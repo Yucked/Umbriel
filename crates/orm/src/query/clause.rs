@@ -32,6 +32,8 @@ pub enum ClauseType {
     Subquery(Subquery),
     /// Stands for a record id e.g `person:charlie`. Useful in a RELATE query.
     Id(types::RecordId),
+    /// Stands for a list of record ids, e.g. the endpoints of a RELATE between every pair.
+    Ids(Vec<types::RecordId>),
     /// Stands for a parameter e.g `$name`
     Param(Param),
     /// Used for filtering on multiple edges
@@ -99,6 +101,22 @@ impl Clause {
                 };
                 let id = Checked::new(ValueLike::value(id), error);
                 parts.push(target(Fragment::new(id)));
+            }
+            ClauseType::Ids(ids) => {
+                let error = match &name {
+                    Some(ClauseName::Table(table)) => {
+                        ids.iter().find(|id| id.table != *table).map(|id| {
+                            format!(
+                                "record `{}` does not belong to table `{}`",
+                                id.to_sql(),
+                                table.as_str()
+                            )
+                        })
+                    }
+                    _ => None,
+                };
+                let ids = Checked::new(ValueLike::value(ids), error);
+                parts.push(target(Fragment::new(ids)));
             }
             ClauseType::Param(param) => parts.push(target(Fragment::new(param))),
             ClauseType::Subquery(subquery) => parts.push(target(subquery.into_fragment())),
@@ -203,6 +221,18 @@ impl<T: Model> From<&RecordId<T>> for Clause {
     }
 }
 
+impl<T: Model> From<Vec<RecordId<T>>> for Clause {
+    fn from(value: Vec<RecordId<T>>) -> Self {
+        Self::new(ClauseType::Ids(value.into_iter().map(Into::into).collect()))
+    }
+}
+
+impl<T: Model> From<&[RecordId<T>]> for Clause {
+    fn from(value: &[RecordId<T>]) -> Self {
+        Self::new(ClauseType::Ids(value.iter().map(Into::into).collect()))
+    }
+}
+
 impl From<types::RecordId> for Clause {
     fn from(value: types::RecordId) -> Self {
         Self::new(ClauseType::Id(value))
@@ -302,6 +332,101 @@ impl From<[usize; 1]> for Clause {
 impl From<AnyEdgeFilter> for Clause {
     fn from(value: AnyEdgeFilter) -> Self {
         Self::new(ClauseType::AnyEdgeFilter(value))
+    }
+}
+
+/// A clause for a graph step that reaches nodes of `N`, such as the start of `Student::with(..)`
+/// or the destination of an edge.
+///
+/// A record id is accepted only as a `RecordId<N>`, or a list of them, so an endpoint of the wrong
+/// model does not compile. Known ids are also checked against the step's table when the query is
+/// rendered. Expressions (filters, parameters, subqueries, untyped SDK record ids, `Empty`, …) are
+/// accepted as before; their values are known only when the query runs, so the database checks
+/// them, and only where the edge table defines `TYPE RELATION IN … OUT …` (endpoint tables) or
+/// `ENFORCED` (endpoint records must exist).
+pub trait IntoNodeClause<N> {
+    /// The clause.
+    fn into_node_clause(self) -> NodeClause;
+}
+
+impl<N: Model> IntoNodeClause<N> for RecordId<N> {
+    fn into_node_clause(self) -> NodeClause {
+        Clause::from(self).into()
+    }
+}
+
+impl<N: Model> IntoNodeClause<N> for &RecordId<N> {
+    fn into_node_clause(self) -> NodeClause {
+        Clause::from(self).into()
+    }
+}
+
+impl<N: Model> IntoNodeClause<N> for Vec<RecordId<N>> {
+    fn into_node_clause(self) -> NodeClause {
+        Clause::from(self).into()
+    }
+}
+
+impl<N: Model> IntoNodeClause<N> for &[RecordId<N>] {
+    fn into_node_clause(self) -> NodeClause {
+        Clause::from(self).into()
+    }
+}
+
+impl<N: Model, const K: usize> IntoNodeClause<N> for [RecordId<N>; K] {
+    fn into_node_clause(self) -> NodeClause {
+        Clause::from(Vec::from(self)).into()
+    }
+}
+
+impl<N, S: Into<Subquery>> IntoNodeClause<N> for S {
+    fn into_node_clause(self) -> NodeClause {
+        Clause::from(self).into()
+    }
+}
+
+/// Implements `IntoNodeClause<N>` for every `N` for clauses that are not typed record ids.
+macro_rules! into_node_clause_untyped {
+    ($($source:ty),* $(,)?) => {
+        $(
+            impl<N> IntoNodeClause<N> for $source {
+                fn into_node_clause(self) -> NodeClause {
+                    Clause::from(self).into()
+                }
+            }
+        )*
+    };
+}
+
+into_node_clause_untyped!(
+    types::RecordId,
+    &types::RecordId,
+    Param,
+    &Param,
+    LetStatement,
+    Operation,
+    Setter,
+    Clause,
+    &Clause,
+    Filter,
+    &Filter,
+    Empty,
+    All,
+    Last,
+    Index,
+    [usize; 1],
+    AnyEdgeFilter,
+);
+
+impl<N> IntoNodeClause<N> for NodeClause {
+    fn into_node_clause(self) -> NodeClause {
+        self
+    }
+}
+
+impl<N> IntoNodeClause<N> for NodeAliasClause {
+    fn into_node_clause(self) -> NodeClause {
+        NodeClause(self.0)
     }
 }
 

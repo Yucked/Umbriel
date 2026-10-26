@@ -104,6 +104,13 @@ impl Codegen<'_> {
             .push(quote!(#ident: #crate_name::FlatPatch::Keep).into());
         self.patch_setters
             .push(quote!(setters.extend(self.#ident.into_setters());).into());
+        self.merge_fields.push(quote!(
+            #vis #ident: #crate_name::FlatMerge<#ty, <#ty as #crate_name::Object>::Merge>
+        ));
+        self.merge_defaults
+            .push(quote!(#ident: #crate_name::FlatMerge::Keep));
+        self.merge_entries
+            .push(quote!(self.#ident.push_entries(object);));
 
         Ok(())
     }

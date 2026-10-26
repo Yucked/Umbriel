@@ -4,8 +4,9 @@ use crate::{
     Alias, All, E, Edge, Field, Filter, Fragment, Function, Model, NONE, NULL, Node, Operation,
     Param, Render, Renderer, Setter,
     statements::{
-        CreateStatement, DeleteStatement, IfElseStatement, InsertStatement, LetStatement,
-        RelateStatement, SelectStatement, Subquery, UpdateStatement,
+        Cardinality, CreateStatement, DeleteStatement, IfElseStatement, InsertStatement,
+        LetStatement, RelateOrUpdateStatement, RelateStatement, ReturnMode, SelectStatement,
+        Subquery, UpdateStatement, UpsertStatement,
     },
 };
 
@@ -189,35 +190,29 @@ impl From<IfElseStatement> for ValueLike {
     }
 }
 
-impl<T: Node> From<CreateStatement<T>> for ValueLike {
-    fn from(statement: CreateStatement<T>) -> Self {
-        Self::new(Subquery::from(statement))
-    }
+/// Implements `From<$statement>` for `ValueLike` by nesting the statement as a subquery, for every
+/// return mode and cardinality.
+macro_rules! value_like_from_write_statement {
+    ($($bound:ident $statement:ident),* $(,)?) => {
+        $(
+            impl<T: $bound, R: ReturnMode, C: Cardinality> From<$statement<T, R, C>> for ValueLike {
+                fn from(statement: $statement<T, R, C>) -> Self {
+                    Self::new(Subquery::from(statement))
+                }
+            }
+        )*
+    };
 }
 
-impl<T: Model> From<UpdateStatement<T>> for ValueLike {
-    fn from(statement: UpdateStatement<T>) -> Self {
-        Self::new(Subquery::from(statement))
-    }
-}
-
-impl<T: Model> From<DeleteStatement<T>> for ValueLike {
-    fn from(statement: DeleteStatement<T>) -> Self {
-        Self::new(Subquery::from(statement))
-    }
-}
-
-impl<T: Edge> From<RelateStatement<T>> for ValueLike {
-    fn from(statement: RelateStatement<T>) -> Self {
-        Self::new(Subquery::from(statement))
-    }
-}
-
-impl<T: Node> From<InsertStatement<T>> for ValueLike {
-    fn from(statement: InsertStatement<T>) -> Self {
-        Self::new(Subquery::from(statement))
-    }
-}
+value_like_from_write_statement!(
+    Node CreateStatement,
+    Model UpdateStatement,
+    Model UpsertStatement,
+    Model DeleteStatement,
+    Edge RelateStatement,
+    Edge RelateOrUpdateStatement,
+    Model InsertStatement,
+);
 
 /// A macro to create a heterogenous list of anything
 /// that can be converted into `ValueLike` including all

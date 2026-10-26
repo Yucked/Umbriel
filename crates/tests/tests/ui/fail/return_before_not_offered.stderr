@@ -1,0 +1,23 @@
+error[E0599]: no method named `return_before` found for struct `CreateStatement<T, R, C>` in the current scope
+  --> tests/ui/fail/return_before_not_offered.rs:18:68
+   |
+18 |     let _ = create::<User>(CreateTarget::table()).content(alice()).return_before();
+   |                                                                    ^^^^^^^^^^^^^
+   |
+help: there is a method `return_none` with a similar name
+   |
+18 -     let _ = create::<User>(CreateTarget::table()).content(alice()).return_before();
+18 +     let _ = create::<User>(CreateTarget::table()).content(alice()).return_none();
+   |
+
+error[E0599]: no method named `return_before` found for struct `InsertStatement<T, R, C>` in the current scope
+  --> tests/ui/fail/return_before_not_offered.rs:19:29
+   |
+19 |     let _ = insert(alice()).return_before();
+   |                             ^^^^^^^^^^^^^
+   |
+help: there is a method `return_none` with a similar name
+   |
+19 -     let _ = insert(alice()).return_before();
+19 +     let _ = insert(alice()).return_none();
+   |

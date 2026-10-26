@@ -149,12 +149,17 @@ impl ModelReceiver {
             DataType::Object => None,
         };
 
+        let merge_ident = struct_name_ident.merge_ident();
+        let merge_struct = self.merge_struct_tokens(&code_gen)?;
+
         let model_kind_impl = match data_type {
             DataType::Node => self.node_tokens(&code_gen)?,
             DataType::Edge => self.edge_tokens(&code_gen)?,
             DataType::Object => quote!(
                 impl #impl_generics #crate_name::Object for #struct_name_ident #ty_generics #where_clause {
                     const STORED_FIELDS: #crate_name::StoredFields = #stored_fields;
+
+                    type Merge = #merge_ident #ty_generics;
 
                     fn field_meta_on(#_____table: #crate_name::Table) -> ::std::vec::Vec<#crate_name::FieldMetadata> {
                         ::std::iter::IntoIterator::into_iter([#( #field_metadata ),*])
@@ -235,6 +240,8 @@ impl ModelReceiver {
             #model_kind_impl
 
             #record_model
+
+            #merge_struct
 
             #stored_fields_definition
 
@@ -495,6 +502,67 @@ impl ModelReceiver {
         ))
     }
 
+    /// `<Model>Merge`: one `Merge` per stored field, for every kind of model. An object's merge is
+    /// nested in the merge of a model that embeds it; a node's or edge's also implements
+    /// `ModelMerge`.
+    fn merge_struct_tokens(&self, code_gen: &Codegen) -> ExtractorResult<TokenStream> {
+        let crate_name = get_crate_name(false);
+        let struct_name_ident = &self.ident();
+        let (impl_generics, ty_generics, where_clause) = self.generics().split_for_impl();
+        let struct_marker = self.generics().phantom_marker_type();
+        let vis = &self.vis;
+        let merge_ident = struct_name_ident.merge_ident();
+        let VariablesModelMacro {
+            _____struct_marker_ident,
+            ..
+        } = VariablesModelMacro::new();
+        let Codegen {
+            merge_fields,
+            merge_defaults,
+            merge_entries,
+            ..
+        } = code_gen;
+        let merge_doc = format!(
+            "A merge into [`{}`] (`MERGE`): each field left as `Merge::Keep` is unchanged, and \
+             nested objects combine with the stored ones.",
+            self.ident
+        );
+        let model_merge = matches!(self.data_type()?, DataType::Node | DataType::Edge).then(|| {
+            quote!(
+                impl #impl_generics #crate_name::ModelMerge for #merge_ident #ty_generics #where_clause {
+                    type Model = #struct_name_ident #ty_generics;
+                }
+            )
+        });
+
+        Ok(quote!(
+            #[doc = #merge_doc]
+            #[allow(non_snake_case)]
+            #vis struct #merge_ident #impl_generics #where_clause {
+                #( #merge_fields, )*
+                #[doc(hidden)]
+                #vis #_____struct_marker_ident: #struct_marker,
+            }
+
+            impl #impl_generics ::std::default::Default for #merge_ident #ty_generics #where_clause {
+                fn default() -> Self {
+                    Self {
+                        #( #merge_defaults, )*
+                        #_____struct_marker_ident: ::std::marker::PhantomData,
+                    }
+                }
+            }
+
+            impl #impl_generics #crate_name::MergeFields for #merge_ident #ty_generics #where_clause {
+                fn push_entries(self, object: &mut #crate_name::MergeObject) {
+                    #( #merge_entries )*
+                }
+            }
+
+            #model_merge
+        ))
+    }
+
     fn node_tokens(&self, code_gen: &Codegen) -> ExtractorResult<TokenStream> {
         let crate_name = get_crate_name(false);
         let struct_name_ident = &self.ident();
@@ -518,8 +586,8 @@ impl ModelReceiver {
                 type TableNameChecker = #table_name_checker;
                 type Aliases = #aliases_struct_name;
 
-                fn with(clause: impl ::std::convert::Into<#crate_name::NodeClause>) -> <Self as #crate_name::SchemaGetter>::Schema {
-                    let clause: #crate_name::NodeClause = clause.into();
+                fn with(clause: impl #crate_name::IntoNodeClause<Self>) -> <Self as #crate_name::SchemaGetter>::Schema {
+                    let clause: #crate_name::NodeClause = #crate_name::IntoNodeClause::<Self>::into_node_clause(clause);
                     #schema #explicit_generics ::#__________connect(
                         #crate_name::Field::default(),
                         clause.with_table(#table).into_inner(),

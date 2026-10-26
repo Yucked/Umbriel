@@ -15,7 +15,7 @@ use umbriel::{
     Nullable, Operatable, Patch, Patchable, Raw, RecordId, RecordRange, Reference, Relate, Render,
     ReturnableStandard, Runnable, SchemaGetter, SetterArray, SetterAssignable, SetterNumeric,
     SurrealCrud, SurrealCrudNode, cond, model,
-    statements::{define_field, define_table, for_permission, relate, select},
+    statements::{Returning, define_field, define_table, for_permission, relate, select},
     types::{self, Kind, RecordIdKey, SurrealValue, Value},
     value,
 };
@@ -853,6 +853,11 @@ mod setters {
     #[test]
     fn fields_stand_for_values_of_their_own_type() {
         let org = Organization::schema();
+        let input = umbriel::statements::input_of::<Organization>();
+        assert_eq!(
+            org.age.increment_by(input.age).to_debug_sql(),
+            "age += $input.age"
+        );
         assert_eq!(
             org.name.equal_to(&User::schema().name).to_debug_sql(),
             "name = name"
@@ -863,7 +868,8 @@ mod setters {
         );
 
         // A generic model's specialization is part of its field types: `Planet<u64>`'s `data`
-        // fits `Planet<u64>`.
+        // fits `Planet<u64>`; `Planet<u32>`'s does not compile
+        // (`tests/ui/fail/field_of_another_specialization.rs`).
         let planet = Planet::<u64>::schema();
         assert_eq!(
             planet
@@ -871,6 +877,61 @@ mod setters {
                 .equal_to(Planet::<u64>::schema().data)
                 .to_debug_sql(),
             "data = data"
+        );
+        assert_eq!(
+            umbriel::statements::update::<Planet<u64>>(Planet::<u64>::id("earth"))
+                .return_value(Planet::<u64>::schema().data)
+                .to_debug_sql(),
+            "UPDATE planet:earth RETURN VALUE data;"
+        );
+    }
+
+    #[test]
+    fn patch_operations_convert_to_and_from_the_sdk() {
+        use surrealdb::opt::PatchOp as SdkPatchOp;
+        use umbriel::{PatchOp, PatchOpConversionError};
+
+        let org = Organization::schema();
+        let add = SdkPatchOp::try_from(org.name.patch_add("Acme Corp")).expect("add");
+        assert!(matches!(&add, SdkPatchOp::Add { path, .. } if path == "/name"));
+        assert!(matches!(
+            SdkPatchOp::try_from(org.name.patch_remove()),
+            Ok(SdkPatchOp::Remove { path }) if path == "/name"
+        ));
+        assert!(matches!(
+            SdkPatchOp::try_from(org.name.patch_replace("Globex")),
+            Ok(SdkPatchOp::Replace { .. })
+        ));
+        assert!(matches!(
+            SdkPatchOp::try_from(org.name.patch_change("@@ -1 +1 @@\n-a\n+b\n")),
+            Ok(SdkPatchOp::Change { .. })
+        ));
+        for unsupported in [
+            org.name.patch_copy(Field::new("label")),
+            org.name.patch_move(Field::new("label")),
+            org.name.patch_test("Acme Corp"),
+        ] {
+            assert!(matches!(
+                SdkPatchOp::try_from(unsupported),
+                Err(PatchOpConversionError::Unsupported(_))
+            ));
+        }
+        assert_eq!(
+            SdkPatchOp::try_from(Organization::schema().users([0usize]).name.patch_remove())
+                .err(),
+            Some(PatchOpConversionError::InvalidPath)
+        );
+
+        assert_eq!(
+            PatchOp::from(add).to_debug_sql(),
+            "{ op: 'add', path: '/name', value: 'Acme Corp' }"
+        );
+        assert_eq!(
+            PatchOp::from(SdkPatchOp::Remove {
+                path: "/name".to_owned()
+            })
+            .to_debug_sql(),
+            "{ op: 'remove', path: '/name' }"
         );
     }
 }
@@ -1530,6 +1591,68 @@ mod record_operations {
     }
 
     #[tokio::test]
+    async fn insert_many_stores_every_record_and_fails_on_a_duplicate() {
+        let db = db().await;
+        let inserted = SpaceShip::insert_many(
+            &db,
+            vec![space_ship("apollo", "Apollo"), space_ship("gemini", "Gemini")],
+        )
+        .await
+        .expect("inserted");
+        assert_eq!(inserted.len(), 2);
+
+        // A batch holding an existing id fails as a whole.
+        let duplicate = SpaceShip::insert_many(
+            &db,
+            vec![space_ship("mercury", "Mercury"), space_ship("apollo", "Apollo")],
+        )
+        .await;
+        assert!(
+            matches!(&duplicate, Err(umbriel::Error::RecordExists { statement: None, .. })),
+            "{duplicate:?}"
+        );
+        let names: Vec<String> = read(&db, "SELECT VALUE name FROM space_ship ORDER BY name;").await;
+        assert_eq!(names, ["Apollo", "Gemini"]);
+    }
+
+    #[tokio::test]
+    async fn get_range_and_get_many_read_several_records() {
+        let db = db().await;
+        for key in 1..=5 {
+            SpaceShip {
+                id: SpaceShip::id(key),
+                name: format!("Ship {key}"),
+                created: DateTime::<Utc>::UNIX_EPOCH,
+            }
+            .create(&db)
+            .await
+            .expect("created");
+        }
+        let names = |ships: Vec<SpaceShip>| {
+            ships.into_iter().map(|ship| ship.name).collect::<Vec<_>>()
+        };
+        let range = SpaceShip::get_range(&db, SpaceShip::id(2)..SpaceShip::id(4))
+            .await
+            .expect("read");
+        assert_eq!(names(range), ["Ship 2", "Ship 3"]);
+        let inclusive = SpaceShip::get_range(&db, SpaceShip::id(4)..=SpaceShip::id(5))
+            .await
+            .expect("read");
+        assert_eq!(names(inclusive), ["Ship 4", "Ship 5"]);
+
+        let many = SpaceShip::get_many(
+            &db,
+            &[SpaceShip::id(5), SpaceShip::id(99), SpaceShip::id(1)],
+        )
+        .await
+        .expect("read");
+        let mut many = names(many);
+        many.sort();
+        assert_eq!(many, ["Ship 1", "Ship 5"]);
+        assert!(SpaceShip::get_many(&db, &[]).await.expect("read").is_empty());
+    }
+
+    #[tokio::test]
     async fn get_reads_a_record_by_id() {
         let db = db().await;
         space_ship("apollo", "Apollo")
@@ -1789,9 +1912,10 @@ mod relations {
                     connected: DateTime::<Utc>::UNIX_EPOCH,
                 },
             })
-            .return_one(db.clone())
+            .execute(&db)
             .await
             .expect("related")
+            .pop()
             .expect("the edge is returned");
         assert_eq!(edge.out.key(), Some(&alice.id));
         assert_eq!(edge.r#in.key(), Some(&acme.id));

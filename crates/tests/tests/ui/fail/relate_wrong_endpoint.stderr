@@ -1,0 +1,28 @@
+error[E0277]: the trait bound `umbriel::statements::Subquery: From<umbriel::RecordId<User>>` is not satisfied
+  --> tests/ui/fail/relate_wrong_endpoint.rs:28:83
+   |
+28 |     let _ = relate::<UserLikesPost>(User::with(User::id("alice")).likes__(E).post(User::id("bob")));
+   |                                                                              ---- ^^^^^^^^^^^^^^^ the trait `From<umbriel::RecordId<User>>` is not implemented for `umbriel::statements::Subquery`
+   |                                                                              |
+   |                                                                              required by a bound introduced by this call
+   |
+   = help: `umbriel::statements::Subquery` implements trait `From<T>`:
+             From<Block>
+             From<CreateStatement<T, R, C>>
+             From<DeleteStatement<T, R, C>>
+             From<IfElseStatement>
+             From<InsertStatement<T, R, C>>
+             From<RelateOrUpdateStatement<T, R, C>>
+             From<RelateStatement<T, R, C>>
+             From<ReturnStatement>
+             From<SelectStatement>
+             From<UpdateStatement<T, R, C>>
+             From<UpsertStatement<T, R, C>>
+   = note: required for `umbriel::RecordId<User>` to implement `Into<umbriel::statements::Subquery>`
+   = note: required for `umbriel::RecordId<User>` to implement `IntoNodeClause<Post>`
+note: required by a bound in `__4User5likesOutEdge::post`
+  --> tests/ui/fail/relate_wrong_endpoint.rs:3:1
+   |
+ 3 | #[model(node, table = "user")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `__4User5likesOutEdge::post`
+   = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` (in Nightly builds, run with -Z macro-backtrace for more info)

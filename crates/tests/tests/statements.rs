@@ -12,23 +12,24 @@ use surrealdb::{
 use umbriel::{
     AliasName, Aliasable, All,
     CrudType::*,
-    E, Field, JwtAlgorithm, Model, NONE, Namespace, Node, Operatable, Param, Patchable, Raw,
-    Render, ReturnType, ReturnableDefault, ReturnableSelect, ReturnableStandard, Runnable,
-    SchemaGetter, SetterArray, SetterAssignable, SetterNumeric, SurrealCrud, SurrealCrudNode,
-    Table, ValueLike, arr, block, chain, cond, count,
+    E, Error, Field, JwtAlgorithm, Merge, Model, NONE, Namespace, Node, Operatable, Param, Patchable,
+    Raw, Render, ReturnableSelect, Runnable, SchemaGetter, SetterArray, SetterAssignable,
+    SetterNumeric, StatementContext, SurrealCrud, SurrealCrudNode, Table, ValueLike, arr, block,
+    chain, cond, count,
     functions::{math, search, string},
     statements::{
-        AnalyzerFilter, SnowballLanguage, Tokenizer, UserRole, begin_transaction, break_,
-        continue_, create, create_only, create_v2, define_access, define_analyzer, define_database,
-        define_event, define_field, define_function, define_index, define_namespace, define_param,
-        define_table, define_user, delete, delete_only, for_, for_permission, fulltext_analyzer,
-        if_, info_for, insert, jwt_access, let_, live, order, record_access, relate, relate_only,
+        AnalyzerFilter, CreateTarget, DiffOp, Returning, SnowballLanguage, Tokenizer, UserRole,
+        begin_transaction, break_, continue_, create, create_only, define_access, define_analyzer,
+        define_database, define_event, define_field, define_function, define_index,
+        define_namespace, define_param, define_table, define_user, delete, delete_edges,
+        delete_only, for_, for_permission, fulltext_analyzer, if_, info_for, input_of, insert,
+        insert_relation, jwt_access, let_, live, order, record_access, relate, relate_only,
         remove_access, remove_analyzer, remove_database, remove_event, remove_field,
         remove_function, remove_index, remove_namespace, remove_param, remove_table, remove_user,
         return_, select, select_value, show_changes_for_table, sleep, throw, update, update_only,
         use_,
     },
-    updater, value,
+    value,
 };
 use umbriel_tests::*;
 
@@ -63,7 +64,7 @@ mod create {
     #[test]
     fn content_binds_the_whole_record() {
         let ship = space_ship("apollo", "Apollo");
-        let query = create::<SpaceShip>()
+        let query = create::<SpaceShip>(SpaceShip::table())
             .content(ship.clone())
             .to_query()
             .expect("valid");
@@ -76,61 +77,67 @@ mod create {
     fn set_assigns_fields() {
         let schema = SpaceShip::schema();
         assert_sql(
-            &create::<SpaceShip>().set([
+            &create::<SpaceShip>(SpaceShip::table()).set([
                 schema.id.equal_to(SpaceShip::id("apollo")),
                 schema.name.equal_to("Apollo"),
             ]),
             "CREATE space_ship SET id = space_ship:apollo, name = 'Apollo';",
         );
         assert_sql(
-            &create::<SpaceShip>().set(schema.name.equal_to("Apollo")),
+            &create::<SpaceShip>(SpaceShip::table()).set(schema.name.equal_to("Apollo")),
             "CREATE space_ship SET name = 'Apollo';",
         );
     }
 
     #[test]
-    fn only_return_types_and_timeout() {
-        let name = SpaceShip::schema().name;
-        let base = || create_only::<SpaceShip>().set(name.equal_to("Apollo"));
+    fn targets_mix_the_table_records_and_mocks() {
         assert_sql(
-            &base()
-                .return_type(ReturnType::None)
-                .timeout(Duration::from_secs(5)),
-            "CREATE ONLY space_ship SET name = 'Apollo' RETURN NONE TIMEOUT 5s;",
+            &create::<SpaceShip>(SpaceShip::id("apollo")),
+            "CREATE space_ship:apollo;",
         );
         assert_sql(
-            &base().return_type(ReturnType::Before),
-            "CREATE ONLY space_ship SET name = 'Apollo' RETURN BEFORE;",
+            &create::<SpaceShip>([
+                CreateTarget::table(),
+                CreateTarget::from(SpaceShip::id("apollo")),
+                CreateTarget::count(3),
+                CreateTarget::range(1..4),
+            ]),
+            "CREATE space_ship, space_ship:apollo, |space_ship:3|, |space_ship:1..4|;",
         );
-        assert_sql(
-            &base().return_type(ReturnType::After),
-            "CREATE ONLY space_ship SET name = 'Apollo' RETURN AFTER;",
+        assert_render_error(
+            &create::<SpaceShip>(CreateTarget::range(4..4)),
+            "the mock range `4..4` is empty",
         );
-        assert_sql(
-            &base().return_type(ReturnType::Diff),
-            "CREATE ONLY space_ship SET name = 'Apollo' RETURN DIFF;",
-        );
-        assert_sql(
-            &base().return_type(vec![ValueLike::from(Field::new("name"))]),
-            "CREATE ONLY space_ship SET name = 'Apollo' RETURN name;",
+        assert_render_error(
+            &create::<SpaceShip>(Table::from("planet")),
+            "is not the table `space_ship` of the model",
         );
     }
 
     #[test]
-    fn create_v2_takes_content_or_assignments() {
+    fn only_return_modes_and_timeout() {
         let name = SpaceShip::schema().name;
+        let base = || create_only::<SpaceShip>(CreateTarget::table()).set(name.equal_to("Apollo"));
         assert_sql(
-            &create_v2::<SpaceShip>(name.equal_to("Apollo")).timeout(Duration::from_secs(1)),
-            "CREATE space_ship SET name = 'Apollo' TIMEOUT 1s;",
+            &base().return_none().timeout(Duration::from_secs(5)),
+            "CREATE ONLY space_ship SET name = 'Apollo' RETURN NONE TIMEOUT 5s;",
         );
         assert_sql(
-            &create_v2::<SpaceShip>([name.equal_to("Apollo")]).return_type(ReturnType::None),
-            "CREATE space_ship SET name = 'Apollo' RETURN NONE;",
+            &base().return_after(),
+            "CREATE ONLY space_ship SET name = 'Apollo' RETURN AFTER;",
         );
-        let content = create_v2(space_ship("apollo", "Apollo"))
-            .to_query()
-            .expect("valid");
-        assert_eq!(content.sql(), "CREATE space_ship CONTENT $_p0;");
+        assert_sql(
+            &base().return_diff(),
+            "CREATE ONLY space_ship SET name = 'Apollo' RETURN DIFF;",
+        );
+        assert_sql(
+            &base().return_value(SpaceShip::schema().name),
+            "CREATE ONLY space_ship SET name = 'Apollo' RETURN VALUE name;",
+        );
+        assert_sql(
+            &base().return_fields::<Value>(Field::new("name")),
+            "CREATE ONLY space_ship SET name = 'Apollo' RETURN name;",
+        );
     }
 
     #[tokio::test]
@@ -138,18 +145,24 @@ mod create {
         let db = db().await;
         let ship = space_ship("apollo", "Apollo");
 
-        let created = create::<SpaceShip>()
+        let created = create_only::<SpaceShip>(CreateTarget::table())
             .content(ship.clone())
-            .get_one(db.clone())
+            .execute(&db)
             .await
-            .expect("created");
+            .expect("created")
+            .expect("returned");
         assert_eq!(created.id, ship.id);
+        let duplicate = create::<SpaceShip>(SpaceShip::table())
+            .content(ship)
+            .execute(&db)
+            .await;
         assert!(
-            create::<SpaceShip>()
-                .content(ship)
-                .run(db.clone())
-                .await
-                .is_err()
+            matches!(
+                &duplicate,
+                Err(Error::RecordExists { id, statement: Some(StatementContext { index: 0, .. }), .. })
+                    if id == "space_ship:apollo"
+            ),
+            "{duplicate:?}"
         );
     }
 
@@ -157,39 +170,103 @@ mod create {
     async fn the_database_generates_a_missing_id() {
         let db = db().await;
         let schema = SpaceShip::schema();
-        let created = create::<SpaceShip>()
+        let created = create::<SpaceShip>(SpaceShip::table())
             .set([
                 schema.name.equal_to("Apollo"),
                 schema.created.equal_to(DateTime::<Utc>::UNIX_EPOCH),
             ])
-            .get_one(db.clone())
+            .execute(&db)
             .await
             .expect("created");
-        assert_eq!(created.id.table.as_str(), "space_ship");
-        assert_eq!(created.name, "Apollo");
+        assert_eq!(created.len(), 1);
+        assert_eq!(created[0].id.table.as_str(), "space_ship");
+        assert_eq!(created[0].name, "Apollo");
     }
 
     #[tokio::test]
-    async fn return_projections_select_the_returned_fields() {
+    async fn without_a_data_clause_a_record_holds_only_its_id() {
         let db = db().await;
-        let returned = create::<SpaceShip>()
+        run(&db, create::<SpaceShip>(SpaceShip::id("apollo")).return_none()).await;
+        let stored: Vec<BTreeMap<String, Value>> =
+            read(&db, "SELECT * FROM space_ship;").await;
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].keys().collect::<Vec<_>>(), ["id"]);
+    }
+
+    #[tokio::test]
+    async fn mock_targets_create_counted_and_ranged_records() {
+        let db = db().await;
+        let schema = SpaceShip::schema();
+        let counted = create::<SpaceShip>(CreateTarget::count(3))
+            .set([
+                schema.name.equal_to("Mock"),
+                schema.created.equal_to(DateTime::<Utc>::UNIX_EPOCH),
+            ])
+            .return_none()
+            .execute(&db)
+            .await;
+        assert!(counted.is_ok(), "{counted:?}");
+        let count: usize = read(&db, "RETURN array::len(SELECT VALUE id FROM space_ship);").await;
+        assert_eq!(count, 3);
+
+        // Since SurrealDB 3.0.0 a mock range excludes its end: `1..4` creates ids 1 to 3.
+        let ranged = create::<SpaceShip>(CreateTarget::range(1..4))
+            .set([
+                schema.name.equal_to("Ranged"),
+                schema.created.equal_to(DateTime::<Utc>::UNIX_EPOCH),
+            ])
+            .return_value(SpaceShip::schema().id)
+            .execute(&db)
+            .await
+            .expect("created");
+        assert_eq!(
+            ranged,
+            [SpaceShip::id(1), SpaceShip::id(2), SpaceShip::id(3)]
+        );
+    }
+
+    #[tokio::test]
+    async fn return_modes_decode_into_their_types() {
+        let db = db().await;
+        let names = create::<SpaceShip>(SpaceShip::table())
             .content(space_ship("apollo", "Apollo"))
-            .return_one_projections::<BTreeMap<String, String>>(db.clone(), Field::new("name"))
+            .return_value(SpaceShip::schema().name)
+            .execute(&db)
+            .await
+            .expect("created");
+        assert_eq!(names, ["Apollo"]);
+
+        let fields = create::<SpaceShip>(SpaceShip::table())
+            .content(space_ship("gemini", "Gemini"))
+            .return_fields::<BTreeMap<String, String>>(Field::new("name"))
+            .execute(&db)
+            .await
+            .expect("created");
+        assert_eq!(
+            fields,
+            [BTreeMap::from([("name".to_owned(), "Gemini".to_owned())])]
+        );
+
+        let () = create::<SpaceShip>(SpaceShip::table())
+            .content(space_ship("mercury", "Mercury"))
+            .return_none()
+            .execute(&db)
+            .await
+            .expect("created");
+
+        let diff = create_only::<SpaceShip>(CreateTarget::table())
+            .content(space_ship("voyager", "Voyager"))
+            .return_diff()
+            .execute(&db)
             .await
             .expect("created")
             .expect("returned");
-        assert_eq!(
-            returned,
-            BTreeMap::from([("name".to_owned(), "Apollo".to_owned())])
+        // A created record's diff replaces the whole document: its path is the root pointer `""`.
+        assert!(
+            matches!(diff.as_slice(), [DiffOp::Replace { path, .. }] if path.is_empty()),
+            "{diff:?}"
         );
-
-        let none = create::<SpaceShip>()
-            .content(space_ship("gemini", "Gemini"))
-            .return_type(ReturnType::None)
-            .return_many_explicit::<Value>(db.clone())
-            .await
-            .expect("created");
-        assert!(none.is_empty());
+        assert_eq!(ships(&db).await, ["Apollo", "Gemini", "Mercury", "Voyager"]);
     }
 
     #[tokio::test]
@@ -208,13 +285,14 @@ mod create {
             users: vec![User::id("alice")].into(),
             ..organization("acme", "Acme Corp", 10)
         };
-        let created = create::<Organization>()
+        let created = create_only::<Organization>(CreateTarget::table())
             .content(acme)
-            .load_link_manys()
+            .load_links::<Organization>(Organization::get_link_many_fields())
             .expect("links")
-            .get_one(db.clone())
+            .execute(&db)
             .await
-            .expect("created");
+            .expect("created")
+            .expect("returned");
         let names = created
             .users
             .values_truthy()
@@ -223,9 +301,10 @@ mod create {
             .collect::<Vec<_>>();
         assert_eq!(names, ["Alice"]);
 
-        let explicit = create::<SpaceShip>()
+        let explicit = create_only::<SpaceShip>(CreateTarget::table())
             .content(space_ship("apollo", "Apollo"))
-            .return_one_explicit::<BTreeMap<String, Value>>(db.clone())
+            .return_fields::<BTreeMap<String, Value>>(Field::new("*"))
+            .execute(&db)
             .await
             .expect("created")
             .expect("returned");
@@ -264,10 +343,11 @@ mod insert {
     }
 
     #[test]
-    fn duplicate_keys_update_and_return_types() {
+    fn duplicate_keys_update_and_return_modes() {
+        let name = SpaceShip::schema().name;
         let query = insert(space_ship("apollo", "Apollo"))
-            .on_duplicate_key_update(updater(Field::new("name")).equal("Apollo 2"))
-            .return_type(ReturnType::None)
+            .on_duplicate_key_update(name.equal_to("Apollo 2"))
+            .return_none()
             .to_query()
             .expect("valid");
         assert_eq!(
@@ -277,20 +357,72 @@ mod insert {
         );
         assert_parses(query.sql());
 
-        let name = SpaceShip::schema().name;
-        let query = insert(space_ship("apollo", "Apollo"))
-            .on_duplicate_key_update(vec![
-                updater(Field::new("visits")).increment_by(1),
-                updater(Field::new("tags")).append("seen"),
+        let org = Organization::schema();
+        let input = input_of::<Organization>();
+        let query = insert(organization("acme", "Acme Corp", 10))
+            .on_duplicate_key_update([
+                org.age.increment_by(input.age),
+                org.name.equal_to(input.name),
             ])
-            .on_duplicate_key_update(name.equal_to("Apollo"))
+            .on_duplicate_key_update(org.age.increment_by(1u8))
             .to_query()
             .expect("valid");
         assert!(
-            query
-                .sql()
-                .ends_with("ON DUPLICATE KEY UPDATE visits += $_p3, tags += $_p4, name = $_p5;")
+            query.sql().ends_with(
+                "ON DUPLICATE KEY UPDATE age += $input.age, name = $input.name, age += $_p5;"
+            ),
+            "{}",
+            query.sql()
         );
+        assert_parses(query.sql());
+
+        let base = || insert(space_ship("apollo", "Apollo"));
+        for (statement, clause) in [
+            (base().return_after().to_debug_sql(), " RETURN AFTER;"),
+            (base().return_diff().to_debug_sql(), " RETURN DIFF;"),
+            (
+                base().return_value(SpaceShip::schema().name).to_debug_sql(),
+                " RETURN VALUE name;",
+            ),
+            (
+                base().return_fields::<Value>(Field::new("name")).to_debug_sql(),
+                " RETURN name;",
+            ),
+        ] {
+            assert!(statement.ends_with(clause), "{statement}");
+            assert_parses(&statement);
+        }
+    }
+
+    #[test]
+    fn ignore_and_relations() {
+        let statement = insert(space_ship("apollo", "Apollo")).ignore();
+        assert!(statement.to_debug_sql().starts_with("INSERT IGNORE INTO space_ship ("));
+        assert_parses(&statement.to_debug_sql());
+
+        let like = CompanyLikeUser {
+            id: CompanyLikeUser::id("acme_alice"),
+            r#in: Company::id("acme").into(),
+            out: User::id("alice").into(),
+            time: Time::default(),
+        };
+        let query = insert_relation(like.clone())
+            .ignore()
+            .to_query()
+            .expect("valid");
+        assert_eq!(query.sql(), "INSERT RELATION IGNORE INTO like $_p0;");
+        assert_parses(query.sql());
+        let schema = CompanyLikeUser::schema();
+        let query = insert_relation(vec![like])
+            .on_duplicate_key_update(schema.time.equal_to(Time::default()))
+            .return_none()
+            .to_query()
+            .expect("valid");
+        assert_eq!(
+            query.sql(),
+            "INSERT RELATION INTO like $_p0 ON DUPLICATE KEY UPDATE time = $_p1 RETURN NONE;"
+        );
+        assert_parses(query.sql());
     }
 
     #[test]
@@ -308,30 +440,221 @@ mod insert {
             space_ship("apollo", "Apollo"),
             space_ship("gemini", "Gemini"),
         ])
-        .return_many(db.clone())
+        .execute(&db)
         .await
         .expect("inserted");
         assert_eq!(inserted.len(), 2);
 
         let one = insert(space_ship("mercury", "Mercury"))
-            .get_one(db.clone())
+            .return_value(SpaceShip::schema().name)
+            .execute(&db)
             .await
             .expect("inserted");
-        assert_eq!(one.name, "Mercury");
+        assert_eq!(one, ["Mercury"]);
         assert_eq!(ships(&db).await, ["Apollo", "Gemini", "Mercury"]);
+
+        let () = insert(space_ship("voyager", "Voyager"))
+            .return_none()
+            .execute(&db)
+            .await
+            .expect("inserted");
+        let diffs = insert(space_ship("pioneer", "Pioneer"))
+            .return_diff()
+            .execute(&db)
+            .await
+            .expect("inserted");
+        assert_eq!(diffs.len(), 1);
+    }
+
+    /// Every model value holds its full id, so `insert::<T>` stores exactly the records the
+    /// targetless `INSERT [ … ]` would.
+    #[tokio::test]
+    async fn insert_into_stores_what_a_targetless_insert_does() {
+        let db = db().await;
+        run(
+            &db,
+            insert(vec![
+                space_ship("apollo", "Apollo"),
+                space_ship("gemini", "Gemini"),
+            ]),
+        )
+        .await;
+        let typed: Vec<BTreeMap<String, Value>> =
+            read(&db, "SELECT * FROM space_ship ORDER BY id;").await;
+
+        let other = umbriel_tests::db().await;
+        run(
+            &other,
+            Raw::new(
+                "INSERT [{ id: space_ship:apollo, name: 'Apollo', created: d'1970-01-01T00:00:00Z' }, \
+                 { id: space_ship:gemini, name: 'Gemini', created: d'1970-01-01T00:00:00Z' }];",
+            ),
+        )
+        .await;
+        let targetless: Vec<BTreeMap<String, Value>> =
+            read(&other, "SELECT * FROM space_ship ORDER BY id;").await;
+        assert_eq!(typed, targetless);
+    }
+
+    #[test]
+    fn a_table_parameter_target_binds_the_models_table() {
+        let query = insert(space_ship("apollo", "Apollo"))
+            .into_table_param()
+            .return_none()
+            .to_query()
+            .expect("valid");
+        assert_eq!(
+            query.sql(),
+            "INSERT INTO $_p0 (created, id, name) VALUES ($_p1, $_p2, $_p3) RETURN NONE;"
+        );
+        assert_eq!(
+            query.vars().get("_p0"),
+            Some(&Value::Table(SpaceShip::table()))
+        );
+        assert_parses(query.sql());
+    }
+
+    #[tokio::test]
+    async fn a_table_parameter_target_stores_the_records_in_the_models_table() {
+        let db = db().await;
+        let inserted = insert(vec![
+            space_ship("apollo", "Apollo"),
+            space_ship("gemini", "Gemini"),
+        ])
+        .into_table_param()
+        .execute(&db)
+        .await
+        .expect("inserted");
+        assert_eq!(inserted.len(), 2);
+        assert_eq!(ships(&db).await, ["Apollo", "Gemini"]);
     }
 
     #[tokio::test]
     async fn duplicate_keys_update_the_existing_record() {
         let db = db().await;
+        let name = SpaceShip::schema().name;
         run(&db, insert(space_ship("apollo", "Apollo"))).await;
         run(
             &db,
             insert(space_ship("apollo", "Apollo"))
-                .on_duplicate_key_update(updater(Field::new("name")).equal("Apollo 2")),
+                .on_duplicate_key_update(name.equal_to("Apollo 2")),
         )
         .await;
         assert_eq!(ships(&db).await, ["Apollo 2"]);
+    }
+
+    #[tokio::test]
+    async fn duplicate_keys_read_the_rejected_record_through_input() {
+        let db = db().await;
+        run(&db, insert(organization("acme", "Acme Corp", 10))).await;
+        let age = Organization::schema().age;
+        let updated = insert(organization("acme", "Acme Corp", 5))
+            .on_duplicate_key_update(age.increment_by(input_of::<Organization>().age))
+            .return_value(Organization::schema().age)
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(updated, [15]);
+    }
+
+    #[tokio::test]
+    async fn ignore_skips_duplicate_ids_and_unique_index_conflicts() {
+        let db = db().await;
+        run(
+            &db,
+            Raw::new("DEFINE INDEX ship_name ON space_ship FIELDS name UNIQUE;"),
+        )
+        .await;
+        run(&db, insert(space_ship("apollo", "Apollo"))).await;
+
+        let skipped = insert(vec![
+            space_ship("apollo", "Apollo again"),
+            space_ship("gemini", "Apollo"),
+            space_ship("mercury", "Mercury"),
+        ])
+        .ignore()
+        .execute(&db)
+        .await
+        .expect("conflicts are skipped");
+        assert_eq!(
+            skipped.iter().map(|ship| ship.name.as_str()).collect::<Vec<_>>(),
+            ["Mercury"]
+        );
+        assert_eq!(ships(&db).await, ["Apollo", "Mercury"]);
+    }
+
+    /// Since SurrealDB 3.3.4, `IGNORE` skips only id and unique index conflicts.
+    #[tokio::test]
+    async fn ignore_still_fails_on_other_errors() {
+        let db = db().await;
+        run(
+            &db,
+            Raw::new("DEFINE FIELD name ON space_ship ASSERT $value != 'Rejected';"),
+        )
+        .await;
+        let result = insert(space_ship("apollo", "Rejected"))
+            .ignore()
+            .execute(&db)
+            .await;
+        assert!(matches!(result, Err(Error::Statement { .. })), "{result:?}");
+        assert!(ships(&db).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn relations_insert_and_handle_existing_edge_ids() {
+        let db = db().await;
+        let like = |note: u32| CompanyLikeUser {
+            id: CompanyLikeUser::id("acme_alice"),
+            r#in: Company::id("acme").into(),
+            out: User::id("alice").into(),
+            time: Time {
+                connected: DateTime::<Utc>::from_timestamp(i64::from(note), 0).expect("time"),
+            },
+        };
+        let created = insert_relation(like(1))
+            .execute(&db)
+            .await
+            .expect("inserted");
+        assert_eq!(created.len(), 1);
+
+        // Since SurrealDB 3.1.5 an existing edge id is an error rather than an update.
+        let duplicate = insert_relation(like(2)).execute(&db).await;
+        assert!(
+            matches!(&duplicate, Err(Error::RecordExists { .. })),
+            "{duplicate:?}"
+        );
+
+        let ignored = insert_relation(like(2))
+            .ignore()
+            .execute(&db)
+            .await
+            .expect("ignored");
+        assert!(ignored.is_empty());
+
+        let time = CompanyLikeUser::schema().time;
+        let updated = insert_relation(like(2))
+            .on_duplicate_key_update(time.equal_to(like(3).time))
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(updated[0].time.connected.timestamp(), 3);
+    }
+
+    #[tokio::test]
+    async fn relations_are_rejected_on_lightweight_tables() {
+        let db = db().await;
+        run(
+            &db,
+            Raw::new("DEFINE TABLE like TYPE RELATION IN company OUT user LIGHTWEIGHT;"),
+        )
+        .await;
+        let like = CompanyLikeUser {
+            id: CompanyLikeUser::id("acme_alice"),
+            r#in: Company::id("acme").into(),
+            out: User::id("alice").into(),
+            time: Time::default(),
+        };
+        assert!(insert_relation(like).execute(&db).await.is_err());
     }
 
     #[tokio::test]
@@ -351,7 +674,7 @@ mod insert {
             ])
             .from(Table::from("old_ship")),
         )
-        .return_many(db.clone())
+        .execute(&db)
         .await
         .expect("copied");
         assert_eq!(copied.len(), 1);
@@ -386,54 +709,14 @@ mod update {
     }
 
     #[test]
-    fn element_assignments_render() {
-        let user = User::schema();
-        assert_sql(
-            &update::<User>(User::id("alice")).set(user.tags.at(0).equal_to("rust")),
-            "UPDATE user:alice SET tags[0] = 'rust';",
-        );
-        assert_sql(
-            &update::<User>(User::id("alice"))
-                .set(user.tags.filter(Param::new("this").equal("go")).equal_to("rust")),
-            "UPDATE user:alice SET tags[WHERE $this = 'go'] = 'rust';",
-        );
-    }
-
-    #[tokio::test]
-    async fn element_assignments_change_one_element() {
-        let db = db().await;
-        User {
-            id: User::id("alice"),
-            name: "Alice".to_owned(),
-            tags: vec!["go".to_owned(), "sql".to_owned()],
-            ..Default::default()
-        }
-        .create(&db)
-        .await
-        .expect("alice");
-        let tags = User::schema().tags;
-        run(&db, update::<User>(User::id("alice")).set(tags.at(1).equal_to("rust"))).await;
-        let stored: Vec<String> = read(&db, "RETURN user:alice.tags;").await;
-        assert_eq!(stored, ["go", "rust"]);
-        run(
-            &db,
-            update::<User>(User::id("alice"))
-                .set(tags.filter(Param::new("this").equal("go")).equal_to("ts")),
-        )
-        .await;
-        let stored: Vec<String> = read(&db, "RETURN user:alice.tags;").await;
-        assert_eq!(stored, ["ts", "rust"]);
-    }
-
-    #[test]
     fn targets_clauses_and_options() {
         let org = Organization::schema();
         assert_sql(
             &update_only::<Organization>(Organization::id("acme"))
                 .set(org.age.equal_to(30u8))
                 .where_(org.age.lt(30))
-                .return_type(ReturnType::Diff)
-                .timeout(Duration::from_secs(1)),
+                .timeout(Duration::from_secs(1))
+                .return_diff(),
             "UPDATE ONLY organization:acme SET age = 30 WHERE age < 30 RETURN DIFF TIMEOUT 1s;",
         );
         assert_sql(
@@ -473,10 +756,13 @@ mod update {
         assert_eq!(content.sql(), "UPDATE $_p0 CONTENT $_p1;");
 
         let merge = update::<Organization>(&acme)
-            .merge(BTreeMap::from([("name".to_owned(), "Globex".to_owned())]))
+            .merge(OrganizationMerge {
+                name: Merge::Set("Globex".to_owned()),
+                ..Default::default()
+            })
             .to_query()
             .expect("valid");
-        assert_eq!(merge.sql(), "UPDATE $_p0 MERGE $_p1;");
+        assert_eq!(merge.sql(), "UPDATE $_p0 MERGE { 'name': $_p1 };");
 
         let replace = update::<Organization>(&acme)
             .replace(BTreeMap::from([("name".to_owned(), "Globex".to_owned())]))
@@ -500,6 +786,101 @@ mod update {
             "UPDATE organization:acme PATCH [{ op: 'add', path: '/name', value: 'Globex' }, \
              { op: 'remove', path: '/time/connected' }];",
         );
+        assert_sql(
+            &update::<Organization>(&acme).patch(vec![
+                org.name.patch_test("Acme Corp"),
+                org.name.patch_copy(Field::new("label")),
+                org.name.patch_move(Field::new("title")),
+            ]),
+            "UPDATE organization:acme PATCH [{ op: 'test', path: '/name', value: 'Acme Corp' }, \
+             { op: 'copy', path: '/name', from: '/label' }, \
+             { op: 'move', path: '/name', from: '/title' }];",
+        );
+        assert_render_error(
+            &update::<Organization>(&acme).patch(org.name.patch_copy(Field::new("tags[0]"))),
+            "The path you have provided is invalid",
+        );
+    }
+
+    #[test]
+    fn unset_merge_explain_and_element_assignments() {
+        let org = Organization::schema();
+        let acme = Organization::id("acme");
+        assert_sql(
+            &update::<Organization>(&acme).unset([Field::from(&org.name), Field::from(&org.age)]),
+            "UPDATE organization:acme UNSET name, age;",
+        );
+        assert_sql(
+            &update::<Organization>(&acme)
+                .unset(&org.name)
+                .unset(Field::new("label")),
+            "UPDATE organization:acme UNSET name, label;",
+        );
+        assert_sql(
+            &update::<Organization>(&acme).merge(OrganizationMerge {
+                age: Merge::Null,
+                time: Merge::Fields(TimeMerge {
+                    connected: Merge::None,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            "UPDATE organization:acme MERGE { 'time': { 'connected': NONE }, 'age': NULL };",
+        );
+        // An empty merge is written as built: the builder never becomes a `SELECT`.
+        assert_sql(
+            &update_only::<Organization>(&acme)
+                .merge(OrganizationMerge::default())
+                .where_(org.age.gt(1))
+                .return_none(),
+            "UPDATE ONLY organization:acme MERGE {} WHERE age > 1 RETURN NONE;",
+        );
+        assert_sql(
+            &update::<Organization>(Organization::table())
+                .set(org.age.increment_by(1u8))
+                .explain(),
+            "UPDATE organization SET age += 1 EXPLAIN;",
+        );
+        assert_sql(
+            &update::<Organization>(Organization::table())
+                .set(org.age.increment_by(1u8))
+                .explain_full(),
+            "UPDATE organization SET age += 1 EXPLAIN FULL;",
+        );
+
+        let user = User::schema();
+        assert_sql(
+            &update::<User>(User::id("alice")).set(user.tags.at(0).equal_to("rust")),
+            "UPDATE user:alice SET tags[0] = 'rust';",
+        );
+        assert_sql(
+            &update::<User>(User::id("alice"))
+                .set(user.tags.filter(Param::new("this").equal("go")).equal_to("rust")),
+            "UPDATE user:alice SET tags[WHERE $this = 'go'] = 'rust';",
+        );
+    }
+
+    #[test]
+    fn return_modes() {
+        let org = Organization::schema();
+        let base = || update::<Organization>(Organization::id("acme")).set(org.age.equal_to(1u8));
+        for (statement, clause) in [
+            (base().return_none().to_debug_sql(), " RETURN NONE;"),
+            (base().return_before().to_debug_sql(), " RETURN BEFORE;"),
+            (base().return_after().to_debug_sql(), " RETURN AFTER;"),
+            (base().return_diff().to_debug_sql(), " RETURN DIFF;"),
+            (
+                base().return_value(Organization::schema().age).to_debug_sql(),
+                " RETURN VALUE age;",
+            ),
+            (
+                base().return_fields::<Value>(Field::new("age")).to_debug_sql(),
+                " RETURN age;",
+            ),
+        ] {
+            assert!(statement.ends_with(clause), "{statement}");
+            assert_parses(&statement);
+        }
     }
 
     async fn acme(db: &Surreal<Db>) {
@@ -516,27 +897,192 @@ mod update {
         let org = Organization::schema();
         let id = Organization::id("acme");
 
-        let updated = update::<Organization>(&id)
+        let updated = update_only::<Organization>(&id)
             .set([
                 org.age.increment_by(5u8),
                 org.users.append(User::id("alice")),
             ])
-            .get_one(db.clone())
+            .execute(&db)
             .await
-            .expect("updated");
+            .expect("updated")
+            .expect("returned");
         assert_eq!(updated.age, 15);
         assert_eq!(updated.users.keys_truthy(), [&User::id("alice")]);
 
-        let updated = update::<Organization>(&id)
+        let updated = update_only::<Organization>(&id)
             .set([
                 org.age.decrement_by(3u8),
                 org.users.remove(User::id("alice")),
             ])
-            .get_one(db.clone())
+            .execute(&db)
             .await
-            .expect("updated");
+            .expect("updated")
+            .expect("returned");
         assert_eq!(updated.age, 12);
         assert!(updated.users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn element_assignments_change_one_element() {
+        let db = db().await;
+        User {
+            id: User::id("alice"),
+            name: "Alice".to_owned(),
+            tags: vec!["go".to_owned(), "sql".to_owned()],
+            ..Default::default()
+        }
+        .create(&db)
+        .await
+        .expect("alice");
+        let tags = User::schema().tags;
+        let updated = update::<User>(User::id("alice"))
+            .set(tags.at(1).equal_to("rust"))
+            .return_value(User::schema().tags)
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(updated, [vec!["go".to_owned(), "rust".to_owned()]]);
+        let updated = update::<User>(User::id("alice"))
+            .set(tags.filter(Param::new("this").equal("go")).equal_to("ts"))
+            .return_value(User::schema().tags)
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(updated, [vec!["ts".to_owned(), "rust".to_owned()]]);
+    }
+
+    #[tokio::test]
+    async fn unset_removes_fields_and_none_fails_on_a_required_schemafull_field() {
+        let db = db().await;
+        acme(&db).await;
+        let org = Organization::schema();
+        run(
+            &db,
+            update::<Organization>(Organization::id("acme")).unset(&org.name),
+        )
+        .await;
+        let absent: bool = read(&db, "RETURN type::is_none(organization:acme.name);").await;
+        assert!(absent);
+
+        run(
+            &db,
+            Raw::new(
+                "DEFINE TABLE strict_org SCHEMAFULL; DEFINE FIELD name ON strict_org TYPE string; \
+                 CREATE strict_org:acme SET name = 'Acme Corp';",
+            ),
+        )
+        .await;
+        let failed = Raw::new("UPDATE strict_org:acme SET name = NONE;")
+            .run(db.clone())
+            .await;
+        assert!(matches!(failed, Err(Error::Statement { .. })), "{failed:?}");
+    }
+
+    #[tokio::test]
+    async fn a_missing_target_is_not_created() {
+        let db = db().await;
+        acme(&db).await;
+        let org = Organization::schema();
+        let updated = update::<Organization>(Organization::id("missing"))
+            .set(org.age.equal_to(1u8))
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert!(updated.is_empty());
+        let names: Vec<String> = read(&db, "SELECT VALUE name FROM organization;").await;
+        assert_eq!(names, ["Acme Corp"]);
+    }
+
+    /// Since SurrealDB 3.3.0 `WHERE` is checked before the data clause, against the record as it
+    /// was before the statement.
+    #[tokio::test]
+    async fn where_is_evaluated_before_the_data_clause() {
+        let db = db().await;
+        acme(&db).await;
+        let org = Organization::schema();
+        let updated = update::<Organization>(Organization::table())
+            .set(org.age.equal_to(30u8))
+            .where_(org.age.equal(10))
+            .return_value(Organization::schema().age)
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(updated, [30]);
+        let none = update::<Organization>(Organization::table())
+            .set(org.age.equal_to(10u8))
+            .where_(org.age.equal(10))
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert!(none.is_empty());
+    }
+
+    #[tokio::test]
+    async fn explain_returns_a_plan_and_writes_nothing() {
+        let db = db().await;
+        acme(&db).await;
+        let org = Organization::schema();
+        let plan = update::<Organization>(Organization::table())
+            .set(org.age.equal_to(99u8))
+            .explain()
+            .execute(&db)
+            .await
+            .expect("explained");
+        assert!(!plan.is_empty());
+        let ages: Vec<u8> = read(&db, "SELECT VALUE age FROM organization;").await;
+        assert_eq!(ages, [10]);
+    }
+
+    #[tokio::test]
+    async fn return_modes_decode_into_their_types() {
+        let db = db().await;
+        acme(&db).await;
+        let org = Organization::schema();
+        let id = Organization::id("acme");
+        let () = update::<Organization>(&id)
+            .set(org.age.equal_to(11u8))
+            .return_none()
+            .execute(&db)
+            .await
+            .expect("updated");
+        let after = update::<Organization>(&id)
+            .set(org.age.equal_to(12u8))
+            .return_after()
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(after[0].age, 12);
+        let ages = update::<Organization>(&id)
+            .set(org.age.equal_to(13u8))
+            .return_value(Organization::schema().age)
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(ages, [13]);
+        let diff = update_only::<Organization>(&id)
+            .set(org.age.equal_to(14u8))
+            .return_diff()
+            .execute(&db)
+            .await
+            .expect("updated")
+            .expect("returned");
+        assert_eq!(
+            diff,
+            [DiffOp::Replace {
+                path: "/age".to_owned(),
+                value: 14_i64.into_value(),
+            }]
+        );
+        let fields = update::<Organization>(&id)
+            .set(org.name.equal_to("Globex"))
+            .return_fields::<BTreeMap<String, String>>(Field::new("name"))
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(
+            fields,
+            [BTreeMap::from([("name".to_owned(), "Globex".to_owned())])]
+        );
     }
 
     #[tokio::test]
@@ -552,7 +1098,7 @@ mod update {
         let updated = update::<Organization>(Organization::table())
             .set(org.age.increment_by(1u8))
             .where_(org.age.gt(20))
-            .return_many(db.clone())
+            .execute(&db)
             .await
             .expect("updated");
         assert_eq!(updated.len(), 1);
@@ -565,19 +1111,55 @@ mod update {
         acme(&db).await;
         let id = Organization::id("acme");
 
-        let replaced = update::<Organization>(&id)
+        let replaced = update_only::<Organization>(&id)
             .content(organization("acme", "Acme Corp", 99))
-            .get_one(db.clone())
+            .execute(&db)
             .await
-            .expect("replaced");
+            .expect("replaced")
+            .expect("returned");
         assert_eq!(replaced.age, 99);
 
-        let merged = update::<Organization>(&id)
-            .merge(BTreeMap::from([("name".to_owned(), "Globex".to_owned())]))
-            .get_one(db.clone())
+        let merged = update_only::<Organization>(&id)
+            .merge(OrganizationMerge {
+                name: Merge::Set("Globex".to_owned()),
+                ..Default::default()
+            })
+            .execute(&db)
             .await
-            .expect("merged");
+            .expect("merged")
+            .expect("returned");
         assert_eq!((merged.name.as_str(), merged.age), ("Globex", 99));
+
+        // A nested merge changes only the fields it names; the stored object keeps the rest.
+        run(
+            &db,
+            Raw::new("UPDATE organization:acme SET time.zone = 'UTC', tags = ['a', 'b'];"),
+        )
+        .await;
+        run(
+            &db,
+            update::<Organization>(&id).merge(OrganizationMerge {
+                time: Merge::Fields(TimeMerge {
+                    connected: Merge::Set(DateTime::<Utc>::from_timestamp(60, 0).expect("time")),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        )
+        .await;
+        let zone: String = read(&db, "RETURN organization:acme.time.zone;").await;
+        assert_eq!(zone, "UTC");
+        let connected: DateTime<Utc> = read(&db, "RETURN organization:acme.time.connected;").await;
+        assert_eq!(connected.timestamp(), 60);
+
+        // An array in a merge replaces the stored array whole.
+        run(
+            &db,
+            Raw::new("UPDATE organization:acme MERGE { tags: ['c'] };"),
+        )
+        .await;
+        let tags: Vec<String> = read(&db, "RETURN organization:acme.tags;").await;
+        assert_eq!(tags, ["c"]);
 
         // REPLACE drops fields the replacement lacks.
         run(
@@ -597,12 +1179,78 @@ mod update {
         let id = Organization::id("acme");
         let org = Organization::schema();
 
-        let patched = update::<Organization>(&id)
+        let patched = update_only::<Organization>(&id)
             .patch(org.name.patch_replace("Globex"))
-            .get_one(db.clone())
+            .execute(&db)
+            .await
+            .expect("patched")
+            .expect("returned");
+        assert_eq!(patched.name, "Globex");
+
+        let names = update::<Organization>(&id)
+            .patch(org.name.patch_add("Initech"))
+            .return_value(Organization::schema().name)
+            .execute(&db)
             .await
             .expect("patched");
-        assert_eq!(patched.name, "Globex");
+        assert_eq!(names, ["Initech"]);
+
+        // "test" becomes "text".
+        run(
+            &db,
+            update::<Organization>(&id).set(org.name.equal_to("test")),
+        )
+        .await;
+        let names = update::<Organization>(&id)
+            .patch(org.name.patch_change("@@ -1,4 +1,4 @@\n te\n-s\n+x\n t\n"))
+            .return_value(Organization::schema().name)
+            .execute(&db)
+            .await
+            .expect("patched");
+        assert_eq!(names, ["text"]);
+
+        run(
+            &db,
+            Raw::new("UPDATE organization:acme SET label = 'Copied', title = 'Moved';"),
+        )
+        .await;
+        let names = update::<Organization>(&id)
+            .patch(org.name.patch_copy(Field::new("label")))
+            .return_value(Organization::schema().name)
+            .execute(&db)
+            .await
+            .expect("copied");
+        assert_eq!(names, ["Copied"]);
+        let names = update::<Organization>(&id)
+            .patch(org.name.patch_move(Field::new("title")))
+            .return_value(Organization::schema().name)
+            .execute(&db)
+            .await
+            .expect("moved");
+        assert_eq!(names, ["Moved"]);
+        let title_gone: bool = read(&db, "RETURN type::is_none(organization:acme.title);").await;
+        assert!(title_gone);
+
+        let names = update::<Organization>(&id)
+            .patch(vec![
+                org.name.patch_test("Moved"),
+                org.name.patch_replace("Tested"),
+            ])
+            .return_value(Organization::schema().name)
+            .execute(&db)
+            .await
+            .expect("test passed");
+        assert_eq!(names, ["Tested"]);
+        let failed = update::<Organization>(&id)
+            .patch(vec![
+                org.name.patch_test("Wrong"),
+                org.name.patch_replace("Never"),
+            ])
+            .execute(&db)
+            .await;
+        assert!(matches!(failed, Err(Error::Statement { .. })), "{failed:?}");
+        let name: String = read(&db, "RETURN organization:acme.name;").await;
+        assert_eq!(name, "Tested");
 
         run(
             &db,
@@ -624,7 +1272,8 @@ mod update {
         let org = Organization::schema();
         let before = update::<Organization>(Organization::id("acme"))
             .set(org.age.equal_to(50u8))
-            .return_many_before(db.clone())
+            .return_before()
+            .execute(&db)
             .await
             .expect("updated");
         assert_eq!(before[0].age, 10);
@@ -644,18 +1293,93 @@ mod delete {
         assert_sql(
             &delete::<Organization>(Organization::table())
                 .where_(org.age.lt(18))
-                .return_type(ReturnType::Before)
-                .timeout(Duration::from_secs(2)),
+                .timeout(Duration::from_secs(2))
+                .return_before(),
             "DELETE organization WHERE age < 18 RETURN BEFORE TIMEOUT 2s;",
+        );
+        assert_sql(
+            &delete::<Organization>(Organization::id("acme")).return_diff(),
+            "DELETE organization:acme RETURN DIFF;",
         );
         assert_sql(
             &delete_only::<Organization>(Organization::id("acme")),
             "DELETE ONLY organization:acme;",
         );
+        assert_sql(
+            &delete::<Organization>(Organization::table()).explain(),
+            "DELETE organization EXPLAIN;",
+        );
+        assert_sql(
+            &delete_edges::<CompanyLikeUser, _>(&Company::with(Company::id("acme")).like__(E)),
+            "DELETE company:acme->like;",
+        );
         assert_render_error(
             &delete::<Organization>(User::id("alice")),
             "does not belong",
         );
+    }
+
+    #[tokio::test]
+    async fn delete_returns_nothing_by_default_and_only_before_or_diff_on_request() {
+        let db = db().await;
+        organization("acme", "Acme Corp", 10)
+            .create(&db)
+            .await
+            .expect("acme");
+        let () = delete::<Organization>(Organization::id("missing"))
+            .execute(&db)
+            .await
+            .expect("deleted nothing");
+        let missing = delete_only::<Organization>(Organization::id("missing"))
+            .return_before()
+            .execute(&db)
+            .await
+            .expect("deleted nothing");
+        assert!(missing.is_none());
+        let diff = delete_only::<Organization>(Organization::id("acme"))
+            .return_diff()
+            .execute(&db)
+            .await
+            .expect("deleted")
+            .expect("returned");
+        assert!(!diff.is_empty());
+    }
+
+    #[tokio::test]
+    async fn explain_deletes_nothing() {
+        let db = db().await;
+        organization("acme", "Acme Corp", 10)
+            .create(&db)
+            .await
+            .expect("acme");
+        let plan = delete::<Organization>(Organization::table())
+            .explain()
+            .execute(&db)
+            .await
+            .expect("explained");
+        assert!(!plan.is_empty());
+        let left: Vec<String> = read(&db, "SELECT VALUE name FROM organization;").await;
+        assert_eq!(left, ["Acme Corp"]);
+    }
+
+    #[tokio::test]
+    async fn an_edge_path_deletes_only_those_edges() {
+        let db = db().await;
+        run(
+            &db,
+            Raw::new(
+                "CREATE company:acme, company:globex, user:alice; \
+                 RELATE company:acme->like->user:alice; RELATE company:globex->like->user:alice;",
+            ),
+        )
+        .await;
+        run(
+            &db,
+            delete_edges::<CompanyLikeUser, _>(&Company::with(Company::id("acme")).like__(E)),
+        )
+        .await;
+        let left: Vec<String> = read(&db, "SELECT VALUE record::id(in) FROM like;").await;
+        assert_eq!(left, ["globex"]);
     }
 
     #[tokio::test]
@@ -676,8 +1400,8 @@ mod delete {
         let org = Organization::schema();
 
         let deleted = delete::<Organization>(Organization::id("acme"))
-            .return_type(ReturnType::Before)
-            .return_many(db.clone())
+            .return_before()
+            .execute(&db)
             .await
             .expect("deleted");
         assert_eq!(deleted[0].name, "Acme Corp");
@@ -705,9 +1429,51 @@ mod relate {
     #[test]
     fn relates_records_subqueries_and_options() {
         assert_sql(
-            &relate::<CompanyLikeUser>(acme_likes_alice()).return_type(ReturnType::None),
+            &relate::<CompanyLikeUser>(acme_likes_alice()).return_none(),
             "RELATE company:acme->like->user:alice RETURN NONE;",
         );
+        assert_sql(
+            &relate::<CompanyLikeUser>(acme_likes_alice())
+                .or_update()
+                .return_before(),
+            "RELATE OR UPDATE company:acme->like->user:alice RETURN BEFORE;",
+        );
+        assert_sql(
+            &relate_only::<CompanyLikeUser>(acme_likes_alice()).or_update(),
+            "RELATE ONLY OR UPDATE company:acme->like->user:alice;",
+        );
+        assert_sql(
+            &relate::<CompanyLikeUser>(
+                Company::with(Company::id("acme"))
+                    .like__(CompanyLikeUser::id("acme_alice"))
+                    .user(User::id("alice")),
+            ),
+            "RELATE company:acme->like:acme_alice->user:alice;",
+        );
+        assert_sql(
+            &relate::<CompanyLikeUser>(
+                Company::with(vec![Company::id("acme"), Company::id("globex")])
+                    .like__(E)
+                    .user([User::id("alice"), User::id("bob")]),
+            ),
+            "RELATE [company:acme, company:globex]->like->[user:alice, user:bob];",
+        );
+        let base = || relate::<CompanyLikeUser>(acme_likes_alice());
+        for (statement, clause) in [
+            (base().return_after().to_debug_sql(), " RETURN AFTER;"),
+            (base().return_diff().to_debug_sql(), " RETURN DIFF;"),
+            (
+                base().return_value(CompanyLikeUser::schema().time).to_debug_sql(),
+                " RETURN VALUE time;",
+            ),
+            (
+                base().return_fields::<Value>(Field::new("time")).to_debug_sql(),
+                " RETURN time;",
+            ),
+        ] {
+            assert!(statement.ends_with(clause), "{statement}");
+            assert_parses(&statement);
+        }
         assert_sql(
             &relate_only::<CompanyLikeUser>(acme_likes_alice()).set(
                 CompanyLikeUser::schema()
@@ -734,25 +1500,30 @@ mod relate {
         assert_parses(content.sql());
     }
 
+    /// A typed id of another model does not compile (`tests/ui/fail/relate_wrong_endpoint.rs`);
+    /// an untyped SDK id is checked when the query is rendered.
     #[test]
-    fn ids_of_another_table_are_rejected() {
-        let path: Field = Company::with(User::id("alice"))
+    fn untyped_ids_of_another_table_are_rejected() {
+        let path: Field = Company::with(surrealdb::types::RecordId::from(User::id("alice")))
             .like__(E)
             .user(User::id("bob"))
             .into();
         assert_render_error(&relate::<CompanyLikeUser>(path), "does not belong to table");
+        let path: Field = Company::with(Company::id("acme"))
+            .like__(E)
+            .user(vec![User::id("bob")])
+            .into();
+        assert!(relate::<CompanyLikeUser>(path).to_query().is_ok());
     }
 
-    #[tokio::test]
-    async fn relating_creates_edges_between_every_pair() {
-        let db = db().await;
+    async fn companies_and_users(db: &Surreal<Db>) {
         for (key, name) in [("acme", "Acme Corp"), ("globex", "Globex")] {
             Company {
                 id: Company::id(key),
                 name: name.to_owned(),
                 ..Default::default()
             }
-            .create(&db)
+            .create(db)
             .await
             .expect("company");
         }
@@ -762,10 +1533,131 @@ mod relate {
                 name: name.to_owned(),
                 ..Default::default()
             }
-            .create(&db)
+            .create(db)
             .await
             .expect("user");
         }
+    }
+
+    fn connected_at(seconds: i64) -> umbriel::Setter {
+        CompanyLikeUser::schema()
+            .time()
+            .connected
+            .equal_to(DateTime::<Utc>::from_timestamp(seconds, 0).expect("time"))
+    }
+
+    #[tokio::test]
+    async fn an_edge_id_in_the_path_names_the_edge() {
+        let db = db().await;
+        companies_and_users(&db).await;
+        let path = || -> Field {
+            Company::with(Company::id("acme"))
+                .like__(CompanyLikeUser::id("acme_alice"))
+                .user(User::id("alice"))
+                .into()
+        };
+        let edges = relate::<CompanyLikeUser>(path())
+            .set(connected_at(1))
+            .execute(&db)
+            .await
+            .expect("related");
+        assert_eq!(edges[0].id, CompanyLikeUser::id("acme_alice"));
+
+        let before = relate::<CompanyLikeUser>(path())
+            .or_update()
+            .set(connected_at(2))
+            .return_before()
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(before[0].time.connected.timestamp(), 1);
+        let connected: DateTime<Utc> = read(&db, "RETURN like:acme_alice.time.connected;").await;
+        assert_eq!(connected.timestamp(), 2);
+
+        // Assigning an existing edge's id on the create path fails.
+        let clash = relate::<CompanyLikeUser>(
+            Company::with(Company::id("globex"))
+                .like__(E)
+                .user(User::id("bob")),
+        )
+        .set(CompanyLikeUser::schema().id.equal_to(CompanyLikeUser::id("acme_alice")))
+        .execute(&db)
+        .await;
+        assert!(matches!(&clash, Err(Error::RecordExists { .. })), "{clash:?}");
+    }
+
+    #[tokio::test]
+    async fn endpoint_lists_relate_every_pair() {
+        let db = db().await;
+        companies_and_users(&db).await;
+        let edges = relate::<CompanyLikeUser>(
+            Company::with([Company::id("acme"), Company::id("globex")])
+                .like__(E)
+                .user(User::id("alice")),
+        )
+        .set(connected_at(1))
+        .execute(&db)
+        .await
+        .expect("related");
+        assert_eq!(edges.len(), 2);
+    }
+
+    /// Dynamic endpoints are checked by the database only: `TYPE RELATION IN … OUT …` restricts
+    /// their tables, and `ENFORCED` requires the records to exist.
+    #[tokio::test]
+    async fn type_relation_rejects_a_dynamic_endpoint_of_another_table() {
+        let db = db().await;
+        companies_and_users(&db).await;
+        run(
+            &db,
+            Raw::new(
+                "DEFINE TABLE like TYPE RELATION IN company OUT user; \
+                 CREATE organization:acme SET name = 'Acme Corp';",
+            ),
+        )
+        .await;
+        // The subquery's records are known only when the statement runs.
+        let wrong_table = relate::<CompanyLikeUser>(
+            Company::with(select(All).from(Organization::table()))
+                .like__(E)
+                .user(User::id("alice")),
+        )
+        .set(connected_at(1))
+        .execute(&db)
+        .await;
+        assert!(wrong_table.is_err(), "{wrong_table:?}");
+    }
+
+    #[tokio::test]
+    async fn enforced_rejects_a_missing_endpoint_record() {
+        let db = db().await;
+        companies_and_users(&db).await;
+        run(
+            &db,
+            Raw::new("DEFINE TABLE like TYPE RELATION IN company OUT user ENFORCED;"),
+        )
+        .await;
+        let missing = relate::<CompanyLikeUser>(
+            Company::with(Company::id("initech"))
+                .like__(E)
+                .user(User::id("alice")),
+        )
+        .set(connected_at(1))
+        .execute(&db)
+        .await;
+        assert!(missing.is_err(), "{missing:?}");
+        let existing = relate::<CompanyLikeUser>(acme_likes_alice())
+            .set(connected_at(1))
+            .execute(&db)
+            .await
+            .expect("related");
+        assert_eq!(existing.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn relating_creates_edges_between_every_pair() {
+        let db = db().await;
+        companies_and_users(&db).await;
 
         let edges = relate::<CompanyLikeUser>(
             Company::with(select(All).from(Company::table()))
@@ -778,7 +1670,7 @@ mod relate {
                 .connected
                 .equal_to(Field::new("time::now()")),
         )
-        .return_many(db.clone())
+        .execute(&db)
         .await
         .expect("related");
         assert_eq!(edges.len(), 4);
@@ -1172,7 +2064,7 @@ mod definitions {
             &define_event("email_changed")
                 .on_table(Table::from("user"))
                 .when(Field::new("$before.email").not_equal(Field::new("$after.email")))
-                .then(create::<SpaceShip>().set(SpaceShip::schema().name.equal_to("Apollo"))),
+                .then(create::<SpaceShip>(SpaceShip::table()).set(SpaceShip::schema().name.equal_to("Apollo"))),
             "DEFINE EVENT email_changed ON TABLE user WHEN $before.email != $after.email \
              THEN (CREATE space_ship SET name = 'Apollo');",
         );
@@ -1610,7 +2502,7 @@ mod definitions {
                 .on_table(Table::from("space_ship"))
                 .when(Field::new("$event").equal("CREATE"))
                 .then(
-                    create::<WeaponStats>()
+                    create::<WeaponStats>(WeaponStats::table())
                         .set(WeaponStats::schema().averageStrength.equal_to(1.5)),
                 ),
         )
@@ -1869,7 +2761,7 @@ mod control_flow {
         let name = Param::new("name");
         assert_sql(
             &for_(&name).in_(vec!["Alice", "Bob"]).block(chain(
-                create::<SpaceShip>().set(SpaceShip::schema().name.equal_to(&name)),
+                create::<SpaceShip>(SpaceShip::table()).set(SpaceShip::schema().name.equal_to(&name)),
             )),
             "FOR $name IN ['Alice', 'Bob'] {\nCREATE space_ship SET name = $name;\n};",
         );
@@ -1877,7 +2769,7 @@ mod control_flow {
 
     #[test]
     fn transactions_commit_or_cancel() {
-        let create_ship = || create::<SpaceShip>().set(SpaceShip::schema().name.equal_to("Apollo"));
+        let create_ship = || create::<SpaceShip>(SpaceShip::table()).set(SpaceShip::schema().name.equal_to("Apollo"));
         let committed = begin_transaction()
             .query(create_ship())
             .query(select(All).from(SpaceShip::table()))
@@ -1927,7 +2819,7 @@ mod control_flow {
         run(
             &db,
             for_(&name).in_(vec!["Apollo", "Gemini"]).block(chain(
-                create::<SpaceShip>().set(SpaceShip::schema().name.equal_to(&name)),
+                create::<SpaceShip>(SpaceShip::table()).set(SpaceShip::schema().name.equal_to(&name)),
             )),
         )
         .await;
@@ -1961,8 +2853,8 @@ mod control_flow {
         run(
             &db,
             begin_transaction()
-                .query(create::<SpaceShip>().content(space_ship("apollo", "Apollo")))
-                .query(create::<SpaceShip>().content(space_ship("gemini", "Gemini")))
+                .query(create::<SpaceShip>(SpaceShip::table()).content(space_ship("apollo", "Apollo")))
+                .query(create::<SpaceShip>(SpaceShip::table()).content(space_ship("gemini", "Gemini")))
                 .commit_transaction(),
         )
         .await;
@@ -1971,7 +2863,7 @@ mod control_flow {
         run(
             &db,
             begin_transaction()
-                .query(create::<SpaceShip>().content(space_ship("mercury", "Mercury")))
+                .query(create::<SpaceShip>(SpaceShip::table()).content(space_ship("mercury", "Mercury")))
                 .cancel_transaction(),
         )
         .await;
@@ -1987,11 +2879,11 @@ mod control_flow {
         run(
             &db,
             begin_transaction()
-                .query(create::<Account>().content(Account {
+                .query(create::<Account>(Account::table()).content(Account {
                     id: one.clone(),
                     balance: 100.0,
                 }))
-                .query(create::<Account>().content(Account {
+                .query(create::<Account>(Account::table()).content(Account {
                     id: two.clone(),
                     balance: 50.0,
                 }))
@@ -2018,13 +2910,16 @@ mod control_flow {
     async fn let_parameters_carry_results_between_statements() {
         let db = db().await;
         let balance = let_("balance")
-            .equal_to(create_only::<Balance>().set(Balance::schema().amount.equal_to(25.0)));
+            .equal_to(
+                create_only::<Balance>(CreateTarget::table())
+                    .set(Balance::schema().amount.equal_to(25.0)),
+            );
         let created_balance = balance.with_path::<Balance>(E).amount;
         let acc = Account::schema();
         run(
             &db,
             chain(balance.clone())
-                .chain(create::<Account>().content(Account {
+                .chain(create::<Account>(Account::table()).content(Account {
                     id: Account::id("one"),
                     balance: 0.0,
                 }))

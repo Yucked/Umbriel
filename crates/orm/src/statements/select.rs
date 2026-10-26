@@ -1211,10 +1211,6 @@ where
         }
         self
     }
-
-    fn get_return_type(&self) -> ReturnType {
-        ReturnType::After
-    }
 }
 
 /// A `SELECT VALUE count …` statement returning a single number.

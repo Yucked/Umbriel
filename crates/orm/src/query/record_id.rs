@@ -264,6 +264,11 @@ impl<T: Model> RecordRange<T> {
     fn from_bounds(start: Bound<RecordIdKey>, end: Bound<RecordIdKey>) -> Self {
         Self::new(RecordIdKeyRange { start, end })
     }
+
+    /// The key range, without the table.
+    pub(crate) fn into_key_range(self) -> RecordIdKeyRange {
+        self.range
+    }
 }
 
 fn key_of<T>(id: &impl Borrow<RecordId<T>>) -> RecordIdKey {

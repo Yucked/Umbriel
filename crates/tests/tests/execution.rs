@@ -1,5 +1,6 @@
 //! Statement-result checking: `select_failure` on constructed result sequences, and `execute`
-//! (through `Runnable::run`) against the in-memory engine.
+//! (through `Runnable::run`) against the in-memory engine, and how `Runnable::get_data` decodes a
+//! first result.
 
 use std::time::Duration;
 
@@ -321,5 +322,28 @@ mod execute {
         );
         let (_, source, _) = statement_error(query.run(db).await);
         assert_ne!(source.query_details(), Some(&QueryError::NotExecuted));
+    }
+}
+
+mod get_data {
+    use super::*;
+
+    async fn names(db: &Surreal<Db>, sql: &str) -> Option<Vec<String>> {
+        Raw::new(sql).get_data(db.clone()).await.expect("decoded")
+    }
+
+    #[tokio::test]
+    async fn decodes_the_first_result_as_it_is() {
+        let db = db().await;
+        assert_eq!(names(&db, "RETURN NONE;").await, None);
+        assert_eq!(names(&db, "RETURN [];").await, Some(vec![]));
+        assert_eq!(
+            names(&db, "RETURN ['Alice'];").await,
+            Some(vec!["Alice".to_owned()])
+        );
+        assert_eq!(
+            names(&db, "RETURN ['Alice', 'Bob'];").await,
+            Some(vec!["Alice".to_owned(), "Bob".to_owned()])
+        );
     }
 }

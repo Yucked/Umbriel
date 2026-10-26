@@ -3,7 +3,7 @@
 
 use surrealdb::{
     Connection, IndexedResults, Surreal,
-    types::{AlreadyExistsError, NotFoundError, QueryError},
+    types::{AlreadyExistsError, NotFoundError, QueryError, SurrealValue, Value},
 };
 
 use crate::{Error, Query, Result, StatementContext};
@@ -57,6 +57,19 @@ pub(crate) async fn execute(db: &Surreal<impl Connection>, query: Query) -> Resu
     match select_failure(statement_count, results.take_errors()) {
         Some(error) => Err(error),
         None => Ok(results),
+    }
+}
+
+/// Decodes the first statement's result as one value: `NONE` is `None`, anything else decodes as
+/// `V`, an array included.
+///
+/// Takes the raw value because the SDK's `take::<Option<V>>` unwraps a one-element array and
+/// rejects longer ones, which breaks every `V` that is itself an array, such as a `RETURN DIFF`
+/// patch.
+pub(crate) fn take_one<V: SurrealValue>(mut results: IndexedResults) -> Result<Option<V>> {
+    match results.take::<Value>(0).map_err(Error::Conversion)? {
+        Value::None => Ok(None),
+        value => V::from_value(value).map(Some).map_err(Error::Conversion),
     }
 }
 

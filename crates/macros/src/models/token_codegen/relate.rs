@@ -68,8 +68,13 @@ impl Codegen<'_> {
 
         // i.e Edge to foreign Node
         let edge_to_foreign_node_connection_method = EdgeToForeignNodeMethod(quote!(
-            pub fn #foreign_node_table(self, clause: impl ::std::convert::Into<#crate_name::NodeClause>) -> #foreign_node_schema {
-                let clause: #crate_name::NodeClause = clause.into();
+            pub fn #foreign_node_table(
+                self,
+                clause: impl #crate_name::IntoNodeClause<<#edge_type as #crate_name::Edge>::#foreign_node_in_or_out>,
+            ) -> #foreign_node_schema {
+                let clause: #crate_name::NodeClause = #crate_name::IntoNodeClause::<
+                    <#edge_type as #crate_name::Edge>::#foreign_node_in_or_out,
+                >::into_node_clause(clause);
                 let clause = clause.with_arrow(#arrow).with_table(#destination_node_table_str);
 
                 <#foreign_node_schema>::#__________connect(

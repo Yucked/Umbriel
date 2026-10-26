@@ -1,160 +1,173 @@
 // Statement syntax
-// DELETE [ ONLY ] @targets
+// DELETE [ FROM | ONLY ] @targets
 //     [ WHERE @condition ]
-//     [ RETURN [ NONE | BEFORE | AFTER | DIFF | @projections ... ]
+//     [ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... ]
 //     [ TIMEOUT @duration ]
+//     [ EXPLAIN [ FULL ]]
 // ;
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::Deref};
 
 use crate::{
-    Conditional, DurationLike, Filter, Model, Renderer, ReturnType, ReturnableDefault,
-    ReturnableStandard, ValueLike, render::Checked,
+    Conditional, DurationLike, Edge, Field, Filter, Model, Renderer, SchemaGetter, ValueLike,
+    render::Checked,
 };
 
-use super::{Statement, impl_statement, update::TargettablesForUpdate};
+use super::{
+    Cardinality, Explained, Many, One, ReturnDefaultNone, ReturnMode, Returning, Statement,
+    impl_statement, returning::return_methods, update::TargettablesForUpdate,
+};
 
-/// Creates a new DELETE statement.
-/// The DELETE statement can be used to delete records from the database.
+/// Creates a new DELETE statement over the model's table or one of its records. Deleting a
+/// record also deletes the edges connected to it.
+///
+/// It returns nothing unless a return method is chosen. Only `RETURN BEFORE` and `RETURN DIFF`
+/// are offered: the deleted records have no state after the statement, so their fields, `VALUE`
+/// projections included, read as `NONE`.
 ///
 /// # Examples
 ///
-/// ```rust, ignore
-/// delete::<User>(user)
-///     .where_(age.less_than(18)); // simple filtering on a field
+/// ```
+/// use umbriel::{*, statements::delete};
+/// # #[model(node, table = "user")]
+/// # #[derive(Debug, Clone, Default)]
+/// # pub struct User { pub id: RecordId<Self>, pub age: u8 }
 ///
-/// delete::<User>(user)
-///     .where_(cond(age.greater_than(18)) // Or more complex filtering with `cond` helper
-///         .and(age.less_than(80)));
+/// let UserSchema { age, .. } = User::schema();
+/// let statement = delete::<User>(User::table())
+///     .where_(age.less_than(18))
+///     .return_before();
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "DELETE user WHERE age < 18 RETURN BEFORE;"
+/// );
 /// ```
 pub fn delete<T: Model>(targettables: impl Into<TargettablesForUpdate>) -> DeleteStatement<T> {
-    DeleteStatement {
-        target: targettables.into().checked::<T>(),
-        is_only: false,
-        where_: None,
-        return_type: None,
-        timeout: None,
-        model: PhantomData,
+    DeleteStatement::new(targettables.into().checked::<T>())
+}
+
+/// Creates a new DELETE ONLY statement over a single record.
+pub fn delete_only<T: Model>(
+    targettables: impl Into<TargettablesForUpdate>,
+) -> DeleteStatement<T, ReturnDefaultNone, One> {
+    DeleteStatement::new(targettables.into().checked::<T>())
+}
+
+/// Creates a DELETE statement over the edges a graph path reaches, such as
+/// `Student::with(student).writes__(Empty)` for `DELETE student:…->writes`: only those edges are
+/// deleted, and the path's edge must be `E`.
+pub fn delete_edges<E, P>(path: &P) -> DeleteStatement<E>
+where
+    E: Edge,
+    P: Deref<Target = <E as SchemaGetter>::Schema>,
+    for<'a> &'a <E as SchemaGetter>::Schema: Into<Field>,
+{
+    let path: Field = (&**path).into();
+    DeleteStatement::new(Checked::new(ValueLike::from(path), None))
+}
+
+#[derive(Debug, Clone)]
+struct DeleteBody {
+    target: Checked<ValueLike>,
+    where_: Option<Filter>,
+    timeout: Option<DurationLike>,
+}
+
+/// A DELETE statement. `R` is its return mode and `C` whether it is written with `ONLY`; both
+/// decide the type [`Returning::execute`] returns.
+#[derive(Debug, Clone)]
+pub struct DeleteStatement<T, R = ReturnDefaultNone, C = Many> {
+    body: DeleteBody,
+    mode: R,
+    cardinality: PhantomData<(fn() -> T, C)>,
+}
+
+impl<T: Model, C: Cardinality> DeleteStatement<T, ReturnDefaultNone, C> {
+    fn new(target: Checked<ValueLike>) -> Self {
+        Self {
+            body: DeleteBody {
+                target,
+                where_: None,
+                timeout: None,
+            },
+            mode: ReturnDefaultNone,
+            cardinality: PhantomData,
+        }
     }
 }
 
-/// Creates a new DELETE ONLY statement, which returns a single record.
-pub fn delete_only<T: Model>(targettables: impl Into<TargettablesForUpdate>) -> DeleteStatement<T> {
-    let mut delete_statement = delete(targettables);
-    delete_statement.is_only = true;
-    delete_statement
-}
-
-/// Define the API for delete Statement
-#[derive(Debug, Clone)]
-pub struct DeleteStatement<T: Model> {
-    target: Checked<ValueLike>,
-    is_only: bool,
-    where_: Option<Filter>,
-    return_type: Option<ReturnType>,
-    timeout: Option<DurationLike>,
-    model: PhantomData<fn() -> T>,
-}
-
-impl<T: Model> DeleteStatement<T> {
+impl<T: Model, R: ReturnMode, C: Cardinality> DeleteStatement<T, R, C> {
     /// Adds a condition to the delete statement.
     ///
-    /// Examples:
+    /// # Examples
     ///
-    /// ```rust, ignore
-    /// // simple filtering on a field
-    /// .where_(age.less_than(18));
-    ///
-    /// // Or more complex filtering with `cond` helper
-    /// .where_(cond(age.greater_than(18))
-    ///         .and(age.less_than(80)));
     /// ```
-    pub fn where_(mut self, condition: impl Conditional + Clone) -> Self {
-        self.where_ = Some(Filter::new(condition));
-        self
-    }
-
-    /// Sets the return type for the query.
-    pub fn return_type(mut self, return_type: impl Into<ReturnType>) -> Self {
-        self.return_type = Some(return_type.into());
+    /// use umbriel::{*, statements::delete};
+    /// # #[model(node, table = "user")]
+    /// # pub struct User { pub id: RecordId<Self>, pub age: u8 }
+    ///
+    /// let age = User::schema().age;
+    /// let statement = delete::<User>(User::table())
+    ///     .where_(cond(age.greater_than(18)).and(age.less_than(80)));
+    /// assert_eq!(
+    ///     statement.to_debug_sql(),
+    ///     "DELETE user WHERE (age > 18) AND (age < 80);"
+    /// );
+    /// ```
+    pub fn where_(mut self, condition: impl Conditional) -> Self {
+        self.body.where_ = Some(Filter::new(condition));
         self
     }
 
     /// Sets the timeout duration for the query. It is written as a literal.
     pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
-        self.timeout = Some(duration.into());
+        self.body.timeout = Some(duration.into());
         self
+    }
+
+    /// `EXPLAIN`: returns the query plan instead of running the statement, so nothing is deleted.
+    pub fn explain(self) -> Explained {
+        Explained::new(self, false)
+    }
+
+    /// `EXPLAIN FULL`: the plan with the number of records each step processes.
+    pub fn explain_full(self) -> Explained {
+        Explained::new(self, true)
+    }
+
+    fn with_mode<M: ReturnMode>(self, mode: M) -> DeleteStatement<T, M, C> {
+        DeleteStatement {
+            body: self.body,
+            mode,
+            cardinality: PhantomData,
+        }
     }
 }
 
-impl<T: Model> Statement for DeleteStatement<T> {
+return_methods!([T: Model] DeleteStatement<T> { before, diff });
+
+impl<T: Model, R: ReturnMode, C: Cardinality> Statement for DeleteStatement<T, R, C> {
     fn render_body(&self, out: &mut Renderer) {
         out.push_str("DELETE ");
-        if self.is_only {
+        if C::ONLY {
             out.push_str("ONLY ");
         }
-        out.push(&self.target);
+        out.push(&self.body.target);
 
-        if let Some(condition) = &self.where_ {
+        if let Some(condition) = &self.body.where_ {
             out.push_str(" WHERE ").push(condition);
         }
 
-        if let Some(return_type) = &self.return_type {
-            out.push_str(" ").push(return_type);
-        }
+        self.mode.render(out);
 
-        if let Some(timeout) = &self.timeout {
+        if let Some(timeout) = &self.body.timeout {
             out.push_str(" TIMEOUT ").push_inlined(timeout);
         }
     }
 }
 
-impl_statement!([T: Model] DeleteStatement<T>);
+impl_statement!([T: Model, R: ReturnMode, C: Cardinality] DeleteStatement<T, R, C>);
 
-impl<T: Model> ReturnableDefault<T> for DeleteStatement<T> {}
-
-impl<T> ReturnableStandard<T> for DeleteStatement<T>
-where
-    T: Model + Send + Sync,
-{
-    fn set_return_type(mut self, return_type: ReturnType) -> Self {
-        self.return_type = Some(return_type);
-        self
-    }
-
-    fn get_return_type(&self) -> ReturnType {
-        self.return_type.clone().unwrap_or(ReturnType::None)
-    }
-}
-
-/// Used in model helper methods for deleting records
-#[derive(Debug, Clone)]
-pub struct DeleteStatementMini<T: Model>(DeleteStatement<T>);
-
-impl<T: Model> From<DeleteStatement<T>> for DeleteStatementMini<T> {
-    fn from(statement: DeleteStatement<T>) -> Self {
-        Self(statement)
-    }
-}
-
-impl<T: Model> Statement for DeleteStatementMini<T> {
-    fn render_body(&self, out: &mut Renderer) {
-        self.0.render_body(out);
-    }
-}
-
-impl_statement!([T: Model] DeleteStatementMini<T>);
-
-impl<T: Model> ReturnableDefault<T> for DeleteStatementMini<T> {}
-
-impl<T> ReturnableStandard<T> for DeleteStatementMini<T>
-where
-    T: Model + Send + Sync,
-{
-    fn set_return_type(self, return_type: ReturnType) -> Self {
-        Self(self.0.set_return_type(return_type))
-    }
-
-    fn get_return_type(&self) -> ReturnType {
-        self.0.get_return_type()
-    }
+impl<T: Model, R: ReturnMode, C: Cardinality> Returning for DeleteStatement<T, R, C> {
+    type Mode = R;
+    type Cardinality = C;
 }

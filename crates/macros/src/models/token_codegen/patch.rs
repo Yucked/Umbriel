@@ -48,6 +48,20 @@ impl Codegen<'_> {
             .into(),
         );
 
+        // An embedded object merges field by field through its own `<Object>Merge`.
+        let merge_type = match field_receiver.to_relation_type(model_attributes) {
+            RelationType::NestObject(nest_object) => quote!(
+                #crate_name::Merge<#field_type, <#nest_object as #crate_name::Object>::Merge>
+            ),
+            _ => quote!(#crate_name::Merge<#field_type>),
+        };
+        self.merge_fields
+            .push(quote!(#vis #field_ident: #merge_type));
+        self.merge_defaults
+            .push(quote!(#field_ident: #crate_name::Merge::Keep));
+        self.merge_entries
+            .push(quote!(self.#field_ident.push_entry(#db_field_name, object);));
+
         Ok(())
     }
 }

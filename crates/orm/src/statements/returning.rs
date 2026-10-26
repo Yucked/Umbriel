@@ -1,0 +1,618 @@
+//! Return clauses of write statements, chosen by type: the return mode a builder carries decides
+//! both the `RETURN` clause it renders and the type `execute` decodes the result into.
+
+use std::{fmt, marker::PhantomData};
+
+use surrealdb::{
+    Connection, IndexedResults, Surreal,
+    types::{self, ConversionError, Kind, Object, SurrealValue, Value},
+};
+
+use crate::{
+    Error, Field, Fragment, Projections, Queryable, Render, Renderer, Result,
+    execution::{execute, take_one},
+};
+
+use super::Statement;
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// How many results a statement returns: [`Many`] for a table or several targets, [`One`] for
+/// `ONLY`.
+pub trait Cardinality: sealed::Sealed + Send + Sync + 'static {
+    /// Whether the statement is written with `ONLY`.
+    #[doc(hidden)]
+    const ONLY: bool;
+
+    /// The result of a statement with return mode `R`.
+    type Output<R: ReturnMode>;
+
+    /// Decodes the first statement's result.
+    #[doc(hidden)]
+    fn decode<R: ReturnMode>(results: IndexedResults) -> Result<Self::Output<R>>;
+}
+
+/// A statement without `ONLY`: its result is a list, one entry per affected record.
+#[derive(Debug, Clone, Copy)]
+pub struct Many;
+
+/// A statement with `ONLY`: its result is a single entry, or none.
+#[derive(Debug, Clone, Copy)]
+pub struct One;
+
+impl sealed::Sealed for Many {}
+impl sealed::Sealed for One {}
+
+impl Cardinality for Many {
+    const ONLY: bool = false;
+    type Output<R: ReturnMode> = R::Many;
+
+    fn decode<R: ReturnMode>(results: IndexedResults) -> Result<R::Many> {
+        R::decode_many(results)
+    }
+}
+
+impl Cardinality for One {
+    const ONLY: bool = true;
+    type Output<R: ReturnMode> = R::One;
+
+    fn decode<R: ReturnMode>(results: IndexedResults) -> Result<R::One> {
+        R::decode_one(results)
+    }
+}
+
+/// What a write statement returns: its `RETURN` clause and the types its result decodes into.
+pub trait ReturnMode: sealed::Sealed + Clone + fmt::Debug + Send + Sync + 'static {
+    /// The result without `ONLY`.
+    type Many;
+    /// The result with `ONLY`.
+    type One;
+
+    /// Writes the clause, with its leading space, or nothing for the statement's default.
+    #[doc(hidden)]
+    fn render(&self, out: &mut Renderer);
+
+    /// Decodes the result of a statement without `ONLY`.
+    #[doc(hidden)]
+    fn decode_many(results: IndexedResults) -> Result<Self::Many>;
+
+    /// Decodes the result of a statement with `ONLY`.
+    #[doc(hidden)]
+    fn decode_one(results: IndexedResults) -> Result<Self::One>;
+}
+
+fn take_many<V: SurrealValue>(mut results: IndexedResults) -> Result<Vec<V>> {
+    results.take::<Vec<V>>(0).map_err(Error::Conversion)
+}
+
+
+/// Implements `Clone` and `Debug` without bounds on the phantom type parameter, which derives
+/// would require.
+macro_rules! phantom_mode {
+    ($name:ident<$param:ident> { $($field:ident),* }) => {
+        impl<$param> Clone for $name<$param> {
+            fn clone(&self) -> Self {
+                Self {
+                    $($field: self.$field.clone(),)*
+                    model: PhantomData,
+                }
+            }
+        }
+
+        impl<$param> fmt::Debug for $name<$param> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.debug_struct(stringify!($name))
+                    $(.field(stringify!($field), &self.$field))*
+                    .finish()
+            }
+        }
+
+        impl<$param> sealed::Sealed for $name<$param> {}
+    };
+}
+
+/// The records as they are after the statement: the default of `CREATE`, `INSERT`, `UPDATE`,
+/// `UPSERT` and `RELATE`, or an explicit `RETURN AFTER`.
+pub struct ReturnAfter<T> {
+    explicit: bool,
+    model: PhantomData<fn() -> T>,
+}
+
+impl<T> ReturnAfter<T> {
+    /// The statement's default, which writes no clause.
+    pub(crate) fn default_mode() -> Self {
+        Self {
+            explicit: false,
+            model: PhantomData,
+        }
+    }
+
+    /// `RETURN AFTER`.
+    pub(crate) fn explicit() -> Self {
+        Self {
+            explicit: true,
+            model: PhantomData,
+        }
+    }
+}
+
+phantom_mode!(ReturnAfter<T> { explicit });
+
+impl<T: SurrealValue + 'static> ReturnMode for ReturnAfter<T> {
+    type Many = Vec<T>;
+    type One = Option<T>;
+
+    fn render(&self, out: &mut Renderer) {
+        if self.explicit {
+            out.push_str(" RETURN AFTER");
+        }
+    }
+
+    fn decode_many(results: IndexedResults) -> Result<Vec<T>> {
+        take_many(results)
+    }
+
+    fn decode_one(results: IndexedResults) -> Result<Option<T>> {
+        take_one(results)
+    }
+}
+
+/// `RETURN BEFORE`: the records as they were before the statement.
+pub struct ReturnBefore<T> {
+    model: PhantomData<fn() -> T>,
+}
+
+impl<T> ReturnBefore<T> {
+    pub(crate) fn new() -> Self {
+        Self { model: PhantomData }
+    }
+}
+
+phantom_mode!(ReturnBefore<T> {});
+
+impl<T: SurrealValue + 'static> ReturnMode for ReturnBefore<T> {
+    type Many = Vec<T>;
+    type One = Option<T>;
+
+    fn render(&self, out: &mut Renderer) {
+        out.push_str(" RETURN BEFORE");
+    }
+
+    fn decode_many(results: IndexedResults) -> Result<Vec<T>> {
+        take_many(results)
+    }
+
+    fn decode_one(results: IndexedResults) -> Result<Option<T>> {
+        take_one(results)
+    }
+}
+
+/// `RETURN NONE`: nothing.
+#[derive(Debug, Clone, Copy)]
+pub struct ReturnNone;
+
+impl sealed::Sealed for ReturnNone {}
+
+impl ReturnMode for ReturnNone {
+    type Many = ();
+    type One = ();
+
+    fn render(&self, out: &mut Renderer) {
+        out.push_str(" RETURN NONE");
+    }
+
+    fn decode_many(_: IndexedResults) -> Result<()> {
+        Ok(())
+    }
+
+    fn decode_one(_: IndexedResults) -> Result<()> {
+        Ok(())
+    }
+}
+
+/// The default of `DELETE`, which returns nothing and writes no clause.
+#[derive(Debug, Clone, Copy)]
+pub struct ReturnDefaultNone;
+
+impl sealed::Sealed for ReturnDefaultNone {}
+
+impl ReturnMode for ReturnDefaultNone {
+    type Many = ();
+    type One = ();
+
+    fn render(&self, _: &mut Renderer) {}
+
+    fn decode_many(_: IndexedResults) -> Result<()> {
+        Ok(())
+    }
+
+    fn decode_one(_: IndexedResults) -> Result<()> {
+        Ok(())
+    }
+}
+
+/// `RETURN DIFF`: for each record, the JSON Patch operations the statement applied.
+#[derive(Debug, Clone, Copy)]
+pub struct ReturnDiff;
+
+impl sealed::Sealed for ReturnDiff {}
+
+impl ReturnMode for ReturnDiff {
+    type Many = Vec<Vec<DiffOp>>;
+    type One = Option<Vec<DiffOp>>;
+
+    fn render(&self, out: &mut Renderer) {
+        out.push_str(" RETURN DIFF");
+    }
+
+    fn decode_many(results: IndexedResults) -> Result<Vec<Vec<DiffOp>>> {
+        take_many(results)
+    }
+
+    fn decode_one(results: IndexedResults) -> Result<Option<Vec<DiffOp>>> {
+        take_one(results)
+    }
+}
+
+/// `RETURN VALUE field`: the value of one field per record, of the field's own type `V`.
+pub struct ReturnValue<V> {
+    field: Field,
+    model: PhantomData<fn() -> V>,
+}
+
+impl<V> ReturnValue<V> {
+    pub(crate) fn new(field: Field) -> Self {
+        Self {
+            field,
+            model: PhantomData,
+        }
+    }
+}
+
+phantom_mode!(ReturnValue<V> { field });
+
+impl<V: SurrealValue + 'static> ReturnMode for ReturnValue<V> {
+    type Many = Vec<V>;
+    type One = Option<V>;
+
+    fn render(&self, out: &mut Renderer) {
+        out.push_str(" RETURN VALUE ").push(&self.field);
+    }
+
+    fn decode_many(results: IndexedResults) -> Result<Vec<V>> {
+        take_many(results)
+    }
+
+    fn decode_one(results: IndexedResults) -> Result<Option<V>> {
+        take_one(results)
+    }
+}
+
+/// `RETURN fields…`: the listed fields or expressions per record, decoded into the caller's `P`.
+pub struct ReturnFields<P> {
+    projections: Projections,
+    model: PhantomData<fn() -> P>,
+}
+
+impl<P> ReturnFields<P> {
+    pub(crate) fn new(projections: Projections) -> Self {
+        Self {
+            projections,
+            model: PhantomData,
+        }
+    }
+}
+
+phantom_mode!(ReturnFields<P> { projections });
+
+impl<P: SurrealValue + 'static> ReturnMode for ReturnFields<P> {
+    type Many = Vec<P>;
+    type One = Option<P>;
+
+    fn render(&self, out: &mut Renderer) {
+        out.push_str(" RETURN ").push(&self.projections);
+    }
+
+    fn decode_many(results: IndexedResults) -> Result<Vec<P>> {
+        take_many(results)
+    }
+
+    fn decode_one(results: IndexedResults) -> Result<Option<P>> {
+        take_one(results)
+    }
+}
+
+/// One operation of a `RETURN DIFF` result, as SurrealDB reports it: a JSON Patch operation whose
+/// `path` is a JSON pointer into the record.
+///
+/// Decoded by its `op` tag, so `add` and `replace`, which share a shape, stay distinct.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum DiffOp {
+    /// A field or element was added.
+    Add {
+        /// Where, as a JSON pointer.
+        path: String,
+        /// The value added.
+        value: Value,
+    },
+    /// A field or element was removed.
+    Remove {
+        /// Where, as a JSON pointer.
+        path: String,
+    },
+    /// A field or element was replaced.
+    Replace {
+        /// Where, as a JSON pointer.
+        path: String,
+        /// The new value.
+        value: Value,
+    },
+    /// A string was changed, described by a text diff.
+    Change {
+        /// Where, as a JSON pointer.
+        path: String,
+        /// The diff, in the `diff-match-patch` patch format.
+        value: String,
+    },
+}
+
+impl DiffOp {
+    fn op(&self) -> &'static str {
+        match self {
+            Self::Add { .. } => "add",
+            Self::Remove { .. } => "remove",
+            Self::Replace { .. } => "replace",
+            Self::Change { .. } => "change",
+        }
+    }
+}
+
+fn diff_error(value: &Value, context: impl Into<String>) -> types::Error {
+    ConversionError::from_value(DiffOp::kind_of(), value)
+        .with_context(context.into())
+        .into()
+}
+
+impl SurrealValue for DiffOp {
+    fn kind_of() -> Kind {
+        Kind::Object
+    }
+
+    fn is_value(value: &Value) -> bool {
+        matches!(value, Value::Object(object) if matches!(object.get("op"), Some(Value::String(_))))
+    }
+
+    fn into_value(self) -> Value {
+        let op = self.op();
+        let mut object = Object::new();
+        object.insert("op".to_owned(), Value::String(op.to_owned()));
+        let (path, value) = match self {
+            Self::Add { path, value } | Self::Replace { path, value } => (path, Some(value)),
+            Self::Remove { path } => (path, None),
+            Self::Change { path, value } => (path, Some(Value::String(value))),
+        };
+        object.insert("path".to_owned(), Value::String(path));
+        if let Some(value) = value {
+            object.insert("value".to_owned(), value);
+        }
+        Value::Object(object)
+    }
+
+    fn from_value(value: Value) -> Result<Self, types::Error> {
+        let Value::Object(object) = value else {
+            return Err(diff_error(&value, "a diff operation is an object"));
+        };
+        let mut fields = object.into_inner();
+        let op = match fields.remove("op") {
+            Some(Value::String(op)) => op,
+            _ => {
+                return Err(diff_error(
+                    &Value::Object(fields.into()),
+                    "a diff operation has an `op` string",
+                ));
+            }
+        };
+        let path = match fields.remove("path") {
+            Some(Value::String(path)) => path,
+            _ => {
+                return Err(diff_error(
+                    &Value::Object(fields.into()),
+                    "a diff operation has a `path` string",
+                ));
+            }
+        };
+        let value = fields.remove("value");
+        match (op.as_str(), value) {
+            ("add", Some(value)) => Ok(Self::Add { path, value }),
+            ("remove", _) => Ok(Self::Remove { path }),
+            ("replace", Some(value)) => Ok(Self::Replace { path, value }),
+            ("change", Some(Value::String(value))) => Ok(Self::Change { path, value }),
+            (op, value) => Err(diff_error(
+                &value.unwrap_or(Value::None),
+                format!("unsupported or incomplete diff operation `{op}`"),
+            )),
+        }
+    }
+}
+
+/// Implements the return methods a statement offers, each switching its return mode. Every
+/// statement struct is `Name<T, R, C>` with a private `with_mode`; the list names the modes its
+/// statement documents, so an undocumented or meaningless mode does not exist on that statement.
+macro_rules! return_methods {
+    ([$($bounds:tt)*] $statement:ident<$model:ident> { $($mode:ident),* $(,)? }) => {
+        impl<$($bounds)*, R: $crate::statements::ReturnMode, C: $crate::statements::Cardinality>
+            $statement<$model, R, C>
+        {
+            $( $crate::statements::returning::return_methods!(@$mode $statement $model); )*
+        }
+    };
+    (@none $statement:ident $model:ident) => {
+        /// `RETURN NONE`: the statement returns nothing.
+        pub fn return_none(self) -> $statement<$model, $crate::statements::ReturnNone, C> {
+            self.with_mode($crate::statements::ReturnNone)
+        }
+    };
+    (@before $statement:ident $model:ident) => {
+        /// `RETURN BEFORE`: each record as it was before the statement.
+        pub fn return_before(
+            self,
+        ) -> $statement<$model, $crate::statements::ReturnBefore<$model>, C> {
+            self.with_mode($crate::statements::ReturnBefore::new())
+        }
+    };
+    (@after $statement:ident $model:ident) => {
+        /// `RETURN AFTER`: each record as it is after the statement, which is also the default.
+        pub fn return_after(
+            self,
+        ) -> $statement<$model, $crate::statements::ReturnAfter<$model>, C> {
+            self.with_mode($crate::statements::ReturnAfter::explicit())
+        }
+    };
+    (@diff $statement:ident $model:ident) => {
+        /// `RETURN DIFF`: for each record, the JSON Patch operations the statement applied.
+        pub fn return_diff(self) -> $statement<$model, $crate::statements::ReturnDiff, C> {
+            self.with_mode($crate::statements::ReturnDiff)
+        }
+    };
+    (@value $statement:ident $model:ident) => {
+        /// `RETURN VALUE field`: one value per record, of the field's own type `V`. The field must
+        /// be one of this model's generated schema fields.
+        pub fn return_value<F, V>(
+            self,
+            field: F,
+        ) -> $statement<$model, $crate::statements::ReturnValue<V>, C>
+        where
+            F: $crate::__private::ModelField<$model, V>,
+            V: ::surrealdb::types::SurrealValue + 'static,
+        {
+            let field: $crate::Field = (*field).clone();
+            self.with_mode($crate::statements::ReturnValue::new(field))
+        }
+    };
+    (@fields $statement:ident $model:ident) => {
+        /// `RETURN fields…`: the listed fields or expressions per record, decoded into `P`.
+        pub fn return_fields<P>(
+            self,
+            projections: impl Into<$crate::Projections>,
+        ) -> $statement<$model, $crate::statements::ReturnFields<P>, C>
+        where
+            P: ::surrealdb::types::SurrealValue + 'static,
+        {
+            self.with_mode($crate::statements::ReturnFields::new(projections.into()))
+        }
+    };
+    (@links $statement:ident $model:ident) => {
+        /// Returns every field with the given record links fetched (`RETURN *, link.*`), decoded
+        /// into `P`. A link to a missing record becomes `NULL`.
+        ///
+        /// # Errors
+        ///
+        /// [`Error::FieldsUnfetchableNotARecordLink`](crate::Error::FieldsUnfetchableNotARecordLink)
+        /// when a field is not one of the model's links.
+        pub fn load_links<P>(
+            self,
+            linked_fields: impl IntoIterator<Item = impl Into<$crate::Field>>,
+        ) -> $crate::Result<$statement<$model, $crate::statements::ReturnFields<P>, C>>
+        where
+            P: ::surrealdb::types::SurrealValue + 'static,
+        {
+            let projections = $crate::traits::statements::fetch_projections::<$model>(
+                linked_fields.into_iter().map(Into::into).collect(),
+            )?;
+            Ok(self.with_mode($crate::statements::ReturnFields::new(projections)))
+        }
+
+        /// Returns every field with every record link fetched, decoded into `P`.
+        pub fn load_all_links<P>(
+            self,
+        ) -> $statement<$model, $crate::statements::ReturnFields<P>, C>
+        where
+            P: ::surrealdb::types::SurrealValue + 'static,
+        {
+            let projections = $crate::traits::statements::link_projections(
+                <$model as $crate::Model>::get_linked_fields(),
+            );
+            self.with_mode($crate::statements::ReturnFields::new(projections))
+        }
+    };
+}
+pub(crate) use return_methods;
+
+/// A write statement whose return mode, and so its result type, is part of its type.
+pub trait Returning: Queryable + Sync {
+    /// The return mode.
+    type Mode: ReturnMode;
+    /// Whether the statement is written with `ONLY`.
+    type Cardinality: Cardinality;
+
+    /// Runs the statement and decodes what its return clause returns. Every statement's result is
+    /// checked first, as [`Runnable::run`](crate::Runnable::run) does.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the statement does not render, when it fails (classified as
+    /// [`Error::RecordExists`], [`Error::TableNotFound`] or [`Error::Statement`]), or when the
+    /// result does not decode into the mode's type ([`Error::Conversion`]).
+    fn execute(
+        &self,
+        db: &Surreal<impl Connection>,
+    ) -> impl Future<Output = Result<<Self::Cardinality as Cardinality>::Output<Self::Mode>>> + Send
+    {
+        async move {
+            let results = execute(db, self.to_query()?).await?;
+            <Self::Cardinality as Cardinality>::decode::<Self::Mode>(results)
+        }
+    }
+}
+
+/// A statement's body as an owned node, so it can be shared inside another statement.
+pub(crate) struct Body<S>(pub(crate) S);
+
+impl<S: Statement> Render for Body<S> {
+    fn render(&self, out: &mut Renderer) {
+        self.0.render_body(out);
+    }
+}
+
+/// A statement with `EXPLAIN` or `EXPLAIN FULL`: it returns the query plan and changes nothing.
+#[derive(Debug, Clone)]
+pub struct Explained {
+    statement: Fragment,
+    full: bool,
+}
+
+impl Explained {
+    pub(crate) fn new(statement: impl Statement + Send + Sync + 'static, full: bool) -> Self {
+        Self {
+            statement: Fragment::new(Body(statement)),
+            full,
+        }
+    }
+
+    /// Runs the statement and returns its plan, one value per plan step.
+    ///
+    /// The plan's shape is SurrealDB's own and is not typed by Umbriel yet.
+    ///
+    /// # Errors
+    ///
+    /// Fails as [`Returning::execute`] does.
+    pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<Vec<Value>> {
+        take_many(execute(db, self.to_query()?).await?)
+    }
+}
+
+impl Statement for Explained {
+    fn render_body(&self, out: &mut Renderer) {
+        out.push(&self.statement);
+        out.push_str(if self.full {
+            " EXPLAIN FULL"
+        } else {
+            " EXPLAIN"
+        });
+    }
+}
+
+super::impl_statement!(Explained);

@@ -15,6 +15,11 @@ impl StructIdent {
         StructPatchIdent(format_ident!("{}Patch", self.to_string()))
     }
 
+    /// The model's merge type, `<Model>Merge`, generated next to the model.
+    pub fn merge_ident(&self) -> Ident {
+        format_ident!("{}Merge", self.to_string())
+    }
+
     /// The model's schema type, `<Model>Schema`, generated next to the model.
     pub fn schema_ident(&self) -> Ident {
         format_ident!("{}Schema", self.to_string())

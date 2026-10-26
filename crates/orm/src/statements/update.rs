@@ -3,64 +3,74 @@
 // 	[ CONTENT @value
 // 	  | MERGE @value
 // 	  | PATCH @value
-// 	  | SET @field = @value ...
+// 	  | REPLACE @value
+// 	  | [ SET @field = @value, ... | UNSET @field, ... ]
 // 	]
 // 	[ WHERE @condition ]
-// 	[ RETURN [ NONE | BEFORE | AFTER | DIFF | @projections ... ]
+// 	[ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... | RETURN VALUE @statement_param ]
 // 	[ TIMEOUT @duration ]
+// 	[ EXPLAIN [ FULL ]]
 // ;
 use std::marker::PhantomData;
 
 use surrealdb::types::{self, SurrealValue, Table, ToSql};
 
 use crate::{
-    Conditional, DurationLike, Filter, Model, PatchOp, RecordId, Renderer, ReturnType,
-    ReturnableDefault, ReturnableStandard, Setter, ValueLike, render::Checked,
+    Conditional, DurationLike, Filter, Model, ModelMerge, PatchOp, RecordId, Renderer, Setter,
+    ValueLike, render::Checked,
 };
 
-use super::{Statement, impl_statement};
+use super::{
+    Cardinality, Explained, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
+    data::{DataClause, Unsettables},
+    impl_statement,
+    returning::return_methods,
+};
 
 /// Creates a new UPDATE statement.
-/// The UPDATE statement can be used to update or modify records in the database.
+/// The UPDATE statement can be used to update or modify records in the database. It never creates
+/// records: a missing target is left missing.
+///
+/// Since SurrealDB 3.3.0 the `WHERE` condition is checked before the data clause, and both read
+/// the record as it was before the statement.
 ///
 /// # Examples
 ///
-/// ```rust, ignore
-/// use umbriel::{*, statements::update};
-///
-/// // Update using set method
-/// update::<User>(user)
-///     .set(object_partial!(User { score: 5 }))
-///     .where_(age.greater_than(18));
-///
-/// // Replace a specific record using content method
-/// update::<User>(user1).content(User { name: "Alice".into(), age: 30, ..Default::default() });
-///
-/// // Apply a generated patch
-/// update::<User>(user2).set(UserPatch { score: Patch::Set(5), ..Default::default() }.into_setters());
 /// ```
-pub fn update<T: Model>(targettables: impl Into<TargettablesForUpdate>) -> UpdateStatementInit<T> {
-    UpdateStatementInit {
-        target: targettables.into().checked::<T>(),
-        is_only: false,
-        data: Data::None,
-        where_: None,
-        return_type: None,
-        timeout: None,
-        model: PhantomData,
+/// use umbriel::{*, statements::update};
+/// # #[model(node, table = "user")]
+/// # #[derive(Debug, Clone, Default)]
+/// # pub struct User { pub id: RecordId<Self>, pub name: String, pub score: u32 }
+///
+/// let UserSchema { score, .. } = User::schema();
+/// let statement = update::<User>(User::id("alice"))
+///     .set(score.increment_by(5u32))
+///     .return_value(score);
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "UPDATE user:alice SET score += 5 RETURN VALUE score;"
+/// );
+/// ```
+pub fn update<T: Model>(targettables: impl Into<TargettablesForUpdate>) -> UpdateStatement<T> {
+    UpdateStatement {
+        body: UpdateBody::new::<T>(targettables.into()),
+        mode: ReturnAfter::default_mode(),
+        cardinality: PhantomData,
     }
 }
 
 /// Creates a new UPDATE ONLY statement, returning a single object.
 pub fn update_only<T: Model>(
     targettables: impl Into<TargettablesForUpdate>,
-) -> UpdateStatementInit<T> {
-    let mut statement = update(targettables);
-    statement.is_only = true;
-    statement
+) -> UpdateStatement<T, ReturnAfter<T>, One> {
+    UpdateStatement {
+        body: UpdateBody::new::<T>(targettables.into()),
+        mode: ReturnAfter::default_mode(),
+        cardinality: PhantomData,
+    }
 }
 
-/// The target of an `UPDATE` or `DELETE`: the model's table or one of its records.
+/// The target of an `UPDATE`, `UPSERT` or `DELETE`: the model's table or one of its records.
 pub enum TargettablesForUpdate {
     /// A table, rendered as its name.
     Table(Table),
@@ -139,208 +149,212 @@ impl<T: Model> From<&RecordId<T>> for TargettablesForUpdate {
     }
 }
 
+/// The clauses an `UPDATE` and an `UPSERT` share, in the order both write them.
 #[derive(Debug, Clone)]
-enum Data {
-    None,
-    Content(ValueLike),
-    Merge(ValueLike),
-    Replace(ValueLike),
-    Set(Vec<Setter>),
-    Patch(Vec<PatchOp>),
+pub(crate) struct UpdateBody {
+    pub(crate) target: Checked<ValueLike>,
+    pub(crate) data: Option<DataClause>,
+    pub(crate) where_: Option<Filter>,
+    pub(crate) timeout: Option<DurationLike>,
 }
 
-/// Update statement initializer
-#[derive(Debug, Clone)]
-pub struct UpdateStatementInit<T: Model> {
-    target: Checked<ValueLike>,
-    is_only: bool,
-    data: Data,
-    where_: Option<Filter>,
-    return_type: Option<ReturnType>,
-    timeout: Option<DurationLike>,
-    model: PhantomData<fn() -> T>,
-}
-
-impl<T: Model> UpdateStatementInit<T> {
-    /// Caution! Replaces the whole record. Specify the full record data using the CONTENT keyword.
-    pub fn content(mut self, content: T) -> UpdateStatement<T> {
-        self.data = Data::Content(ValueLike::value(content));
-        UpdateStatement(self)
-    }
-
-    /// Merges the given object into the record with the MERGE keyword. Nested objects are merged
-    /// recursively; use `set` to replace a field's value instead.
-    pub fn merge(mut self, merge: impl SurrealValue) -> UpdateStatement<T> {
-        self.data = Data::Merge(ValueLike::value(merge));
-        UpdateStatement(self)
-    }
-
-    /// Caution! Replaces the whole record with the given object, removing every field it does
-    /// not contain.
-    pub fn replace(mut self, replacement: impl SurrealValue) -> UpdateStatement<T> {
-        self.data = Data::Replace(ValueLike::value(replacement));
-        UpdateStatement(self)
-    }
-
-    /// When specifying fields to update using the SET clause,
-    /// it is possible to increment and decrement numeric values,
-    /// and add or remove values from arrays.
-    /// To increment a numeric value, or to add an item to an array,
-    /// use the `append` or incremenet (i.e +=) operator. To decrement a numeric value,
-    /// or to remove an value from an array, use the `decrement` or `remove` (i.e -=) operator.
-    ///
-    /// # Examples
-    ///
-    /// ```rust, ignore
-    /// // Set fields using a helper macro function:
-    /// .set(object_partial!(Weapon {
-    ///     id: weapon_id.clone(),
-    ///     name: "Laser".to_string()
-    /// }))
-    ///
-    /// // Set multiple fields as an array or vector:
-    /// .set([name.equal_to("Laser"), damage.increment_by(100)]);
-    ///
-    /// // set a single field number. Generates  =
-    /// .set(score.equal_to(5))
-    ///
-    /// // increment a field number. Generates  +=
-    /// .set(score.increment_by(5))
-    ///
-    /// // decrement a field number. Generates  -=
-    /// .set(score.decrement_by(5))
-    ///
-    /// // add to an array. Generates  +=
-    /// .set(friends_names.append("Alice"))
-    ///
-    /// // remove value from an array. Generates  -=
-    /// .set(friends_names.remove("Bob"))
-    /// ```
-    pub fn set(mut self, settables: impl Into<Vec<Setter>>) -> UpdateStatement<T> {
-        let settables: Vec<Setter> = settables.into();
-        match &mut self.data {
-            Data::Set(setters) => setters.extend(settables),
-            data => *data = Data::Set(settables),
+impl UpdateBody {
+    pub(crate) fn new<T: Model>(target: TargettablesForUpdate) -> Self {
+        Self {
+            target: target.checked::<T>(),
+            data: None,
+            where_: None,
+            timeout: None,
         }
-        UpdateStatement(self)
     }
 
-    /// Specify the patch operations to be applied to the record using the PATCH keyword.
-    ///
-    /// # Example
-    /// ```rust, ignore
-    /// name.patch_replace("Alice");
-    /// name.patch_add("Alice");
-    /// name.patch_remove();
-    /// // regex search and replace
-    /// name.patch_change("@@ -1,4 +1,4 @@\n te\n-s\n+x\n t\n");
-    /// ```
-    pub fn patch(mut self, patch_op: impl Into<Vec<PatchOp>>) -> UpdateStatement<T> {
-        let patch_ops: Vec<PatchOp> = patch_op.into();
-        match &mut self.data {
-            Data::Patch(ops) => ops.extend(patch_ops),
-            data => *data = Data::Patch(patch_ops),
-        }
-        UpdateStatement(self)
-    }
-}
-
-/// A builder for update statements.
-#[derive(Debug, Clone)]
-pub struct UpdateStatement<T: Model>(UpdateStatementInit<T>);
-
-impl<T: Model> From<UpdateStatementInit<T>> for UpdateStatement<T> {
-    fn from(value: UpdateStatementInit<T>) -> Self {
-        Self(value)
-    }
-}
-
-impl<T: Model> UpdateStatement<T> {
-    /// Adds a condition to the `WHERE` clause of the query.
-    ///
-    /// # Example
-    ///
-    /// ```rust, ignore
-    /// // You can use a simple filter without the `cond` helper function
-    /// .where_(age.greater_than_or_equal(18)
-    ///
-    /// // or with the `cond` helper function for multiple `AND` or `OR` conditions
-    /// .where_(cond(age.greater_than_or_equal(18)).and(age.less_than_or_equal(90)))
-    /// ```
-    pub fn where_(mut self, condition: impl Conditional) -> Self {
-        self.0.where_ = Some(Filter::new(condition));
-        self
-    }
-
-    /// Sets the return type for the query.
-    pub fn return_type(mut self, return_type: impl Into<ReturnType>) -> Self {
-        self.0.return_type = Some(return_type.into());
-        self
-    }
-
-    /// Sets the timeout duration for the query. It is written as a literal.
-    pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
-        self.0.timeout = Some(duration.into());
-        self
-    }
-}
-
-impl<T: Model> Statement for UpdateStatement<T> {
-    fn render_body(&self, out: &mut Renderer) {
-        let statement = &self.0;
-        out.push_str("UPDATE ");
-        if statement.is_only {
+    /// Writes `KEYWORD [ONLY] target data [WHERE …]`; the return clause follows.
+    pub(crate) fn render_head(&self, keyword: &str, only: bool, out: &mut Renderer) {
+        out.push_str(keyword).push_str(" ");
+        if only {
             out.push_str("ONLY ");
         }
-        out.push(&statement.target);
-
-        match &statement.data {
-            Data::None => {}
-            Data::Content(content) => {
-                out.push_str(" CONTENT ").push(content);
-            }
-            Data::Merge(merge) => {
-                out.push_str(" MERGE ").push(merge);
-            }
-            Data::Replace(replacement) => {
-                out.push_str(" REPLACE ").push(replacement);
-            }
-            Data::Set(setters) => {
-                out.push_str(" SET ").push(setters);
-            }
-            Data::Patch(ops) => {
-                out.push_str(" PATCH [").push(ops).push_str("]");
-            }
-        }
-
-        if let Some(condition) = &statement.where_ {
+        out.push(&self.target).push(&self.data);
+        if let Some(condition) = &self.where_ {
             out.push_str(" WHERE ").push(condition);
         }
+    }
 
-        if let Some(return_type) = &statement.return_type {
-            out.push_str(" ").push(return_type);
-        }
-
-        if let Some(timeout) = &statement.timeout {
+    /// Writes `[TIMEOUT …]`, after the return clause.
+    pub(crate) fn render_tail(&self, out: &mut Renderer) {
+        if let Some(timeout) = &self.timeout {
             out.push_str(" TIMEOUT ").push_inlined(timeout);
         }
     }
 }
 
-impl_statement!([T: Model] UpdateStatement<T>);
+/// Implements the data clauses, `WHERE`, `TIMEOUT` and `EXPLAIN` that `UPDATE` and `UPSERT` share.
+macro_rules! update_clauses {
+    ($statement:ident) => {
+        impl<T: Model, R: ReturnMode, C: Cardinality> $statement<T, R, C> {
+            /// Caution! Replaces the whole record with the model (`CONTENT`). `CONTENT` bypasses
+            /// `READONLY` fields; use [`replace`](Self::replace) to respect them.
+            pub fn content(mut self, content: T) -> Self {
+                self.body.data = Some(DataClause::Content(ValueLike::value(content)));
+                self
+            }
 
-impl<T: Model> ReturnableDefault<T> for UpdateStatement<T> {}
+            /// Merges the non-`Keep` fields of a generated `<Model>Merge` into the record
+            /// (`MERGE`). Nested objects combine at every level; arrays are replaced whole.
+            ///
+            /// An empty merge, with every field `Keep`, still writes `MERGE {}`: the statement is
+            /// a real update, so events fire and its `WHERE`, `ONLY`, return mode and `EXPLAIN`
+            /// apply as written.
+            pub fn merge(self, merge: impl ModelMerge<Model = T>) -> Self {
+                self.merge_object(merge.into_object())
+            }
 
-impl<T> ReturnableStandard<T> for UpdateStatement<T>
-where
-    T: Model + Send + Sync,
-{
-    fn set_return_type(mut self, return_type: ReturnType) -> Self {
-        self.0.return_type = Some(return_type);
-        self
+            /// `MERGE` with an object already built from a `<Model>Merge`.
+            pub(crate) fn merge_object(mut self, object: $crate::MergeObject) -> Self {
+                self.body.data = Some(DataClause::Merge(ValueLike::new(object)));
+                self
+            }
+
+            /// Caution! Replaces the whole record with the given object, removing every field it
+            /// does not contain (`REPLACE`). Unlike `CONTENT`, it respects `READONLY` fields.
+            pub fn replace(mut self, replacement: impl SurrealValue) -> Self {
+                self.body.data = Some(DataClause::Replace(ValueLike::value(replacement)));
+                self
+            }
+
+            /// When specifying fields to update using the SET clause,
+            /// it is possible to increment and decrement numeric values,
+            /// and add or remove values from arrays.
+            /// To increment a numeric value, or to add an item to an array,
+            /// use the `append` or incremenet (i.e +=) operator. To decrement a numeric value,
+            /// or to remove an value from an array, use the `decrement` or `remove` (i.e -=)
+            /// operator. Repeated calls add to the assignments.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use umbriel::{*, statements::update};
+            /// # #[model(node, table = "weapon")]
+            /// # pub struct Weapon {
+            /// #     pub id: RecordId<Self>,
+            /// #     pub name: String,
+            /// #     pub damage: u32,
+            /// #     pub owners: Vec<String>,
+            /// # }
+            ///
+            /// let WeaponSchema { name, damage, owners, .. } = Weapon::schema();
+            /// let laser = Weapon::id("laser");
+            ///
+            /// // Several assignments; `increment_by` writes `+=`.
+            /// let statement = update::<Weapon>(&laser)
+            ///     .set([name.equal_to("Laser"), damage.increment_by(100u32)]);
+            /// assert_eq!(
+            ///     statement.to_debug_sql(),
+            ///     "UPDATE weapon:laser SET name = 'Laser', damage += 100;"
+            /// );
+            ///
+            /// // `append` adds to an array; `at` assigns one element.
+            /// let statement = update::<Weapon>(&laser)
+            ///     .set([owners.append("Alice"), owners.at(0).equal_to("Bob")]);
+            /// assert_eq!(
+            ///     statement.to_debug_sql(),
+            ///     "UPDATE weapon:laser SET owners += 'Alice', owners[0] = 'Bob';"
+            /// );
+            /// ```
+            pub fn set(mut self, settables: impl Into<Vec<Setter>>) -> Self {
+                self.body.data = Some(DataClause::set(self.body.data.take(), settables.into()));
+                self
+            }
+
+            /// Removes fields from the record (`UNSET`). Repeated calls add to the fields.
+            pub fn unset(mut self, fields: impl Into<Unsettables>) -> Self {
+                self.body.data = Some(DataClause::unset(self.body.data.take(), fields.into().0));
+                self
+            }
+
+            /// Applies JSON Patch operations to the record (`PATCH`). Repeated calls add to the
+            /// operations; if one fails, such as a failed `test`, the statement fails.
+            ///
+            /// # Example
+            ///
+            /// ```
+            /// use umbriel::{*, statements::update};
+            /// # #[model(node, table = "user")]
+            /// # pub struct User { pub id: RecordId<Self>, pub name: String }
+            ///
+            /// let name = User::schema().name;
+            /// let statement = update::<User>(User::id("alice"))
+            ///     .patch([name.patch_test("Alice"), name.patch_replace("Bob")]);
+            /// assert_eq!(
+            ///     statement.to_debug_sql(),
+            ///     "UPDATE user:alice PATCH [{ op: 'test', path: '/name', value: 'Alice' }, \
+            ///      { op: 'replace', path: '/name', value: 'Bob' }];"
+            /// );
+            /// ```
+            pub fn patch(mut self, patch_op: impl Into<Vec<PatchOp>>) -> Self {
+                self.body.data = Some(DataClause::patch(self.body.data.take(), patch_op.into()));
+                self
+            }
+
+            /// Adds a condition to the `WHERE` clause of the query.
+            pub fn where_(mut self, condition: impl Conditional) -> Self {
+                self.body.where_ = Some(Filter::new(condition));
+                self
+            }
+
+            /// Sets the timeout duration for the query. It is written as a literal.
+            pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
+                self.body.timeout = Some(duration.into());
+                self
+            }
+
+            /// `EXPLAIN`: returns the query plan instead of running the statement, so nothing is
+            /// written.
+            pub fn explain(self) -> Explained {
+                Explained::new(self, false)
+            }
+
+            /// `EXPLAIN FULL`: the plan with the number of records each step processes.
+            pub fn explain_full(self) -> Explained {
+                Explained::new(self, true)
+            }
+
+            fn with_mode<M: ReturnMode>(self, mode: M) -> $statement<T, M, C> {
+                $statement {
+                    body: self.body,
+                    mode,
+                    cardinality: PhantomData,
+                }
+            }
+        }
+    };
+}
+pub(crate) use update_clauses;
+
+/// An `UPDATE` statement. `R` is its return mode and `C` whether it is written with `ONLY`; both
+/// decide the type [`Returning::execute`] returns.
+#[derive(Debug, Clone)]
+pub struct UpdateStatement<T, R = ReturnAfter<T>, C = Many> {
+    body: UpdateBody,
+    mode: R,
+    cardinality: PhantomData<(fn() -> T, C)>,
+}
+
+update_clauses!(UpdateStatement);
+
+return_methods!([T: Model] UpdateStatement<T> { none, before, after, diff, value, fields, links });
+
+impl<T: Model, R: ReturnMode, C: Cardinality> Statement for UpdateStatement<T, R, C> {
+    fn render_body(&self, out: &mut Renderer) {
+        self.body.render_head("UPDATE", C::ONLY, out);
+        self.mode.render(out);
+        self.body.render_tail(out);
     }
+}
 
-    fn get_return_type(&self) -> ReturnType {
-        self.0.return_type.clone().unwrap_or(ReturnType::None)
-    }
+impl_statement!([T: Model, R: ReturnMode, C: Cardinality] UpdateStatement<T, R, C>);
+
+impl<T: Model, R: ReturnMode, C: Cardinality> Returning for UpdateStatement<T, R, C> {
+    type Mode = R;
+    type Cardinality = C;
 }

@@ -1,5 +1,5 @@
 //! Query building blocks: rendering and binding, fields and paths, filters, operators,
-//! parameters, clauses, values, arithmetic, casts, updaters and names.
+//! parameters, clauses, values, arithmetic, casts and names.
 
 use std::time::Duration;
 
@@ -11,7 +11,7 @@ use umbriel::{
     SchemaGetter, Table, TableIndex, ValueLike, any_other_edges, arr, bracket, cast, chain, cond,
     index,
     statements::{let_, return_, select, select_value},
-    this, updater, value, where_,
+    this, value, where_,
 };
 use umbriel_tests::*;
 
@@ -634,9 +634,10 @@ mod clauses {
             Field::from(to_book).to_debug_sql(),
             "student:alice->writes->book:rust"
         );
+        // A typed id of another model does not compile; an untyped one is checked on rendering.
         let wrong = Student::with(Student::id("alice"))
             .writes__(E)
-            .book(Blog::id("rust"));
+            .book(types::RecordId::from(Blog::id("rust")));
         assert!(Field::from(wrong).to_query().is_err());
         assert_eq!(EdgeDirection::Out.as_arrow_symbol().to_debug_sql(), "->");
         assert_eq!(EdgeDirection::In.as_arrow_symbol().to_debug_sql(), "<-");
@@ -821,44 +822,6 @@ mod arithmetic {
         let rocket = Weapon::schema().rocket().strength;
         assert_eq!((rocket.clone() + 1).to_debug_sql(), "rocket.strength + 1");
         assert_eq!((&rocket * 2).to_debug_sql(), "rocket.strength * 2");
-    }
-}
-
-mod updaters {
-    use super::*;
-
-    #[test]
-    fn every_operator() {
-        let score = Field::new("score");
-        let tags = Field::new("tags");
-        assert_eq!(updater(&score).equal(2).to_debug_sql(), "score = 2");
-        assert_eq!(updater(&score).increment_by(2).to_debug_sql(), "score += 2");
-        assert_eq!(updater(&score).decrement_by(2).to_debug_sql(), "score -= 2");
-        assert_eq!(
-            updater(&tags).append("rust").to_debug_sql(),
-            "tags += 'rust'"
-        );
-        assert_eq!(
-            updater(&tags).remove("rust").to_debug_sql(),
-            "tags -= 'rust'"
-        );
-        assert_eq!(
-            updater(&tags).plus_equal("rust").to_debug_sql(),
-            "tags += 'rust'"
-        );
-        assert_eq!(
-            updater(&tags).minus_equal("rust").to_debug_sql(),
-            "tags -= 'rust'"
-        );
-        assert_eq!(updater(&score).to_debug_sql(), "score");
-        assert_eq!(
-            updater(&score)
-                .increment_by(2)
-                .to_query()
-                .expect("valid")
-                .sql(),
-            "score += $_p0"
-        );
     }
 }
 

@@ -3,11 +3,12 @@ use std::{marker::PhantomData, ops::Deref};
 use surrealdb::types::SurrealValue;
 
 use crate::{
-    Block, Conditional, Edge, Field, Filter, IdiomPart, Node, NumberLike, Operator, Param, Render,
-    Renderer, ValueLike,
+    Block, Conditional, Edge, Field, Filter, IdiomPart, Model, Node, NumberLike, Operator, Param,
+    Render, Renderer, ValueLike,
     statements::{
-        DeleteStatement, IfElseStatement, InsertStatement, LetStatement, RelateStatement,
-        SelectStatement, Subquery, UpdateStatement,
+        Cardinality, CreateStatement, DeleteStatement, IfElseStatement, InsertStatement,
+        LetStatement, RelateOrUpdateStatement, RelateStatement, ReturnMode, SelectStatement,
+        Subquery, UpdateStatement, UpsertStatement,
     },
 };
 
@@ -157,29 +158,31 @@ impl<T> From<&Block> for SetterArg<T> {
     }
 }
 
-impl<T, V: Node> From<UpdateStatement<V>> for SetterArg<T> {
-    fn from(value: UpdateStatement<V>) -> Self {
-        Self::Expression(value.into())
-    }
+/// Implements `From<$statement>` for `SetterArg` by nesting the write statement as a subquery,
+/// for every return mode and cardinality.
+macro_rules! setter_arg_from_write_statement {
+    ($($bound:ident $statement:ident),* $(,)?) => {
+        $(
+            impl<T, V: $bound, R: ReturnMode, C: Cardinality> From<$statement<V, R, C>>
+                for SetterArg<T>
+            {
+                fn from(value: $statement<V, R, C>) -> Self {
+                    Self::Expression(value.into())
+                }
+            }
+        )*
+    };
 }
 
-impl<T, V: Node> From<DeleteStatement<V>> for SetterArg<T> {
-    fn from(value: DeleteStatement<V>) -> Self {
-        Self::Expression(value.into())
-    }
-}
-
-impl<T, V: Node> From<InsertStatement<V>> for SetterArg<T> {
-    fn from(value: InsertStatement<V>) -> Self {
-        Self::Expression(value.into())
-    }
-}
-
-impl<T, V: Edge> From<RelateStatement<V>> for SetterArg<T> {
-    fn from(value: RelateStatement<V>) -> Self {
-        Self::Expression(value.into())
-    }
-}
+setter_arg_from_write_statement!(
+    Node CreateStatement,
+    Model UpdateStatement,
+    Model UpsertStatement,
+    Model DeleteStatement,
+    Edge RelateStatement,
+    Edge RelateOrUpdateStatement,
+    Model InsertStatement,
+);
 
 fn assign<T: SurrealValue>(
     field: &Field,

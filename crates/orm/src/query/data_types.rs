@@ -5,8 +5,9 @@ use surrealdb::types::{self, SurrealValue};
 use crate::{
     Edge, Field, Function, Model, Node, Operation, Param, RecordId, Render, Renderer, ValueLike,
     statements::{
-        CreateStatement, DeleteStatement, IfElseStatement, InsertStatement, LetStatement,
-        RelateStatement, SelectStatement, Subquery, UpdateStatement,
+        Cardinality, CreateStatement, DeleteStatement, IfElseStatement, InsertStatement,
+        LetStatement, RelateOrUpdateStatement, RelateStatement, ReturnMode, SelectStatement,
+        Subquery, UpdateStatement, UpsertStatement,
     },
 };
 
@@ -65,35 +66,18 @@ macro_rules! typed_expression {
         typed_expression!(@expressions $name: Field, &Field, Param, &Param, LetStatement, &LetStatement,
             Operation, Function, Subquery, SelectStatement, IfElseStatement);
 
-        impl<T: Node> From<CreateStatement<T>> for $name {
-            fn from(statement: CreateStatement<T>) -> Self {
-                Self(statement.into())
+        typed_expression!(@statements $name: Node CreateStatement, Model UpdateStatement,
+            Model UpsertStatement, Model DeleteStatement, Edge RelateStatement,
+            Edge RelateOrUpdateStatement, Model InsertStatement);
+    };
+    (@statements $name:ident: $($bound:ident $statement:ident),*) => {
+        $(
+            impl<T: $bound, R: ReturnMode, C: Cardinality> From<$statement<T, R, C>> for $name {
+                fn from(statement: $statement<T, R, C>) -> Self {
+                    Self(statement.into())
+                }
             }
-        }
-
-        impl<T: Model> From<UpdateStatement<T>> for $name {
-            fn from(statement: UpdateStatement<T>) -> Self {
-                Self(statement.into())
-            }
-        }
-
-        impl<T: Model> From<DeleteStatement<T>> for $name {
-            fn from(statement: DeleteStatement<T>) -> Self {
-                Self(statement.into())
-            }
-        }
-
-        impl<T: Edge> From<RelateStatement<T>> for $name {
-            fn from(statement: RelateStatement<T>) -> Self {
-                Self(statement.into())
-            }
-        }
-
-        impl<T: Node> From<InsertStatement<T>> for $name {
-            fn from(statement: InsertStatement<T>) -> Self {
-                Self(statement.into())
-            }
-        }
+        )*
     };
     (@expressions $name:ident: $($source:ty),*) => {
         $(

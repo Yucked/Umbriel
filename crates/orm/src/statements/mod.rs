@@ -10,7 +10,7 @@ pub(crate) trait Statement {
 pub(crate) mod break_;
 pub(crate) mod continue_;
 pub(crate) mod create;
-pub(crate) mod create_v2;
+pub(crate) mod data;
 pub(crate) mod define_access;
 pub(crate) mod define_analyzer;
 pub(crate) mod define_database;
@@ -43,6 +43,7 @@ pub(crate) mod remove_param;
 pub(crate) mod remove_table;
 pub(crate) mod remove_user;
 pub(crate) mod return_;
+pub(crate) mod returning;
 pub(crate) mod select;
 pub(crate) mod show;
 pub(crate) mod sleep;
@@ -50,6 +51,7 @@ pub(crate) mod subquery;
 pub(crate) mod throw;
 pub(crate) mod transaction;
 pub(crate) mod update;
+pub(crate) mod upsert;
 pub(crate) mod use_;
 pub(crate) mod utils_block;
 pub(crate) mod utils_chain;
@@ -123,8 +125,8 @@ impl<S: Statement + ?Sized> Render for StatementBody<'_, S> {
 
 pub use break_::{BreakStatement, break_};
 pub use continue_::{ContinueStatement, continue_};
-pub use create::{CreateStatement, create, create_only};
-pub use create_v2::{CreateStatementV2, create_v2};
+pub use create::{CreateStatement, CreateTarget, CreateTargets, create, create_only};
+pub use data::Unsettables;
 pub use define_access::{
     AccessExpression, DefineAccessStatement, JwtAccess, RecordAccess, define_access, jwt_access,
     record_access,
@@ -141,15 +143,15 @@ pub use define_namespace::{DefineNamespaceStatement, define_namespace};
 pub use define_param::{DefineParamStatement, define_param};
 pub use define_table::{DefineTableStatement, define_table};
 pub use define_user::{DefineUserStatement, UserRole, define_user};
-pub use delete::{DeleteStatement, DeleteStatementMini, delete, delete_only};
+pub use delete::{DeleteStatement, delete, delete_edges, delete_only};
 pub use for_loop::{ForLoopStatement, for_};
 pub use for_permission::{ForPermission, Permissions, for_permission};
 pub use ifelse::{IfElseStatement, if_};
 pub use info::{InfoStatement, info_for};
-pub use insert::{InsertStatement, Insertables, insert};
+pub use insert::{InsertStatement, Insertables, input_of, insert, insert_relation};
 pub use let_::{LetStatement, let_};
 pub use live_select::{LiveSelectStatement, live};
-pub use relate::{RelateStatement, relate, relate_only};
+pub use relate::{RelateOrUpdateStatement, RelateStatement, relate, relate_only};
 pub use remove_access::{RemoveAccessStatement, remove_access};
 pub use remove_analyzer::{RemoveAnalyzerStatement, remove_analyzer};
 pub use remove_database::{RemoveDatabaseStatement, remove_database};
@@ -162,6 +164,10 @@ pub use remove_param::{RemoveParamStatement, remove_param};
 pub use remove_table::{RemoveTableStatement, remove_table};
 pub use remove_user::{RemoveUserStatement, UserPermissionScope, remove_user};
 pub use return_::{ReturnStatement, return_};
+pub use returning::{
+    Cardinality, DiffOp, Explained, Many, One, ReturnAfter, ReturnBefore, ReturnDefaultNone,
+    ReturnDiff, ReturnFields, ReturnMode, ReturnNone, ReturnValue, Returning,
+};
 pub use select::{
     Order, Orderables, SelectStatement, SelectStatementMini, Selectables, Splittables, order,
     select, select_value,
@@ -171,7 +177,8 @@ pub use sleep::{SleepStatement, sleep};
 pub use subquery::Subquery;
 pub use throw::{ThrowStatement, throw};
 pub use transaction::{QueryTransaction, TransactionCompletion, begin_transaction};
-pub use update::{UpdateStatement, update, update_only};
+pub use update::{TargettablesForUpdate, UpdateStatement, update, update_only};
+pub use upsert::{UpsertStatement, upsert, upsert_only};
 pub use use_::{UseStatement, use_};
 
 /// helpers for statements

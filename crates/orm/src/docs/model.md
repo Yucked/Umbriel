@@ -14,6 +14,9 @@ database without Serde, and generates:
   (`User::schema().name`) and whose link methods traverse records and graph edges;
 - for nodes and edges, the [`Model`] implementation (table, record id, field definitions for
   migrations) and `<Model>Patch`, a partial update with one [`Patch`] per stored field;
+- for every model, `<Model>Merge`, a recursive `MERGE` with one [`Merge`] per stored field: an
+  embedded object's field takes `Merge::Fields(<Object>Merge)` to merge only some of its fields,
+  and a flattened object's field is a [`FlatMerge`];
 - for objects, the [`Object`] implementation a model needs to flatten them.
 
 # Record ids

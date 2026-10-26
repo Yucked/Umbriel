@@ -4,12 +4,14 @@
 
 use surrealdb::{Surreal, engine::local::Db};
 use umbriel::{
-    All, E, Field, Model, NONE, Operatable, Param, Pickable, Render, ReturnableSelect,
-    ReturnableStandard, Runnable, SchemaGetter, SetterAssignable, SetterNumeric, Table, block,
-    chain, define_function, for_,
+    All, E, Field, Model, NONE, Operatable, Param, Pickable, Render, ReturnableSelect, Runnable,
+    SchemaGetter, SetterAssignable, SetterNumeric, Table, block, chain, define_function, for_,
     functions::math,
     object, object_partial, pick, query, query_raw,
-    statements::{create, create_only, insert, return_, select, select_value, update},
+    statements::{
+        CreateTarget, Returning, create, create_only, insert, return_, select, select_value,
+        update,
+    },
     transaction,
 };
 use umbriel_tests::*;
@@ -241,13 +243,13 @@ mod chain_macros {
         let name = SpaceShip::schema().name;
         let query = chain! {
             for ship in vec!["Apollo", "Gemini"] {
-                create::<SpaceShip>().set(name.equal_to(&ship));
+                create::<SpaceShip>(SpaceShip::table()).set(name.equal_to(&ship));
             };
             let count = 3;
             if count.gt(2) {
-                create::<SpaceShip>().set(name.equal_to("Mercury"));
+                create::<SpaceShip>(SpaceShip::table()).set(name.equal_to("Mercury"));
             } else {
-                create::<SpaceShip>().set(name.equal_to("Vostok"));
+                create::<SpaceShip>(SpaceShip::table()).set(name.equal_to("Vostok"));
             };
         };
         query.run(db.clone()).await.expect("ran");
@@ -265,13 +267,13 @@ mod chain_macros {
         let transfer = transaction! {
             BEGIN TRANSACTION;
 
-            let balance = create_only().content(Balance {
+            let balance = create_only(CreateTarget::table()).content(Balance {
                 id: Balance::id("transfer"),
                 amount,
             });
 
-            create_only().content(Account { id: one.clone(), balance: 1_000.0 });
-            create_only().content(Account { id: two.clone(), balance: 500.0 });
+            create_only(CreateTarget::table()).content(Account { id: one.clone(), balance: 1_000.0 });
+            create_only(CreateTarget::table()).content(Account { id: two.clone(), balance: 500.0 });
 
             update::<Account>(one).set(acc.balance.increment_by(balance.with_path::<Balance>(E).amount));
             update::<Account>(two).set(acc.balance.decrement_by(amount));
@@ -308,7 +310,7 @@ mod chain_macros {
             .collect::<Vec<_>>();
         insert(weapons).run(db.clone()).await.expect("inserted");
 
-        let created = create::<WeaponStats>().set(object_partial!(WeaponStats {
+        let created = create::<WeaponStats>(WeaponStats::table()).set(object_partial!(WeaponStats {
             averageStrength: block! {
                 let strengths = select_value(strength).from(weapon);
                 let total = math::sum!(strengths);
@@ -325,8 +327,8 @@ mod chain_macros {
              RETURN math::ceil(((($total / $count) * ($count * $total)) / ($total + 4)) * 100);\n\
              };"
         );
-        let stats = created.get_one(db.clone()).await.expect("created");
-        assert_eq!(stats.average_strength, 10_115.0);
+        let stats = created.execute(&db).await.expect("created");
+        assert_eq!(stats[0].average_strength, 10_115.0);
     }
 }
 
@@ -399,7 +401,7 @@ mod definitions {
             created: Param::new("now"),
         });
         assert_sql(
-            &create::<SpaceShip>().set(all),
+            &create::<SpaceShip>(SpaceShip::table()).set(all),
             "CREATE space_ship SET id = space_ship:apollo, name = 'Apollo', created = $now;",
         );
         let some = object_partial!(SpaceShip { name: "Gemini" });

@@ -25,7 +25,7 @@ use surrealdb::{
 use umbriel::{
     E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate, ReturnableStandard,
     Runnable, SchemaGetter, SurrealCrud, SurrealCrudNode, model,
-    statements::{relate, return_},
+    statements::{Returning, relate, return_},
 };
 use umbriel_tests::{read, statement_error};
 
@@ -327,9 +327,10 @@ mod scenarios {
                 out: LinkOne::from(acme.id.clone()),
                 role: "Engineer".to_owned(),
             })
-            .return_one(db.clone())
+            .execute(db)
             .await
             .expect("related")
+            .pop()
             .expect("the edge is returned");
         assert_eq!(edge.r#in.key(), Some(&alice.id));
         assert_eq!(edge.out.key(), Some(&acme.id));

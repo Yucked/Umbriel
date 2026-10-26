@@ -1,0 +1,79 @@
+error[E0277]: the trait bound `__4Page5titleField: Into<SetterArg<u32>>` is not satisfied
+  --> tests/ui/fail/input_mismatched_field.rs:21:70
+   |
+21 |     let _ = insert(page).on_duplicate_key_update(visits.increment_by(input_of::<Page>().title));
+   |                                                         ------------ ^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+   |                                                         |
+   |                                                         required by a bound introduced by this call
+   |
+help: the trait `umbriel::surrealdb_types::SurrealValue` is not implemented for `__4Page5titleField`
+  --> tests/ui/fail/input_mismatched_field.rs:6:1
+   |
+ 6 | #[model(node, table = "page")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: the following other types implement trait `umbriel::surrealdb_types::SurrealValue`:
+             &str
+             ()
+             (A, B)
+             (A, B, C)
+             (A, B, C, D)
+             (A, B, C, D, E)
+             (A, B, C, D, E, F)
+             (A, B, C, D, E, F, G)
+           and $N others
+   = note: required for `SetterArg<u32>` to implement `From<__4Page5titleField>`
+   = note: required for `__4Page5titleField` to implement `Into<SetterArg<u32>>`
+note: required by a bound in `increment_by`
+  --> $WORKSPACE/crates/orm/src/traits/setter.rs
+   |
+   |     fn increment_by(&self, value: impl Into<SetterArg<T>>) -> Setter {
+   |                                        ^^^^^^^^^^^^^^^^^^ required by this bound in `SetterNumeric::increment_by`
+   = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `u32: From<__4Page5titleField>` is not satisfied
+  --> tests/ui/fail/input_mismatched_field.rs:21:70
+   |
+21 |     let _ = insert(page).on_duplicate_key_update(visits.increment_by(input_of::<Page>().title));
+   |                                                         ------------ ^^^^^^^^^^^^^^^^^^^^^^^^ the trait `From<__4Page5titleField>` is not implemented for `u32`
+   |                                                         |
+   |                                                         required by a bound introduced by this call
+   |
+   = help: `u32` implements trait `From<T>`:
+             From<&rend::u32_be>
+             From<&rend::u32_le>
+             From<&rend::unaligned::u32_ube>
+             From<&rend::unaligned::u32_ule>
+             From<Ipv4Addr>
+             From<argon2::version::Version>
+             From<aws_lc_rs::aead::aead_ctx::AeadDirection>
+             From<aws_lc_rs::endian::BigEndian<u32>>
+             From<aws_lc_rs::endian::LittleEndian<u32>>
+             From<bool>
+             From<char>
+             From<deranged::RangedU32<MIN, MAX>>
+             From<diskann_wide::bitmask::BitMask<32>>
+             From<h2::frame::reason::Reason>
+             From<h2::frame::stream_id::StreamId>
+             From<h2::share::StreamId>
+             From<icu_properties::props::GeneralCategoryGroup>
+             From<icu_properties::script::ScriptWithExt>
+             From<potential_utf::uchar::PotentialCodePoint>
+             From<rend::u32_be>
+             From<rend::u32_le>
+             From<rend::unaligned::u32_ube>
+             From<rend::unaligned::u32_ule>
+             From<rustix::backend::fs::types::Mode>
+             From<std::ascii::Char>
+             From<u16>
+             From<u8>
+             From<zerocopy::byteorder::U16<O>>
+             From<zerocopy::byteorder::U32<O>>
+   = note: required for `__4Page5titleField` to implement `Into<u32>`
+   = note: required for `SetterArg<u32>` to implement `From<__4Page5titleField>`
+   = note: 1 redundant requirement hidden
+   = note: required for `__4Page5titleField` to implement `Into<SetterArg<u32>>`
+note: required by a bound in `increment_by`
+  --> $WORKSPACE/crates/orm/src/traits/setter.rs
+   |
+   |     fn increment_by(&self, value: impl Into<SetterArg<T>>) -> Setter {
+   |                                        ^^^^^^^^^^^^^^^^^^ required by this bound in `SetterNumeric::increment_by`

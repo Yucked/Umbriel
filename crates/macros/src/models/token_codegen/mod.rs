@@ -150,6 +150,12 @@ pub struct Codegen<'a> {
     pub patch_defaults: Vec<PatchDefault>,
     /// Adds the assignment of a patch field that is not `Keep`.
     pub patch_setters: Vec<PatchSetter>,
+    /// e.g `pub time: umbriel::Merge<Time, <Time as umbriel::Object>::Merge>` in `<Model>Merge`.
+    pub merge_fields: Vec<TokenStream>,
+    /// e.g `time: umbriel::Merge::Keep`.
+    pub merge_defaults: Vec<TokenStream>,
+    /// Adds the entry of a merge field that is not `Keep`.
+    pub merge_entries: Vec<TokenStream>,
     pub renamed_serialized_fields_kv: Vec<RenamedSerializedFields>,
     /// The Rust field holding the record's `id`.
     pub record_id_field: Option<syn::Ident>,

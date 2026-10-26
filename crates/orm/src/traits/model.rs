@@ -4,12 +4,12 @@ use surrealdb::{
 };
 
 use crate::{
-    Alias, All, Conditional, Error, Field, Filter, ModelPatch, NodeClause, Raw, RecordId,
-    RecordKey, Render, Result, StoredFields, count,
+    Alias, All, Conditional, Error, Field, Filter, IntoNodeClause, ModelMerge, ModelPatch, Raw,
+    RecordId, RecordKey, RecordRange, Render, Result, StoredFields, count,
     execution::{classify, execute},
     statements::{
-        SelectStatementMini,
-        delete::{DeleteStatementMini, delete},
+        DeleteStatement, SelectStatementMini,
+        delete::delete,
         select::{SelectStatementCount, select},
         select_value,
         update::update,
@@ -156,6 +156,83 @@ pub trait SurrealCrud: Model + Send {
         }
     }
 
+    /// Merges a partial record into the record (`UPDATE … MERGE`) and returns it afterwards.
+    ///
+    /// Unlike [`patch`](Self::patch), whose `Set` replaces a field whole, a merge combines nested
+    /// objects at every level: [`Merge::Fields`](crate::Merge::Fields) changes only the named
+    /// fields of an embedded object, and stored fields the merge does not mention survive. Arrays
+    /// are replaced whole. A merge with only `Keep` fields reads the record with `SELECT` instead,
+    /// so it causes no write or update-side effects; [`update(..).merge(..)`](crate::statements::update)
+    /// writes `MERGE {}` as built. `None` means no record was returned.
+    fn merge<M>(
+        db: &Surreal<impl Connection>,
+        id: &RecordId<Self>,
+        merge: M,
+    ) -> impl Future<Output = Result<Option<Self>>> + Send
+    where
+        M: ModelMerge<Model = Self> + Send,
+    {
+        async move {
+            let object = merge.into_object();
+            let query = if object.is_empty() {
+                select(All).from(id).to_query()?
+            } else {
+                update::<Self>(id).merge_object(object).to_query()?
+            };
+            execute(db, query).await?.take(0).map_err(Error::Conversion)
+        }
+    }
+
+    /// Inserts several records in one SDK call (`insert(table).content(records)`), returning the
+    /// stored records.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::RecordExists`] when a record's id already exists, with the database error kept.
+    fn insert_many(
+        db: &Surreal<impl Connection>,
+        records: Vec<Self>,
+    ) -> impl Future<Output = Result<Vec<Self>>> + Send {
+        async move {
+            db.insert::<Vec<Self>>(Self::table().as_str())
+                .content(records)
+                .await
+                .map_err(|error| classify(error, None))
+        }
+    }
+
+    /// Fetches the records whose keys fall in `range`, e.g. `User::get_range(&db, a..b)`.
+    fn get_range(
+        db: &Surreal<impl Connection>,
+        range: impl Into<RecordRange<Self>>,
+    ) -> impl Future<Output = Result<Vec<Self>>> + Send {
+        let range: RecordRange<Self> = range.into();
+        let range = range.into_key_range();
+        async move {
+            db.select::<Vec<Self>>(Self::table().as_str())
+                .range(range)
+                .await
+                .map_err(|error| classify(error, None))
+        }
+    }
+
+    /// Fetches the records with the given ids that exist, in one SDK call. Missing ids return
+    /// nothing.
+    fn get_many(
+        db: &Surreal<impl Connection>,
+        ids: &[RecordId<Self>],
+    ) -> impl Future<Output = Result<Vec<Self>>> + Send {
+        let ids = ids
+            .iter()
+            .map(|id| types::Value::RecordId(id.into()))
+            .collect::<Vec<_>>();
+        async move {
+            db.select::<Vec<Self>>(ids)
+                .await
+                .map_err(|error| classify(error, None))
+        }
+    }
+
     /// Finds records by filtering.
     fn find_where(filter: impl Conditional + Clone) -> SelectStatementMini<Self> {
         select(All).from(Self::table()).where_(filter).into()
@@ -179,8 +256,8 @@ pub trait SurrealCrud: Model + Send {
     }
 
     /// Deletes records by filtering.
-    fn delete_where(filter: impl Conditional + Clone) -> DeleteStatementMini<Self> {
-        delete::<Self>(Self::table()).where_(filter).into()
+    fn delete_where(filter: impl Conditional + Clone) -> DeleteStatement<Self> {
+        delete::<Self>(Self::table()).where_(filter)
     }
 }
 
@@ -224,14 +301,36 @@ pub trait Node: Model + SchemaGetter {
     /// returns the table name of the node
     fn get_table() -> Table;
 
-    /// Useful in relate statement for attaching id or statement to a node
-    /// Example:
-    /// ```rust, ignore
-    /// Student::with(Empty).writes__(Empty).book(Empty);
+    /// Starts a graph path at this node: a record id of this model (or a list of them), a filter,
+    /// a parameter or a subquery. A record id of another model does not compile; see
+    /// [`IntoNodeClause`] for what the database checks instead.
     ///
-    /// relate(Student::with(student_id).writes__(Empty).book(book_id)).content(write);
+    /// # Examples
+    ///
     /// ```
-    fn with(clause: impl Into<NodeClause>) -> Self::Schema;
+    /// use umbriel::*;
+    /// # #[model(node, table = "student")]
+    /// # pub struct Student {
+    /// #     pub id: RecordId<Self>,
+    /// #     #[orm(relate(model = "StudentWritesBook", connection = "->writes->book"))]
+    /// #     pub books: Relate<Book>,
+    /// # }
+    /// # #[model(node, table = "book")]
+    /// # pub struct Book { pub id: RecordId<Self> }
+    /// # #[model(edge, table = "writes")]
+    /// # pub struct Writes<In: Node, Out: Node> {
+    /// #     pub id: RecordId<Self>,
+    /// #     #[orm(link_one = "In")]
+    /// #     pub r#in: LinkOne<In>,
+    /// #     #[orm(link_one = "Out")]
+    /// #     pub out: LinkOne<Out>,
+    /// # }
+    /// # pub type StudentWritesBook = Writes<Student, Book>;
+    ///
+    /// let books = Student::with(Student::id("alice")).writes__(E).book(E);
+    /// assert_eq!(Field::from(books).to_debug_sql(), "student:alice->writes->book");
+    /// ```
+    fn with(clause: impl IntoNodeClause<Self>) -> Self::Schema;
 
     /// returns the relations aliases of the model in the format `->edge->graph AS alias`.
     fn get_fields_relations_aliased() -> Vec<Alias>;
@@ -266,6 +365,11 @@ pub trait Object: SurrealValue + SchemaGetter {
     /// flattens this object stores them as its own fields.
     #[doc(hidden)]
     const STORED_FIELDS: StoredFields;
+
+    /// The generated `<Object>Merge`, which merges a subset of this object's fields when it is
+    /// nested in a model.
+    #[doc(hidden)]
+    type Merge: crate::MergeFields + Default;
 
     /// The metadata and definitions of this object's fields as top-level fields of `table`, for
     /// a model that flattens this object.

@@ -1,8 +1,9 @@
 use crate::{Block, Edge, Fragment, Model, Node, Render, Renderer};
 
 use super::{
-    CreateStatement, DeleteStatement, IfElseStatement, InsertStatement, RelateStatement,
-    ReturnStatement, SelectStatement, Statement, UpdateStatement,
+    Cardinality, CreateStatement, DeleteStatement, IfElseStatement, InsertStatement,
+    RelateOrUpdateStatement, RelateStatement, ReturnMode, ReturnStatement, SelectStatement,
+    Statement, UpdateStatement, UpsertStatement,
 };
 
 /// A statement nested inside another query, rendered in parentheses with its own values.
@@ -64,8 +65,10 @@ macro_rules! subquery_from {
 subquery_from!(SelectStatement);
 subquery_from!(IfElseStatement);
 subquery_from!(ReturnStatement);
-subquery_from!([T: Node] CreateStatement<T>);
-subquery_from!([T: Model] UpdateStatement<T>);
-subquery_from!([T: Model] DeleteStatement<T>);
-subquery_from!([T: Edge] RelateStatement<T>);
-subquery_from!([T: Node] InsertStatement<T>);
+subquery_from!([T: Node, R: ReturnMode, C: Cardinality] CreateStatement<T, R, C>);
+subquery_from!([T: Model, R: ReturnMode, C: Cardinality] UpdateStatement<T, R, C>);
+subquery_from!([T: Model, R: ReturnMode, C: Cardinality] UpsertStatement<T, R, C>);
+subquery_from!([T: Model, R: ReturnMode, C: Cardinality] DeleteStatement<T, R, C>);
+subquery_from!([T: Edge, R: ReturnMode, C: Cardinality] RelateStatement<T, R, C>);
+subquery_from!([T: Edge, R: ReturnMode, C: Cardinality] RelateOrUpdateStatement<T, R, C>);
+subquery_from!([T: Model, R: ReturnMode, C: Cardinality] InsertStatement<T, R, C>);

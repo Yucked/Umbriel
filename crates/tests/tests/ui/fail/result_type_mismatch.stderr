@@ -1,0 +1,33 @@
+error[E0308]: `?` operator has incompatible types
+  --> tests/ui/fail/result_type_mismatch.rs:16:24
+   |
+16 |     let _: Vec<User> = update::<User>(User::id("alice")).return_none().execute(db).await?;
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Vec<User>`, found `()`
+   |
+   = note: `?` operator cannot convert from `()` to `Vec<User>`
+   = note: expected struct `Vec<User>`
+           found unit type `()`
+
+error[E0308]: `?` operator has incompatible types
+  --> tests/ui/fail/result_type_mismatch.rs:17:24
+   |
+17 |       let _: Vec<User> = update::<User>(User::id("alice"))
+   |  ________________________^
+18 | |         .return_value(User::schema().name)
+19 | |         .execute(db)
+20 | |         .await?;
+   | |_______________^ expected `Vec<User>`, found `Vec<String>`
+   |
+   = note: `?` operator cannot convert from `Vec<std::string::String>` to `Vec<User>`
+   = note: expected struct `Vec<User>`
+              found struct `Vec<std::string::String>`
+
+error[E0308]: `?` operator has incompatible types
+  --> tests/ui/fail/result_type_mismatch.rs:21:24
+   |
+21 |     let _: Vec<User> = delete::<User>(User::id("alice")).execute(db).await?;
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Vec<User>`, found `()`
+   |
+   = note: `?` operator cannot convert from `()` to `Vec<User>`
+   = note: expected struct `Vec<User>`
+           found unit type `()`

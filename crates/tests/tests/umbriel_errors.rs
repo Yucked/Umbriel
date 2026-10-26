@@ -12,7 +12,7 @@ use surrealdb::{
 use umbriel::{
     All, Error, Model, Raw, ReturnableSelect, Runnable, SchemaGetter, SetterAssignable,
     StatementContext, SurrealCrud, SurrealCrudNode,
-    statements::{delete, select, update},
+    statements::{CreateTarget, Returning, create, create_only, delete, select, update},
 };
 use umbriel_tests::*;
 
@@ -67,10 +67,10 @@ mod record_exists {
     #[tokio::test]
     async fn a_second_create_statement_is_record_exists_with_its_context() {
         let db = db().await;
-        let statement = || Raw::new("CREATE ONLY space_ship:apollo SET name = 'Apollo';");
-        statement().run(db.clone()).await.expect("created");
+        let statement = || create_only::<SpaceShip>(CreateTarget::table()).content(apollo());
+        statement().execute(&db).await.expect("created");
 
-        let error = statement().run(db.clone()).await.expect_err("a duplicate");
+        let error = statement().execute(&db).await.expect_err("a duplicate");
         assert!(
             matches!(
                 &error,
@@ -116,8 +116,9 @@ mod record_exists {
             .await
             .expect("defined");
         apollo().create(&db).await.expect("created");
-        let clash = Raw::new("CREATE space_ship:gemini SET name = 'Apollo';")
-            .run(db.clone())
+        let clash = create::<SpaceShip>(SpaceShip::id("gemini"))
+            .set(SpaceShip::schema().name.equal_to("Apollo"))
+            .execute(&db)
             .await;
         assert!(matches!(clash, Err(Error::Statement { .. })), "{clash:?}");
     }
@@ -147,14 +148,14 @@ mod table_not_found {
         assert!(is_space_ship_missing(&read, true), "{read:?}");
 
         let updated = update::<SpaceShip>(SpaceShip::table())
-            .set([SpaceShip::schema().name.equal_to("Apollo")])
-            .run(db.clone())
+            .set(SpaceShip::schema().name.equal_to("Apollo"))
+            .execute(&db)
             .await
             .expect_err("undefined");
         assert!(is_space_ship_missing(&updated, true), "{updated:?}");
 
         let deleted = delete::<SpaceShip>(SpaceShip::table())
-            .run(db.clone())
+            .execute(&db)
             .await
             .expect_err("undefined");
         assert!(is_space_ship_missing(&deleted, true), "{deleted:?}");
