@@ -1,9 +1,12 @@
 //! Return modes (`orm/src/statements/returning.rs`): `DiffOp` decodes every JSON Patch operation
-//! by its `op` tag, and `ONLY` turns a list result into a single optional one.
+//! by its `op` tag, and `ONLY` turns a list result into a single optional one, keeping a result
+//! that is itself an array whole.
+
+use std::collections::BTreeMap;
 
 use surrealdb::types::{Object, SurrealValue, Value};
 use umbriel::{
-    Model,
+    Field, Model, SchemaGetter, SetterAssignable, SurrealCrudNode,
     statements::{CreateTarget, DiffOp, Returning, create, create_only, delete_only, update_only},
 };
 use umbriel_tests::*;
@@ -121,4 +124,37 @@ async fn only_returns_one_optional_result() {
         .await
         .expect("deleted");
     assert_eq!(deleted.map(|ship| ship.name), Some("Apollo".to_owned()));
+}
+
+/// An `ONLY` result that is itself an array decodes whole, whatever its length.
+#[tokio::test]
+async fn only_keeps_an_array_result_whole() {
+    let db = db().await;
+    User {
+        id: User::id("alice"),
+        name: "Alice".to_owned(),
+        ..Default::default()
+    }
+    .create(&db)
+    .await
+    .expect("alice");
+    let schema = User::schema();
+    for tags in [vec![], vec!["go".to_owned()], vec!["go".to_owned(), "sql".to_owned()]] {
+        let value = update_only::<User>(User::id("alice"))
+            .set(schema.tags.equal_to(tags.clone()))
+            .return_value(User::schema().tags)
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(value, Some(tags.clone()));
+
+        // A projection is an object per record, holding the array.
+        let fields = update_only::<User>(User::id("alice"))
+            .set(schema.tags.equal_to(tags.clone()))
+            .return_fields::<BTreeMap<String, Vec<String>>>(Field::new("tags"))
+            .execute(&db)
+            .await
+            .expect("updated");
+        assert_eq!(fields, Some(BTreeMap::from([("tags".to_owned(), tags)])));
+    }
 }

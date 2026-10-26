@@ -5,8 +5,8 @@
 use std::time::Duration;
 
 use surrealdb::{Error as SdkError, Surreal, engine::local::Db, types::QueryError};
-use umbriel::{Error, Raw, Runnable, test_support::select_failure};
-use umbriel_tests::{db, statement_error};
+use umbriel::{Error, Model, Raw, Runnable, SurrealCrudNode, test_support::select_failure};
+use umbriel_tests::{SpaceShip, db, statement_error};
 
 fn thrown(message: &str) -> SdkError {
     SdkError::thrown(message.to_owned())
@@ -345,5 +345,31 @@ mod get_data {
             names(&db, "RETURN ['Alice', 'Bob'];").await,
             Some(vec!["Alice".to_owned(), "Bob".to_owned()])
         );
+    }
+
+    /// The compatibility break: a statement without `ONLY` returns a list even for one record,
+    /// so asking for a single model is a conversion error rather than the list's only element.
+    #[tokio::test]
+    async fn one_record_from_a_list_must_be_asked_for_as_a_list() {
+        let db = db().await;
+        SpaceShip {
+            id: SpaceShip::id("apollo"),
+            name: "Apollo".to_owned(),
+            ..Default::default()
+        }
+        .create(&db)
+        .await
+        .expect("apollo");
+        let query = Raw::new("SELECT * FROM space_ship;");
+
+        let single = query.get_data::<SpaceShip>(db.clone()).await;
+        assert!(matches!(single, Err(Error::Conversion(_))), "{single:?}");
+
+        let listed = query
+            .get_data::<Vec<SpaceShip>>(db.clone())
+            .await
+            .expect("decoded")
+            .expect("a result");
+        assert_eq!(listed.len(), 1);
     }
 }

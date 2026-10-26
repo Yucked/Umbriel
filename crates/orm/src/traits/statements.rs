@@ -32,12 +32,14 @@ where
 
     /// Runs the query, checks the complete response as [`run`](Self::run) does, and decodes the
     /// result of its first statement as `T`: `None` when it is `NONE`. The result is decoded as
-    /// it is, so a statement without `ONLY` decodes as a list, such as `Vec<T>`.
+    /// it is, so a statement without `ONLY` decodes as a list, such as `Vec<T>`, even when it
+    /// returns one record. A one-element list is not unwrapped into its element, as it was before
+    /// Umbriel issue #11.
     ///
     /// # Errors
     ///
     /// The errors of [`run`](Self::run), or [`Error::Conversion`] when the result does not decode
-    /// as `T`.
+    /// as `T`, such as a single model asked for from a statement without `ONLY`.
     fn get_data<T>(
         &self,
         db: Surreal<impl surrealdb::Connection>,
