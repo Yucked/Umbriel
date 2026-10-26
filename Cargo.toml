@@ -23,11 +23,11 @@ umbriel = { path = "crates/orm" }
 umbriel-macros = { path = "crates/macros" }
 
 # Engines, transports, TLS and scripting are opted into through `umbriel` features.
-surrealdb = { version = "3.3.3", default-features = false }
+surrealdb = { version = "3.3.4", default-features = false }
 # SurrealDB's internal parser (no SemVer guarantee); keep the same requirement as `surrealdb`.
-surrealdb-syn = "3.3.3"
+surrealdb-syn = "3.3.4"
 # The SDK's value types, named by the macros when emitting `Kind`s; same requirement as `surrealdb`.
-surrealdb-types = "3.3.3"
+surrealdb-types = "3.3.4"
 
 syn = { version = "3.0.7", features = ["full", "extra-traits", "fold", "visit", "visit-mut"] }
 quote = "1.0.47"
