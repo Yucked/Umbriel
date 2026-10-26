@@ -1,0 +1,72 @@
+error[E0277]: the trait bound `__4User3ageField: Into<SetterArg<std::string::String>>` is not satisfied
+  --> tests/ui/fail/assign_mismatched_field.rs:13:32
+   |
+13 |     let _ = user.name.equal_to(user.age);
+   |                       -------- ^^^^^^^^ unsatisfied trait bound
+   |                       |
+   |                       required by a bound introduced by this call
+   |
+help: the trait `umbriel::surrealdb_types::SurrealValue` is not implemented for `__4User3ageField`
+  --> tests/ui/fail/assign_mismatched_field.rs:3:1
+   |
+ 3 | #[model(node, table = "user")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: the following other types implement trait `umbriel::surrealdb_types::SurrealValue`:
+             &str
+             ()
+             (A, B)
+             (A, B, C)
+             (A, B, C, D)
+             (A, B, C, D, E)
+             (A, B, C, D, E, F)
+             (A, B, C, D, E, F, G)
+           and $N others
+   = note: required for `SetterArg<std::string::String>` to implement `From<__4User3ageField>`
+   = note: required for `__4User3ageField` to implement `Into<SetterArg<std::string::String>>`
+note: required by a bound in `equal_to`
+  --> $WORKSPACE/crates/orm/src/traits/setter.rs
+   |
+   |     fn equal_to(&self, value: impl Into<SetterArg<T>>) -> Setter {
+   |                                    ^^^^^^^^^^^^^^^^^^ required by this bound in `SetterAssignable::equal_to`
+   = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `std::string::String: From<__4User3ageField>` is not satisfied
+  --> tests/ui/fail/assign_mismatched_field.rs:13:32
+   |
+13 |     let _ = user.name.equal_to(user.age);
+   |                       -------- ^^^^^^^^ the trait `From<__4User3ageField>` is not implemented for `std::string::String`
+   |                       |
+   |                       required by a bound introduced by this call
+   |
+   = help: `std::string::String` implements trait `From<T>`:
+             From<&mut str>
+             From<&std::string::String>
+             From<&str>
+             From<&surrealdb_strand::Strand>
+             From<&tendril::tendril::Tendril<tendril::fmt::UTF8, A>>
+             From<Box<str>>
+             From<Cow<'_, str>>
+             From<ammonia::Document>
+             From<char>
+             From<clap_builder::builder::str::Str>
+             From<clap_builder::util::id::Id>
+             From<object_store::path::Path>
+             From<surrealdb_core::err::Error>
+             From<surrealdb_sql::ident::Ident>
+             From<surrealdb_sql::table_name::TableName>
+             From<surrealdb_strand::Strand>
+             From<surrealdb_strand::table::TableName>
+             From<tendril::tendril::Tendril<tendril::fmt::UTF8, A>>
+             From<ulid::Ulid>
+             From<umbriel::Table>
+             From<url::Url>
+             From<uuid::Uuid>
+   = note: required for `__4User3ageField` to implement `Into<std::string::String>`
+   = note: required for `SetterArg<std::string::String>` to implement `From<__4User3ageField>`
+   = note: 1 redundant requirement hidden
+   = note: required for `__4User3ageField` to implement `Into<SetterArg<std::string::String>>`
+note: required by a bound in `equal_to`
+  --> $WORKSPACE/crates/orm/src/traits/setter.rs
+   |
+   |     fn equal_to(&self, value: impl Into<SetterArg<T>>) -> Setter {
+   |                                    ^^^^^^^^^^^^^^^^^^ required by this bound in `SetterAssignable::equal_to`

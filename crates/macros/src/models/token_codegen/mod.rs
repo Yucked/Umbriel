@@ -60,12 +60,12 @@ pub struct Codegen<'a> {
     /// to build up struct for generating fields of a Schema of the Edge
     /// The full thing can look like, next to the model (no module):
     /// ```rust,ignore
-    /// pub struct __WritesIdField(pub Field);
-    /// pub struct __WritesTimeWrittenField(pub Field);
+    /// pub struct __6Writes2idField<In, Out>(pub Field, pub PhantomData<fn() -> (In, Out,)>);
+    /// pub struct __6Writes11timeWrittenField<In, Out>(pub Field, pub PhantomData<fn() -> (In, Out,)>);
     ///
     /// pub struct WritesSchema<In, Out> {
-    ///     pub id: __WritesIdField,
-    ///     pub timeWritten: __WritesTimeWrittenField,
+    ///     pub id: __6Writes2idField<In, Out>,
+    ///     pub timeWritten: __6Writes11timeWrittenField<In, Out>,
     /// }
     /// ```
     pub schema_struct_fields_types_kv: Vec<SchemaStructFieldsTypesKv>,

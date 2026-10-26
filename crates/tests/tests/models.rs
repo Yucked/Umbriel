@@ -136,6 +136,17 @@ pub struct Address {
     pub city: String,
 }
 
+/// A generic model whose parameter has the name the field generator would otherwise give its
+/// arithmetic operand: the generated name must avoid it.
+#[model(node, table = "counter")]
+#[derive(Debug, Clone)]
+pub struct Counter<__UmbrielOperand: SurrealValue + umbriel::validators::Int + 'static> {
+    pub id: RecordId<Self>,
+    #[orm(ty = "int")]
+    pub step: __UmbrielOperand,
+    pub total: u32,
+}
+
 #[model(node, table = "customer")]
 #[derive(Debug, Clone)]
 pub struct Customer {
@@ -657,6 +668,14 @@ mod schema {
     use super::*;
 
     #[test]
+    fn arithmetic_on_a_model_with_a_parameter_named_like_the_operand() {
+        let counter = Counter::<u8>::schema();
+        // `total`'s arithmetic impls take the model's `__UmbrielOperand` and a generated operand.
+        assert_eq!((counter.total.clone() + 1).to_debug_sql(), "total + 1");
+        assert_eq!((&counter.total * 2).to_debug_sql(), "total * 2");
+    }
+
+    #[test]
     fn fields_are_named_after_their_stored_names() {
         assert_eq!(
             Alien::schema().lifeExpectancy.to_debug_sql(),
@@ -827,6 +846,32 @@ mod setters {
 
         let indexed = Organization::schema().users([0usize]).name.patch_remove();
         assert!(indexed.to_query().is_err());
+    }
+
+    /// A field of the same type is accepted as a value; one of another type does not compile
+    /// (`tests/ui/fail/assign_mismatched_field.rs`), and an explicit `Field` stays untyped.
+    #[test]
+    fn fields_stand_for_values_of_their_own_type() {
+        let org = Organization::schema();
+        assert_eq!(
+            org.name.equal_to(&User::schema().name).to_debug_sql(),
+            "name = name"
+        );
+        assert_eq!(
+            org.name.equal_to(Field::new("age")).to_debug_sql(),
+            "name = age"
+        );
+
+        // A generic model's specialization is part of its field types: `Planet<u64>`'s `data`
+        // fits `Planet<u64>`.
+        let planet = Planet::<u64>::schema();
+        assert_eq!(
+            planet
+                .data
+                .equal_to(Planet::<u64>::schema().data)
+                .to_debug_sql(),
+            "data = data"
+        );
     }
 }
 

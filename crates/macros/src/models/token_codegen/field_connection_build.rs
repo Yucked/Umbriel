@@ -25,9 +25,15 @@ impl Codegen<'_> {
         let field_ident_normalized = field_receiver.field_ident_normalized(&casing)?;
         let field_name_serialized = field_receiver.db_field_name(&casing)?;
         let field_wrapper = field_receiver.field_wrapper_ident(table_derive_attrs)?;
+        // Each wrapper is generic over the model's parameters, so a field of `Planet<u32>` and one
+        // of `Planet<u64>` are different types.
+        let (_, ty_generics, _) = table_derive_attrs
+            .generics()
+            .to_basic_generics_ref()
+            .split_for_impl();
 
         self.schema_struct_fields_types_kv
-            .push(quote!(pub #field_ident_normalized: #field_wrapper, ).into());
+            .push(quote!(pub #field_ident_normalized: #field_wrapper #ty_generics, ).into());
 
         // The field's path is the model's path followed by its stored name.
         self.schema_struct_fields_names_kv.push(

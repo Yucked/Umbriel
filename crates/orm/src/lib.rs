@@ -71,6 +71,18 @@ pub mod internal_tools {
 pub mod __private {
     pub use umbriel_macros::ModelCodegen;
 
+    /// Implemented by `#[model]` for every field wrapper it generates: `M` is the model or object
+    /// that declares the field, and `V` is the field's Rust type.
+    ///
+    /// Builders use it to type what a field stands for: `return_value(field)` yields `V`. The model
+    /// and value are trait parameters rather than associated types because a generic model's field
+    /// types name the model's parameters, which the wrapper type itself does not.
+    ///
+    /// The derive is its only supported implementor. A derive expands in the crate that declares
+    /// the model, so this trait cannot be sealed: a hand-written implementation can claim any
+    /// types, and the checks it enables then no longer hold.
+    pub trait ModelField<M, V>: std::ops::Deref<Target = crate::Field> {}
+
     /// Glob-imported by `#[model]`: the `SurrealValue` derive names the trait unqualified, and
     /// `Value` too in the code it generates for `#[surreal(flatten)]` fields.
     pub mod surreal_value {
