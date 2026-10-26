@@ -1,12 +1,68 @@
+use std::{marker::PhantomData, ops::Deref};
+
 use surrealdb::types::SurrealValue;
 
 use crate::{
-    Block, Conditional, Edge, Field, Node, Operator, Param, Render, Renderer, ValueLike,
+    Block, Conditional, Edge, Field, Filter, IdiomPart, Node, NumberLike, Operator, Param, Render,
+    Renderer, ValueLike,
     statements::{
         DeleteStatement, IfElseStatement, InsertStatement, LetStatement, RelateStatement,
         SelectStatement, Subquery, UpdateStatement,
     },
 };
+
+/// One element of an array field, typed by the element: `tags.at(0)` or
+/// `tags.filter(cond)` (`tags[0]`, `tags[WHERE …]`), assignable like a field of type `T`.
+#[derive(Debug, Clone)]
+pub struct ElementField<T> {
+    field: Field,
+    element: PhantomData<fn() -> T>,
+}
+
+impl<T> ElementField<T> {
+    fn new(field: Field) -> Self {
+        Self {
+            field,
+            element: PhantomData,
+        }
+    }
+}
+
+impl<T> Deref for ElementField<T> {
+    type Target = Field;
+
+    fn deref(&self) -> &Self::Target {
+        &self.field
+    }
+}
+
+impl<T> From<ElementField<T>> for Field {
+    fn from(value: ElementField<T>) -> Self {
+        value.field
+    }
+}
+
+impl<T> From<&ElementField<T>> for Field {
+    fn from(value: &ElementField<T>) -> Self {
+        value.field.clone()
+    }
+}
+
+impl<T> From<ElementField<T>> for ValueLike {
+    fn from(value: ElementField<T>) -> Self {
+        value.field.into()
+    }
+}
+
+impl<T> Render for ElementField<T> {
+    fn render(&self, out: &mut Renderer) {
+        out.push(&self.field);
+    }
+}
+
+impl<T: SurrealValue> SetterAssignable<T> for ElementField<T> {}
+
+impl<T: SurrealValue + Into<NumberLike>> SetterNumeric<T> for ElementField<T> {}
 
 /// An assignment, e.g. `name = $_p0`, used in `SET` clauses.
 #[derive(Debug, Clone, PartialEq)]
@@ -189,6 +245,32 @@ where
     /// Removes the given value from the array.
     fn remove(&self, value: impl Into<SetterArg<T>>) -> Setter {
         assign(self.deref(), Operator::Dec, value)
+    }
+
+    /// The element at `index`, `field[index]`, assignable as a `T`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use umbriel::*;
+    /// # struct Tags(Field);
+    /// # impl std::ops::Deref for Tags { type Target = Field; fn deref(&self) -> &Field { &self.0 } }
+    /// # impl SetterArray<String> for Tags {}
+    /// # let tags = Tags(Field::new("tags"));
+    /// let first = tags.at(0).equal_to("rust".to_owned());
+    /// assert_eq!(first.to_debug_sql(), "tags[0] = 'rust'");
+    /// ```
+    fn at(&self, index: impl Into<NumberLike>) -> ElementField<T> {
+        let mut field = self.deref().clone();
+        field.push(IdiomPart::Index(index.into()));
+        ElementField::new(field)
+    }
+
+    /// The elements matching `condition`, `field[WHERE condition]`, assignable as a `T`.
+    fn filter(&self, condition: impl Conditional) -> ElementField<T> {
+        let mut field = self.deref().clone();
+        field.push(IdiomPart::Where(Filter::new(condition)));
+        ElementField::new(field)
     }
 
     /// Derefs to field type.

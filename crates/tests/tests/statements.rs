@@ -386,6 +386,46 @@ mod update {
     }
 
     #[test]
+    fn element_assignments_render() {
+        let user = User::schema();
+        assert_sql(
+            &update::<User>(User::id("alice")).set(user.tags.at(0).equal_to("rust")),
+            "UPDATE user:alice SET tags[0] = 'rust';",
+        );
+        assert_sql(
+            &update::<User>(User::id("alice"))
+                .set(user.tags.filter(Param::new("this").equal("go")).equal_to("rust")),
+            "UPDATE user:alice SET tags[WHERE $this = 'go'] = 'rust';",
+        );
+    }
+
+    #[tokio::test]
+    async fn element_assignments_change_one_element() {
+        let db = db().await;
+        User {
+            id: User::id("alice"),
+            name: "Alice".to_owned(),
+            tags: vec!["go".to_owned(), "sql".to_owned()],
+            ..Default::default()
+        }
+        .create(&db)
+        .await
+        .expect("alice");
+        let tags = User::schema().tags;
+        run(&db, update::<User>(User::id("alice")).set(tags.at(1).equal_to("rust"))).await;
+        let stored: Vec<String> = read(&db, "RETURN user:alice.tags;").await;
+        assert_eq!(stored, ["go", "rust"]);
+        run(
+            &db,
+            update::<User>(User::id("alice"))
+                .set(tags.filter(Param::new("this").equal("go")).equal_to("ts")),
+        )
+        .await;
+        let stored: Vec<String> = read(&db, "RETURN user:alice.tags;").await;
+        assert_eq!(stored, ["ts", "rust"]);
+    }
+
+    #[test]
     fn targets_clauses_and_options() {
         let org = Organization::schema();
         assert_sql(
