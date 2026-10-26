@@ -33,6 +33,35 @@ pub enum Error {
         related: Vec<(usize, surrealdb::Error)>,
     },
 
+    /// A write was refused because a record with the same id already exists, for example a
+    /// second `CREATE` of one id.
+    #[error("record `{id}` already exists{}", statement_note(.statement.as_ref()))]
+    RecordExists {
+        /// The existing record's id, in SurrealQL syntax.
+        id: String,
+        /// The database's error.
+        #[source]
+        source: Box<surrealdb::Error>,
+        /// Where the failure occurred, when it came from a statement of a query rather than an
+        /// SDK method.
+        statement: Option<StatementContext>,
+    },
+
+    /// A statement used a table that is not defined, on a database that does not define tables
+    /// implicitly (such as one defined `STRICT`). Since SurrealDB 3.0.0 this is an error rather
+    /// than an empty result.
+    #[error("table `{table}` does not exist{}", statement_note(.statement.as_ref()))]
+    TableNotFound {
+        /// The table's name.
+        table: String,
+        /// The database's error.
+        #[source]
+        source: Box<surrealdb::Error>,
+        /// Where the failure occurred, when it came from a statement of a query rather than an
+        /// SDK method.
+        statement: Option<StatementContext>,
+    },
+
     /// A value returned by the database did not convert into the requested type.
     #[error("unexpected value from the database: {0}")]
     Conversion(#[source] surrealdb::Error),
@@ -53,6 +82,16 @@ pub enum Error {
     Migration(Box<crate::migrations::MigrationError>),
 }
 
+/// The position of a failed statement within its query, and the other statement errors of the
+/// same response.
+#[derive(Debug)]
+pub struct StatementContext {
+    /// The position of the statement in the query, from 0.
+    pub index: usize,
+    /// Every other statement error of the response, in statement order.
+    pub related: Vec<(usize, surrealdb::Error)>,
+}
+
 #[cfg(feature = "migrations")]
 impl From<crate::migrations::MigrationError> for Error {
     fn from(error: crate::migrations::MigrationError) -> Self {
@@ -66,6 +105,16 @@ fn related_note(related: &[(usize, surrealdb::Error)]) -> String {
         1 => " (1 related statement error)".to_owned(),
         count => format!(" ({count} related statement errors)"),
     }
+}
+
+fn statement_note(statement: Option<&StatementContext>) -> String {
+    statement.map_or_else(String::new, |statement| {
+        format!(
+            " (statement {}{})",
+            statement.index,
+            related_note(&statement.related)
+        )
+    })
 }
 
 /// The result type returned by Umbriel.

@@ -9,7 +9,7 @@ use crate::{
 };
 use surrealdb::{
     Connection, Surreal,
-    types::{Kind, NotFoundError, RecordId, SurrealValue, ToSql},
+    types::{Kind, RecordId, SurrealValue, ToSql},
 };
 
 use crate::migrations::*;
@@ -20,12 +20,7 @@ use crate::migrations::*;
 #[doc(hidden)]
 pub fn history_or_empty<T: Default>(result: crate::Result<T>) -> MigrationResult<T> {
     match result {
-        Err(crate::Error::Statement { source, .. })
-            if matches!(
-                source.not_found_details(),
-                Some(NotFoundError::Table { name }) if name == Migration::table().as_str()
-            ) =>
-        {
+        Err(crate::Error::TableNotFound { table, .. }) if table == Migration::table().as_str() => {
             Ok(T::default())
         }
         result => Ok(result?),

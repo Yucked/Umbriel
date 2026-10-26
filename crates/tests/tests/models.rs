@@ -1478,7 +1478,10 @@ mod record_operations {
         assert_eq!(created.record_id(), apollo.record_id());
         assert_eq!(created.name, "Apollo");
 
-        assert!(apollo.create(&db).await.is_err());
+        assert!(matches!(
+            apollo.create(&db).await,
+            Err(umbriel::Error::RecordExists { statement: None, .. })
+        ));
     }
 
     #[tokio::test]

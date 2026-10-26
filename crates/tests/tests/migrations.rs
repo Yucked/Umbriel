@@ -945,12 +945,15 @@ mod history {
         assert!(Migration::get_all_desc(db).await.is_err());
     }
 
+    /// A failed statement, classified as execution classifies it.
     fn statement_error(source: surrealdb::Error) -> umbriel::Result<Vec<Migration>> {
-        Err(umbriel::Error::Statement {
-            index: 0,
-            source: Box::new(source),
-            related: vec![],
-        })
+        Err(umbriel::test_support::classify(
+            source,
+            Some(umbriel::StatementContext {
+                index: 0,
+                related: vec![],
+            }),
+        ))
     }
 
     #[test]

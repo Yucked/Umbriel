@@ -20,7 +20,8 @@ where
     Self: Queryable,
 {
     /// Runs the query against the database. Succeeds only when every statement succeeded;
-    /// otherwise returns [`Error::Statement`].
+    /// otherwise returns the first failure, classified as [`Error::RecordExists`],
+    /// [`Error::TableNotFound`] or [`Error::Statement`].
     fn run(
         &self,
         db: Surreal<impl surrealdb::Connection>,

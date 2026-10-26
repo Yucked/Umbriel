@@ -6,7 +6,7 @@ use surrealdb::{
 use crate::{
     Alias, All, Conditional, Error, Field, Filter, ModelPatch, NodeClause, Raw, RecordId,
     RecordKey, Render, Result, StoredFields, count,
-    execution::execute,
+    execution::{classify, execute},
     statements::{
         SelectStatementMini,
         delete::{DeleteStatementMini, delete},
@@ -89,7 +89,7 @@ pub trait SurrealCrud: Model + Send {
         async move {
             db.select(types::RecordId::from(id))
                 .await
-                .map_err(Error::Query)
+                .map_err(|error| classify(error, None))
         }
     }
 
@@ -102,7 +102,7 @@ pub trait SurrealCrud: Model + Send {
             db.upsert(id)
                 .content(self)
                 .await
-                .map_err(Error::Query)?
+                .map_err(|error| classify(error, None))?
                 .ok_or(Error::RecordNotFound(what))
         }
     }
@@ -126,7 +126,7 @@ pub trait SurrealCrud: Model + Send {
         async move {
             db.delete(types::RecordId::from(id))
                 .await
-                .map_err(Error::Query)
+                .map_err(|error| classify(error, None))
         }
     }
 
@@ -197,7 +197,7 @@ pub trait SurrealCrudNode: Node + Send {
             db.create(id)
                 .content(self)
                 .await
-                .map_err(Error::Query)?
+                .map_err(|error| classify(error, None))?
                 .ok_or(Error::RecordNotFound(what))
         }
     }

@@ -1,14 +1,57 @@
 //! Query execution: every query runs through [`execute`], which checks each statement's result
 //! before reporting success.
 
-use surrealdb::{Connection, IndexedResults, Surreal, types::QueryError};
+use surrealdb::{
+    Connection, IndexedResults, Surreal,
+    types::{AlreadyExistsError, NotFoundError, QueryError},
+};
 
-use crate::{Error, Query, Result};
+use crate::{Error, Query, Result, StatementContext};
+
+/// Turns a database error into Umbriel's error, keeping it as the source.
+///
+/// Shared by statement execution, which passes the failed statement's context, and the SDK
+/// methods models call directly, which pass none. The classification reads only the error's
+/// structured details, never its message:
+/// - an already-exists error for a record is [`Error::RecordExists`];
+/// - a not-found error for a table is [`Error::TableNotFound`];
+/// - anything else is [`Error::Statement`] with a context, or [`Error::Query`] without one.
+#[doc(hidden)]
+pub fn classify(source: surrealdb::Error, statement: Option<StatementContext>) -> Error {
+    if let Some(AlreadyExistsError::Record { id }) = source.already_exists_details() {
+        let id = id.clone();
+        return Error::RecordExists {
+            id,
+            source: Box::new(source),
+            statement,
+        };
+    }
+    if let Some(NotFoundError::Table { name }) = source.not_found_details() {
+        let table = name.clone();
+        return Error::TableNotFound {
+            table,
+            source: Box::new(source),
+            statement,
+        };
+    }
+    match statement {
+        Some(StatementContext { index, related }) => Error::Statement {
+            index,
+            source: Box::new(source),
+            related,
+        },
+        None => Error::Query(source),
+    }
+}
 
 /// Runs a rendered query and checks every statement's result.
 pub(crate) async fn execute(db: &Surreal<impl Connection>, query: Query) -> Result<IndexedResults> {
     let (sql, vars) = query.into_parts();
-    let mut results = db.query(sql).bind(vars).await.map_err(Error::Query)?;
+    let mut results = db
+        .query(sql)
+        .bind(vars)
+        .await
+        .map_err(|error| classify(error, None))?;
     // Counted first: `take_errors` removes the failed statements from the results.
     let statement_count = results.num_statements();
     match select_failure(statement_count, results.take_errors()) {
@@ -90,9 +133,11 @@ pub fn select_failure(
     })?;
 
     let (index, source) = errors.remove(primary);
-    Some(Error::Statement {
-        index,
-        source: Box::new(source),
-        related: errors,
-    })
+    Some(classify(
+        source,
+        Some(StatementContext {
+            index,
+            related: errors,
+        }),
+    ))
 }
