@@ -8,6 +8,7 @@ mod helpers;
 mod kind;
 mod migrations;
 mod models;
+mod models_union;
 mod query;
 mod query_builder;
 mod statement_parser;
@@ -45,6 +46,16 @@ pub fn model_codegen(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(TableResources, attributes(orm))]
 pub fn table_resources_derive(input: TokenStream) -> TokenStream {
     derive_with::<TableMigrationSchemaDeriveAttributes>(input)
+}
+
+/// Declares a union of models for mixed-model writes; documented on its re-export,
+/// `umbriel::Models`.
+#[proc_macro_derive(Models)]
+pub fn models_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    models_union::derive_models(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 #[proc_macro_derive(Pickable)]

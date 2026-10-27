@@ -5,7 +5,7 @@ use std::{fmt, marker::PhantomData};
 
 use surrealdb::{
     Connection, IndexedResults, Surreal,
-    types::{self, ConversionError, Kind, Object, SurrealValue, Value},
+    types::{self, ConversionError, Kind, Object, SurrealNull, SurrealValue, Value},
 };
 
 use crate::{
@@ -86,7 +86,6 @@ pub trait ReturnMode: sealed::Sealed + Clone + fmt::Debug + Send + Sync + 'stati
 fn take_many<V: SurrealValue>(mut results: IndexedResults) -> Result<Vec<V>> {
     results.take::<Vec<V>>(0).map_err(Error::Conversion)
 }
-
 
 /// Implements `Clone` and `Debug` without bounds on the phantom type parameter, which derives
 /// would require.
@@ -209,6 +208,31 @@ impl ReturnMode for ReturnNone {
 
     fn decode_one(_: IndexedResults) -> Result<()> {
         Ok(())
+    }
+}
+
+/// `RETURN NULL`: one `NULL` for each record the statement returns, where `RETURN NONE` returns
+/// nothing. A `WHERE`, `IGNORE` or permissions decide which records are returned; the count of
+/// nulls is not documented as a count of writes.
+#[derive(Debug, Clone, Copy)]
+pub struct ReturnNull;
+
+impl sealed::Sealed for ReturnNull {}
+
+impl ReturnMode for ReturnNull {
+    type Many = Vec<SurrealNull>;
+    type One = Option<SurrealNull>;
+
+    fn render(&self, out: &mut Renderer) {
+        out.push_str(" RETURN NULL");
+    }
+
+    fn decode_many(results: IndexedResults) -> Result<Vec<SurrealNull>> {
+        take_many(results)
+    }
+
+    fn decode_one(results: IndexedResults) -> Result<Option<SurrealNull>> {
+        take_one(results)
     }
 }
 
@@ -453,6 +477,12 @@ macro_rules! return_methods {
         /// `RETURN NONE`: the statement returns nothing.
         pub fn return_none(self) -> $statement<$model, $crate::statements::ReturnNone, C> {
             self.with_mode($crate::statements::ReturnNone)
+        }
+    };
+    (@null $statement:ident $model:ident) => {
+        /// `RETURN NULL`: one `NULL` per returned record.
+        pub fn return_null(self) -> $statement<$model, $crate::statements::ReturnNull, C> {
+            self.with_mode($crate::statements::ReturnNull)
         }
     };
     (@before $statement:ident $model:ident) => {

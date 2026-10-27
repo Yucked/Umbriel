@@ -2,7 +2,7 @@ use surrealdb::types::{self, Table, ToSql};
 
 use crate::{
     Arrow, Conditional, Fragment, Graph, Ident, IdiomPart, Model, NumberLike, Operatable,
-    Operation, Param, RecordId, Render, Renderer, Setter, ValueLike,
+    Operation, Param, RecordId, Render, Renderer, Setter, TableSpec, ValueLike,
     render::Checked,
     statements::{LetStatement, Subquery},
 };
@@ -42,8 +42,33 @@ pub enum ClauseType {
 
 #[derive(Debug, Clone)]
 enum ClauseName {
-    Table(Table),
+    /// A table, rendered by name. With a family, a record id of any member is accepted; without
+    /// one, only of this table.
+    Table(Table, Option<TableSpec>),
     Field(Ident),
+}
+
+impl ClauseName {
+    /// The error for a record id outside this step's table or family.
+    fn id_error(&self, id: &types::RecordId) -> Option<String> {
+        let Self::Table(table, family) = self else {
+            return None;
+        };
+        match family {
+            Some(family) if family.accepts(id.table.as_str()) => None,
+            Some(family) if family.prefix().is_some() => Some(format!(
+                "record `{}` does not belong to a table of `{}`",
+                id.to_sql(),
+                family.table()
+            )),
+            _ if id.table == *table => None,
+            _ => Some(format!(
+                "record `{}` does not belong to table `{}`",
+                id.to_sql(),
+                table.as_str()
+            )),
+        }
+    }
 }
 
 /// A step in a graph traversal or field path: what to select at this step and how to filter it.
@@ -72,7 +97,14 @@ impl Clause {
 
     /// Attach the table this step traverses to. A record id clause must belong to it.
     pub fn with_table(mut self, table: impl Into<Table>) -> Self {
-        self.name = Some(ClauseName::Table(table.into()));
+        self.name = Some(ClauseName::Table(table.into(), None));
+        self
+    }
+
+    /// Attach a model's table family: the step is written with the default table, and a record id
+    /// clause must belong to a member.
+    pub fn with_family(mut self, family: TableSpec) -> Self {
+        self.name = Some(ClauseName::Table(Table::new(family.table()), Some(family)));
         self
     }
 
@@ -91,30 +123,14 @@ impl Clause {
 
         match kind {
             ClauseType::Id(id) => {
-                let error = match &name {
-                    Some(ClauseName::Table(table)) if id.table != *table => Some(format!(
-                        "record `{}` does not belong to table `{}`",
-                        id.to_sql(),
-                        table.as_str()
-                    )),
-                    _ => None,
-                };
+                let error = name.as_ref().and_then(|name| name.id_error(&id));
                 let id = Checked::new(ValueLike::value(id), error);
                 parts.push(target(Fragment::new(id)));
             }
             ClauseType::Ids(ids) => {
-                let error = match &name {
-                    Some(ClauseName::Table(table)) => {
-                        ids.iter().find(|id| id.table != *table).map(|id| {
-                            format!(
-                                "record `{}` does not belong to table `{}`",
-                                id.to_sql(),
-                                table.as_str()
-                            )
-                        })
-                    }
-                    _ => None,
-                };
+                let error = name
+                    .as_ref()
+                    .and_then(|name| ids.iter().find_map(|id| name.id_error(id)));
                 let ids = Checked::new(ValueLike::value(ids), error);
                 parts.push(target(Fragment::new(ids)));
             }
@@ -122,7 +138,7 @@ impl Clause {
             ClauseType::Subquery(subquery) => parts.push(target(subquery.into_fragment())),
             ClauseType::AnyEdgeFilter(filter) => {
                 let mut tables = match name {
-                    Some(ClauseName::Table(table)) => vec![table],
+                    Some(ClauseName::Table(table, _)) => vec![table],
                     _ => vec![],
                 };
                 tables.extend(filter.edge_tables);
@@ -134,7 +150,7 @@ impl Clause {
             }
             kind => {
                 match name {
-                    Some(ClauseName::Table(table)) => parts.push(match arrow {
+                    Some(ClauseName::Table(table, _)) => parts.push(match arrow {
                         Some(_) => IdiomPart::Graph(Graph::tables(arrow, vec![table], None)),
                         None => IdiomPart::Expr(Fragment::new(table)),
                     }),
@@ -169,6 +185,11 @@ macro_rules! clause_wrapper {
                 /// Attach the table this step traverses to.
                 pub fn with_table(self, table: impl Into<Table>) -> Self {
                     Self(self.0.with_table(table))
+                }
+
+                /// Attach a model's table family; see [`Clause::with_family`].
+                pub fn with_family(self, family: TableSpec) -> Self {
+                    Self(self.0.with_family(family))
                 }
 
                 /// Attach the field this step accesses.
@@ -344,6 +365,11 @@ impl From<AnyEdgeFilter> for Clause {
 /// accepted as before; their values are known only when the query runs, so the database checks
 /// them, and only where the edge table defines `TYPE RELATION IN … OUT …` (endpoint tables) or
 /// `ENFORCED` (endpoint records must exist).
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not an endpoint for `{N}`",
+    label = "expected a `RecordId<{N}>`, a list of them, or an untyped expression",
+    note = "a record id of another model cannot reach `{N}`"
+)]
 pub trait IntoNodeClause<N> {
     /// The clause.
     fn into_node_clause(self) -> NodeClause;
@@ -379,6 +405,9 @@ impl<N: Model, const K: usize> IntoNodeClause<N> for [RecordId<N>; K] {
     }
 }
 
+// Hidden from diagnostics: otherwise rustc reports the unmet `Into<Subquery>` of this blanket impl
+// instead of the endpoint mismatch.
+#[diagnostic::do_not_recommend]
 impl<N, S: Into<Subquery>> IntoNodeClause<N> for S {
     fn into_node_clause(self) -> NodeClause {
         Clause::from(self).into()

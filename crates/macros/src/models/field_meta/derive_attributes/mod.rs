@@ -56,6 +56,11 @@ pub struct MyFieldReceiver {
     #[darling(default)]
     pub(crate) nest_object: Option<NestObjectAttrType>,
 
+    /// `merge = "TheirMerge"`: the field merges field by field through the caller's own
+    /// `MergeFields` type, for a value that is not a `#[model(object)]`.
+    #[darling(default)]
+    pub(crate) merge: Option<MergeAttrType>,
+
     #[darling(default, rename = "ty")]
     pub(crate) field_type_db: Option<FieldTypeDb>,
 

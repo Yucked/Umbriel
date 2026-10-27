@@ -4,14 +4,13 @@ use surrealdb::{
 };
 
 use crate::{
-    Alias, All, Conditional, Error, Field, Filter, IntoNodeClause, ModelMerge, ModelPatch, Raw,
-    RecordId, RecordKey, RecordRange, Render, Result, StoredFields, count,
+    Alias, All, Conditional, Error, Field, IntoNodeClause, ModelMerge, ModelPatch, Raw, RecordId,
+    RecordKey, RecordRange, Render, Result, StoredFields, TableOf,
     execution::{classify, execute},
+    query::table_of::select_range,
     statements::{
         DeleteStatement, SelectStatementMini,
-        delete::delete,
         select::{SelectStatementCount, select},
-        select_value,
         update::update,
     },
 };
@@ -39,13 +38,34 @@ pub trait Model: Sized + SurrealValue + 'static {
     #[doc(hidden)]
     type StructRenamedCreator;
 
-    /// The name of the model/table
-    fn table() -> Table;
+    /// The model's default table, from `table = "…"`. Static, so a `Models` union can check its
+    /// members' tables at compile time.
+    const TABLE: &'static str;
+
+    /// The prefix of the tables chosen at run time, from `table_prefix = "…"`; `None` when the
+    /// model has only its default table. See [`TableSpec`].
+    const TABLE_PREFIX: Option<&'static str>;
+
+    /// The model's default table.
+    fn table() -> Table {
+        Table::new(Self::TABLE)
+    }
+
+    /// The table `name` of this model's family, chosen at run time.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::TableNotInFamily`] when `name` is neither the default table nor a longer name
+    /// starting with the model's `table_prefix`.
+    fn table_of(name: &str) -> Result<TableOf<Self>> {
+        TableOf::new(name)
+    }
 
     /// The record's id.
     fn record_id(&self) -> &RecordId<Self>;
 
-    /// The id with the given key in this model's table.
+    /// The id with the given key in this model's default table; [`TableOf::id`] builds one in
+    /// another member.
     fn id(key: impl RecordKey) -> RecordId<Self> {
         RecordId::new(key)
     }
@@ -183,36 +203,35 @@ pub trait SurrealCrud: Model + Send {
         }
     }
 
-    /// Inserts several records in one SDK call (`insert(table).content(records)`), returning the
-    /// stored records.
+    /// Inserts several records into the default table in one SDK call
+    /// (`insert(table).content(records)`), returning the stored records;
+    /// [`TableOf::insert_many`] inserts into another member.
     ///
     /// # Errors
     ///
+    /// [`Error::QueryBuilder`] when a record's id names another table, and
     /// [`Error::RecordExists`] when a record's id already exists, with the database error kept.
     fn insert_many(
         db: &Surreal<impl Connection>,
         records: Vec<Self>,
     ) -> impl Future<Output = Result<Vec<Self>>> + Send {
-        async move {
-            db.insert::<Vec<Self>>(Self::table().as_str())
-                .content(records)
-                .await
-                .map_err(|error| classify(error, None))
-        }
+        async move { TableOf::<Self>::default().insert_many(db, records).await }
     }
 
-    /// Fetches the records whose keys fall in `range`, e.g. `User::get_range(&db, a..b)`.
+    /// Fetches the records whose keys fall in `range`, e.g. `User::get_range(&db, a..b)`, in the
+    /// range's own table.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::QueryBuilder`] when the range's bounds name different tables.
     fn get_range(
         db: &Surreal<impl Connection>,
         range: impl Into<RecordRange<Self>>,
     ) -> impl Future<Output = Result<Vec<Self>>> + Send {
-        let range: RecordRange<Self> = range.into();
-        let range = range.into_key_range();
+        let parts = range.into().into_parts();
         async move {
-            db.select::<Vec<Self>>(Self::table().as_str())
-                .range(range)
-                .await
-                .map_err(|error| classify(error, None))
+            let (table, keys) = parts?;
+            select_range(db, &table, keys).await
         }
     }
 
@@ -233,31 +252,25 @@ pub trait SurrealCrud: Model + Send {
         }
     }
 
-    /// Finds records by filtering.
+    /// Finds records of the default table by filtering; [`TableOf::find_where`] searches
+    /// another member.
     fn find_where(filter: impl Conditional + Clone) -> SelectStatementMini<Self> {
-        select(All).from(Self::table()).where_(filter).into()
+        TableOf::<Self>::default().find_where(filter)
     }
 
-    /// Count filtered records.
+    /// Counts filtered records of the default table.
     fn count_where(filter: impl Conditional + Clone) -> SelectStatementCount {
-        let selection = select_value(Field::new("count")).from(
-            select(count!(Filter::new(filter)))
-                .from(Self::table())
-                .group_all(),
-        );
-        selection.into()
+        TableOf::<Self>::default().count_where(filter)
     }
 
-    /// Count all records.
+    /// Counts every record of the default table.
     fn count_all() -> SelectStatementCount {
-        let selection = select_value(Field::new("count"))
-            .from(select(count!()).from(Self::table()).group_all());
-        selection.into()
+        TableOf::<Self>::default().count_all()
     }
 
-    /// Deletes records by filtering.
+    /// Deletes records of the default table by filtering.
     fn delete_where(filter: impl Conditional + Clone) -> DeleteStatement<Self> {
-        delete::<Self>(Self::table()).where_(filter)
+        TableOf::<Self>::default().delete_where(filter)
     }
 }
 

@@ -17,7 +17,7 @@ use surrealdb::types::{self, SurrealValue, Table, ToSql};
 
 use crate::{
     Conditional, DurationLike, Filter, Model, ModelMerge, PatchOp, RecordId, Renderer, Setter,
-    ValueLike, render::Checked,
+    TableOf, TableSpec, ValueLike, render::Checked,
 };
 
 use super::{
@@ -71,6 +71,7 @@ pub fn update_only<T: Model>(
 }
 
 /// The target of an `UPDATE`, `UPSERT` or `DELETE`: the model's table or one of its records.
+#[derive(Debug, Clone)]
 pub enum TargettablesForUpdate {
     /// A table, rendered as its name.
     Table(Table),
@@ -79,31 +80,43 @@ pub enum TargettablesForUpdate {
 }
 
 impl TargettablesForUpdate {
-    /// The target, with an error when it does not belong to `T`'s table.
+    /// The target, with an error when it is not in a table of `T`'s family.
     pub(crate) fn checked<T: Model>(self) -> Checked<ValueLike> {
-        let table = T::table();
+        let family = TableSpec::of::<T>();
         match self {
             Self::Table(target) => {
-                let error = (target != table).then(|| {
+                let error = (!family.accepts(target.as_str())).then(|| {
                     format!(
-                        "table `{}` is not the table `{}` of the model",
+                        "table `{}` is not a table of the model `{}`",
                         target.as_str(),
-                        table.as_str()
+                        T::TABLE
                     )
                 });
                 Checked::new(ValueLike::table(target), error)
             }
             Self::Record(id) => {
-                let error = (id.table != table).then(|| {
+                let error = (!family.accepts(id.table.as_str())).then(|| {
                     format!(
-                        "record `{}` does not belong to the model's table `{}`",
+                        "record `{}` does not belong to a table of the model `{}`",
                         id.to_sql(),
-                        table.as_str()
+                        T::TABLE
                     )
                 });
                 Checked::new(ValueLike::value(id), error)
             }
         }
+    }
+}
+
+impl<T: Model> From<TableOf<T>> for TargettablesForUpdate {
+    fn from(table: TableOf<T>) -> Self {
+        Self::Table(table.into())
+    }
+}
+
+impl<T: Model> From<&TableOf<T>> for TargettablesForUpdate {
+    fn from(table: &TableOf<T>) -> Self {
+        Self::Table(table.table().clone())
     }
 }
 
@@ -152,6 +165,8 @@ impl<T: Model> From<&RecordId<T>> for TargettablesForUpdate {
 /// The clauses an `UPDATE` and an `UPSERT` share, in the order both write them.
 #[derive(Debug, Clone)]
 pub(crate) struct UpdateBody {
+    /// The target as given, to check a `CONTENT` record id against.
+    pub(crate) target_kind: TargettablesForUpdate,
     pub(crate) target: Checked<ValueLike>,
     pub(crate) data: Option<DataClause>,
     pub(crate) where_: Option<Filter>,
@@ -161,10 +176,29 @@ pub(crate) struct UpdateBody {
 impl UpdateBody {
     pub(crate) fn new<T: Model>(target: TargettablesForUpdate) -> Self {
         Self {
+            target_kind: target.clone(),
             target: target.checked::<T>(),
             data: None,
             where_: None,
             timeout: None,
+        }
+    }
+
+    /// The error when the `CONTENT` record id `id` is not in the target table, or is not the
+    /// target record.
+    fn content_error(&self, id: &types::RecordId) -> Option<String> {
+        match &self.target_kind {
+            TargettablesForUpdate::Table(table) if id.table != *table => Some(format!(
+                "the content's record `{}` is not in the target table `{}`",
+                id.to_sql(),
+                table.as_str()
+            )),
+            TargettablesForUpdate::Record(target) if id != target => Some(format!(
+                "the content's record `{}` is not the target record `{}`",
+                id.to_sql(),
+                target.to_sql()
+            )),
+            _ => None,
         }
     }
 
@@ -173,6 +207,11 @@ impl UpdateBody {
         out.push_str(keyword).push_str(" ");
         if only {
             out.push_str("ONLY ");
+        }
+        if let Some(error) =
+            DataClause::content_id(self.data.as_ref()).and_then(|id| self.content_error(id))
+        {
+            out.push_error(error);
         }
         out.push(&self.target).push(&self.data);
         if let Some(condition) = &self.where_ {
@@ -193,9 +232,11 @@ macro_rules! update_clauses {
     ($statement:ident) => {
         impl<T: Model, R: ReturnMode, C: Cardinality> $statement<T, R, C> {
             /// Caution! Replaces the whole record with the model (`CONTENT`). `CONTENT` bypasses
-            /// `READONLY` fields; use [`replace`](Self::replace) to respect them.
+            /// `READONLY` fields; use [`replace`](Self::replace) to respect them. The model's
+            /// record id must be in a table target's table, or equal a record target; otherwise
+            /// the statement fails when it is rendered.
             pub fn content(mut self, content: T) -> Self {
-                self.body.data = Some(DataClause::Content(ValueLike::value(content)));
+                self.body.data = Some(DataClause::content(content));
                 self
             }
 
@@ -342,7 +383,7 @@ pub struct UpdateStatement<T, R = ReturnAfter<T>, C = Many> {
 
 update_clauses!(UpdateStatement);
 
-return_methods!([T: Model] UpdateStatement<T> { none, before, after, diff, value, fields, links });
+return_methods!([T: Model] UpdateStatement<T> { none, null, before, after, diff, value, fields, links });
 
 impl<T: Model, R: ReturnMode, C: Cardinality> Statement for UpdateStatement<T, R, C> {
     fn render_body(&self, out: &mut Renderer) {

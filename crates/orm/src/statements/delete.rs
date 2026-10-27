@@ -143,7 +143,7 @@ impl<T: Model, R: ReturnMode, C: Cardinality> DeleteStatement<T, R, C> {
     }
 }
 
-return_methods!([T: Model] DeleteStatement<T> { before, diff });
+return_methods!([T: Model] DeleteStatement<T> { null, before, diff });
 
 impl<T: Model, R: ReturnMode, C: Cardinality> Statement for DeleteStatement<T, R, C> {
     fn render_body(&self, out: &mut Renderer) {

@@ -84,7 +84,7 @@ pub struct UpsertStatement<T, R = ReturnAfter<T>, C = Many> {
 
 update_clauses!(UpsertStatement);
 
-return_methods!([T: Model] UpsertStatement<T> { none, before, after, diff, value, fields, links });
+return_methods!([T: Model] UpsertStatement<T> { none, null, before, after, diff, value, fields, links });
 
 impl<T: Model, R: ReturnMode, C: Cardinality> Statement for UpsertStatement<T, R, C> {
     fn render_body(&self, out: &mut Renderer) {

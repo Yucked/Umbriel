@@ -5,15 +5,16 @@
 // 		[ ON DUPLICATE KEY UPDATE @field = @value ... ]
 // 	]
 // 	[ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... | RETURN VALUE @statement_param ]
+// 	[ TIMEOUT @duration ]
 // ;
 use std::{
     collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
 };
 
-use surrealdb::types::{SurrealValue, Value};
+use surrealdb::types::{SurrealValue, Table, ToSql, Value};
 
-use crate::{Edge, Model, Node, Param, Renderer, SchemaGetter, Setter};
+use crate::{DurationLike, Edge, Model, Node, Param, Renderer, SchemaGetter, Setter, TableOf};
 
 use super::{
     Cardinality, Many, ReturnAfter, ReturnMode, Returning, SelectStatement, Statement, Subquery,
@@ -192,8 +193,11 @@ struct InsertBody {
     ignore: bool,
     /// Whether the table is bound as a parameter (`INTO $_pN`) rather than written by name.
     table_param: bool,
+    /// The member of `T`'s family chosen with `into_table`; `None` is the default table.
+    table: Option<Table>,
     data: Data,
     on_duplicate_key_update: Vec<Setter>,
+    timeout: Option<DurationLike>,
 }
 
 /// An INSERT statement. `R` is its return mode, which decides the type
@@ -212,8 +216,10 @@ impl<T: Model> InsertStatement<T> {
                 relation,
                 ignore: false,
                 table_param: false,
+                table: None,
                 data,
                 on_duplicate_key_update: vec![],
+                timeout: None,
             },
             mode: ReturnAfter::default_mode(),
             cardinality: PhantomData,
@@ -253,6 +259,14 @@ impl<T: Model, R: ReturnMode, C: Cardinality> InsertStatement<T, R, C> {
         self
     }
 
+    /// `INSERT INTO table` for a member of `T`'s family chosen at run time. Every record's id
+    /// must be in that table; one in another member fails when the statement is rendered, so it
+    /// never runs. Combines with [`into_table_param`](Self::into_table_param).
+    pub fn into_table(mut self, table: TableOf<T>) -> Self {
+        self.body.table = Some(table.into());
+        self
+    }
+
     /// `ON DUPLICATE KEY UPDATE`: updates a record that already exists instead. Bare fields name
     /// the existing record, and [`input_of`] the fields of the one that could not be inserted.
     /// Repeated calls add to the assignments.
@@ -279,6 +293,14 @@ impl<T: Model, R: ReturnMode, C: Cardinality> InsertStatement<T, R, C> {
         self
     }
 
+    /// `TIMEOUT`: the statement fails if it runs longer than `duration`, written as a literal.
+    /// SurrealDB's `INSERT` documentation omits it, but the 3.3.4 parser accepts it and execution
+    /// applies it, as for the other write statements.
+    pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
+        self.body.timeout = Some(duration.into());
+        self
+    }
+
     fn with_mode<M: ReturnMode>(self, mode: M) -> InsertStatement<T, M, C> {
         InsertStatement {
             body: self.body,
@@ -289,7 +311,7 @@ impl<T: Model, R: ReturnMode, C: Cardinality> InsertStatement<T, R, C> {
 }
 
 // `RETURN BEFORE` is not offered: SurrealDB documents it as `NONE` for `INSERT`.
-return_methods!([T: Model] InsertStatement<T> { none, after, diff, value, fields, links });
+return_methods!([T: Model] InsertStatement<T> { none, null, after, diff, value, fields, links });
 
 impl<T: Model, R: ReturnMode, C: Cardinality> Statement for InsertStatement<T, R, C> {
     fn render_body(&self, out: &mut Renderer) {
@@ -302,10 +324,11 @@ impl<T: Model, R: ReturnMode, C: Cardinality> Statement for InsertStatement<T, R
             out.push_str("IGNORE ");
         }
         out.push_str("INTO ");
+        let table = body.table.clone().unwrap_or_else(T::table);
         if body.table_param {
-            out.push_value(&Value::Table(T::table()));
+            out.push_value(&Value::Table(table.clone()));
         } else {
-            out.push(&T::table());
+            out.push(&table);
         }
         out.push_str(" ");
 
@@ -314,6 +337,13 @@ impl<T: Model, R: ReturnMode, C: Cardinality> Statement for InsertStatement<T, R
                 out.push(query);
             }
             Data::Values(values) => {
+                if let Value::Array(objects) = values {
+                    for object in objects.iter() {
+                        if let Value::Object(object) = object {
+                            check_record_table(object.get("id"), &table, out);
+                        }
+                    }
+                }
                 out.push_value(values);
             }
             Data::Rows {
@@ -323,6 +353,11 @@ impl<T: Model, R: ReturnMode, C: Cardinality> Statement for InsertStatement<T, R
             } => {
                 for error in errors {
                     out.push_error(error.as_str());
+                }
+                if let Some(id_column) = fields.iter().position(|field| field == "id") {
+                    for row in rows {
+                        check_record_table(row.get(id_column), &table, out);
+                    }
                 }
                 out.push_str("(");
                 for (index, field) in fields.iter().enumerate() {
@@ -354,6 +389,23 @@ impl<T: Model, R: ReturnMode, C: Cardinality> Statement for InsertStatement<T, R
         }
 
         self.mode.render(out);
+        if let Some(timeout) = &body.timeout {
+            out.push_str(" TIMEOUT ").push_inlined(timeout);
+        }
+    }
+}
+
+/// Adds an error when a record's id names a table other than the one inserted into: the default
+/// table, or the member chosen with `into_table`.
+fn check_record_table(id: Option<&Value>, table: &Table, out: &mut Renderer) {
+    if let Some(Value::RecordId(id)) = id
+        && id.table != *table
+    {
+        out.push_error(format!(
+            "record `{}` is not in the table `{}` the records are inserted into",
+            id.to_sql(),
+            table.as_str()
+        ));
     }
 }
 

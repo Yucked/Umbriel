@@ -24,6 +24,7 @@ fn expand_model_attribute(args: TokenStream, item: TokenStream) -> syn::Result<T
 
     let mut kind = None;
     let mut table = None;
+    let mut table_prefix = None;
     let mut manual_value = false;
     for arg in &args {
         match arg {
@@ -40,6 +41,9 @@ fn expand_model_attribute(args: TokenStream, item: TokenStream) -> syn::Result<T
             Meta::NameValue(name_value) if name_value.path.is_ident("table") => {
                 table = Some(name_value.value.clone());
             }
+            Meta::NameValue(name_value) if name_value.path.is_ident("table_prefix") => {
+                table_prefix = Some(name_value.value.clone());
+            }
             Meta::NameValue(name_value) if name_value.path.is_ident("value") => {
                 match &name_value.value {
                     Expr::Path(path) if path.path.is_ident("manual") => manual_value = true,
@@ -54,7 +58,8 @@ fn expand_model_attribute(args: TokenStream, item: TokenStream) -> syn::Result<T
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "expected `node`, `edge` or `object`, `table = \"…\"` or `value = manual`",
+                    "expected `node`, `edge` or `object`, `table = \"…\"`, `table_prefix = \"…\"` \
+                     or `value = manual`",
                 ));
             }
         }
@@ -67,6 +72,7 @@ fn expand_model_attribute(args: TokenStream, item: TokenStream) -> syn::Result<T
         )
     })?;
     let table = table.map(|table| quote!(, table = #table));
+    let table_prefix = table_prefix.map(|prefix| quote!(, table_prefix = #prefix));
 
     // `SurrealValue` names its runtime through the consumer's own path to Umbriel, so a
     // renamed dependency works without a direct `surrealdb` dependency. The derive writes
@@ -92,7 +98,7 @@ fn expand_model_attribute(args: TokenStream, item: TokenStream) -> syn::Result<T
         #surreal_value_scope
         #surreal_value
         #[derive(#crate_name::__private::ModelCodegen)]
-        #[orm(#kind #table)]
+        #[orm(#kind #table #table_prefix)]
         #item
     ))
 }
@@ -359,6 +365,10 @@ impl ModelReceiver {
             .table()?
             .expect("a node or edge has a table")
             .as_string();
+        let table_prefix = match self.table_prefix()? {
+            Some(prefix) => quote!(::std::option::Option::Some(#prefix)),
+            None => quote!(::std::option::Option::None),
+        };
         let table_definitions = self.get_table_definition_token()?;
         let patch_ident = struct_name_ident.patch_ident();
         let VariablesModelMacro {
@@ -419,9 +429,9 @@ impl ModelReceiver {
             impl #impl_generics #crate_name::Model for #struct_name_ident #ty_generics #where_clause {
                 type StructRenamedCreator = #struct_with_renamed_serialized_fields;
 
-                fn table() -> #crate_name::Table {
-                    #crate_name::Table::new(#table)
-                }
+                const TABLE: &'static str = #table;
+
+                const TABLE_PREFIX: ::std::option::Option<&'static str> = #table_prefix;
 
                 fn record_id(&self) -> &#crate_name::RecordId<Self> {
                     &self.#record_id_field
@@ -590,7 +600,7 @@ impl ModelReceiver {
                     let clause: #crate_name::NodeClause = #crate_name::IntoNodeClause::<Self>::into_node_clause(clause);
                     #schema #explicit_generics ::#__________connect(
                         #crate_name::Field::default(),
-                        clause.with_table(#table).into_inner(),
+                        clause.with_family(#crate_name::TableSpec::of::<Self>()).into_inner(),
                     )
                 }
 

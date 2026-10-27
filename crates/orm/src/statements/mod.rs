@@ -7,6 +7,7 @@ pub(crate) trait Statement {
     fn render_body(&self, out: &mut Renderer);
 }
 
+pub(crate) mod any;
 pub(crate) mod break_;
 pub(crate) mod continue_;
 pub(crate) mod create;
@@ -123,6 +124,10 @@ impl<S: Statement + ?Sized> Render for StatementBody<'_, S> {
     }
 }
 
+pub use any::{
+    AnyTarget, CreateAnyStatement, InsertAnyStatement, Models, create_any, create_any_only,
+    insert_any,
+};
 pub use break_::{BreakStatement, break_};
 pub use continue_::{ContinueStatement, continue_};
 pub use create::{CreateStatement, CreateTarget, CreateTargets, create, create_only};
@@ -166,7 +171,7 @@ pub use remove_user::{RemoveUserStatement, UserPermissionScope, remove_user};
 pub use return_::{ReturnStatement, return_};
 pub use returning::{
     Cardinality, DiffOp, Explained, Many, One, ReturnAfter, ReturnBefore, ReturnDefaultNone,
-    ReturnDiff, ReturnFields, ReturnMode, ReturnNone, ReturnValue, Returning,
+    ReturnDiff, ReturnFields, ReturnMode, ReturnNone, ReturnNull, ReturnValue, Returning,
 };
 pub use select::{
     Order, Orderables, SelectStatement, SelectStatementMini, Selectables, Splittables, order,

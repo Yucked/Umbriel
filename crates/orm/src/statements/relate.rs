@@ -3,16 +3,22 @@
 // 	[ CONTENT @value
 // 	  | SET @field = @value ...
 // 	]
+// The parser also accepts `MERGE`, `PATCH`, `REPLACE` and `UNSET`, which the engine applies as for
+// every other write (`doc/alter.rs` `process_record_data` in 3.3.4), keeping `in` and `out`.
 // 	[ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... | RETURN VALUE @statement_param ]
 // 	[ TIMEOUT @duration ]
 // ;
 use std::marker::PhantomData;
 
-use crate::{DurationLike, Edge, Field, Renderer, Setter, ValueLike};
+use surrealdb::types::SurrealValue;
+
+use crate::{DurationLike, Edge, Field, ModelMerge, PatchOp, Renderer, Setter, ValueLike};
 
 use super::{
-    Cardinality, Many, One, ReturnAfter, ReturnMode, Returning, Statement, data::DataClause,
-    impl_statement, returning::return_methods,
+    Cardinality, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
+    data::{DataClause, Unsettables},
+    impl_statement,
+    returning::return_methods,
 };
 
 /// Creates a new RELATE statement.
@@ -133,7 +139,7 @@ macro_rules! relate_clauses {
         impl<T: Edge, R: ReturnMode, C: Cardinality> $statement<T, R, C> {
             /// Sets the edge's content (`CONTENT`).
             pub fn content(mut self, content: T) -> Self {
-                self.body.data = Some(DataClause::Content(ValueLike::value(content)));
+                self.body.data = Some(DataClause::content(content));
                 self
             }
 
@@ -143,6 +149,34 @@ macro_rules! relate_clauses {
             /// assignments.
             pub fn set(mut self, settables: impl Into<Vec<Setter>>) -> Self {
                 self.body.data = Some(DataClause::set(self.body.data.take(), settables.into()));
+                self
+            }
+
+            /// Merges the non-`Keep` fields of a generated `<Edge>Merge` into the edge (`MERGE`):
+            /// into a new edge, or into the existing one under `OR UPDATE`.
+            pub fn merge(mut self, merge: impl ModelMerge<Model = T>) -> Self {
+                self.body.data = Some(DataClause::Merge(ValueLike::new(merge.into_object())));
+                self
+            }
+
+            /// Applies JSON Patch operations to the edge (`PATCH`); repeated calls add to the
+            /// operations.
+            pub fn patch(mut self, patch_op: impl Into<Vec<PatchOp>>) -> Self {
+                self.body.data = Some(DataClause::patch(self.body.data.take(), patch_op.into()));
+                self
+            }
+
+            /// Replaces the edge's fields with the given value (`REPLACE`), respecting `READONLY`
+            /// fields. The engine keeps the edge's `in` and `out`.
+            pub fn replace(mut self, replacement: impl SurrealValue) -> Self {
+                self.body.data = Some(DataClause::Replace(ValueLike::value(replacement)));
+                self
+            }
+
+            /// Removes fields from the edge (`UNSET`); under `OR UPDATE` it removes stored
+            /// properties of the existing edge. Repeated calls add to the fields.
+            pub fn unset(mut self, fields: impl Into<Unsettables>) -> Self {
+                self.body.data = Some(DataClause::unset(self.body.data.take(), fields.into().0));
                 self
             }
 
@@ -195,7 +229,7 @@ impl<T: Edge, R: ReturnMode, C: Cardinality> RelateStatement<T, R, C> {
 relate_clauses!(RelateStatement);
 
 // `RETURN BEFORE` is offered only with `OR UPDATE`: a new edge has no earlier state.
-return_methods!([T: Edge] RelateStatement<T> { none, after, diff, value, fields, links });
+return_methods!([T: Edge] RelateStatement<T> { none, null, after, diff, value, fields, links });
 
 impl<T: Edge, R: ReturnMode, C: Cardinality> Statement for RelateStatement<T, R, C> {
     fn render_body(&self, out: &mut Renderer) {
@@ -214,7 +248,7 @@ pub struct RelateOrUpdateStatement<T, R = ReturnAfter<T>, C = Many> {
 
 relate_clauses!(RelateOrUpdateStatement);
 
-return_methods!([T: Edge] RelateOrUpdateStatement<T> { none, before, after, diff, value, fields, links });
+return_methods!([T: Edge] RelateOrUpdateStatement<T> { none, null, before, after, diff, value, fields, links });
 
 impl<T: Edge, R: ReturnMode, C: Cardinality> Statement for RelateOrUpdateStatement<T, R, C> {
     fn render_body(&self, out: &mut Renderer) {

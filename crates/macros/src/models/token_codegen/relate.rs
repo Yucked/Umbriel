@@ -51,7 +51,6 @@ impl Codegen<'_> {
             foreign_node_table,
         } = &RelateAttribute::try_from(relate)?;
         let arrow = &ArrowTokenStream::from(edge_direction);
-        let destination_node_table_str = &foreign_node_table.to_string();
 
         let edge_name_with_direction_as_method_ident =
             &(|| Self::add_direction_indication_to_ident(edge_table, edge_direction));
@@ -75,7 +74,9 @@ impl Codegen<'_> {
                 let clause: #crate_name::NodeClause = #crate_name::IntoNodeClause::<
                     <#edge_type as #crate_name::Edge>::#foreign_node_in_or_out,
                 >::into_node_clause(clause);
-                let clause = clause.with_arrow(#arrow).with_table(#destination_node_table_str);
+                let clause = clause.with_arrow(#arrow).with_family(#crate_name::TableSpec::of::<
+                    <#edge_type as #crate_name::Edge>::#foreign_node_in_or_out,
+                >());
 
                 <#foreign_node_schema>::#__________connect(
                     &self.0,

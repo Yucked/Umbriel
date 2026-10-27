@@ -1,25 +1,21 @@
-error[E0277]: the trait bound `umbriel::statements::Subquery: From<umbriel::RecordId<User>>` is not satisfied
-  --> tests/ui/fail/relate_wrong_endpoint.rs:28:83
+error[E0277]: `umbriel::RecordId<User>` is not an endpoint for `Post`
+  --> tests/ui/fail/relate_wrong_endpoint.rs:28:78
    |
 28 |     let _ = relate::<UserLikesPost>(User::with(User::id("alice")).likes__(E).post(User::id("bob")));
-   |                                                                              ---- ^^^^^^^^^^^^^^^ the trait `From<umbriel::RecordId<User>>` is not implemented for `umbriel::statements::Subquery`
+   |                                                                              ^^^^ --------------- `umbriel::RecordId<User>` doesn't satisfy the trait bound
    |                                                                              |
-   |                                                                              required by a bound introduced by this call
+   |                                                                              expected a `RecordId<Post>`, a list of them, or an untyped expression
    |
-   = help: `umbriel::statements::Subquery` implements trait `From<T>`:
-             From<Block>
-             From<CreateStatement<T, R, C>>
-             From<DeleteStatement<T, R, C>>
-             From<IfElseStatement>
-             From<InsertStatement<T, R, C>>
-             From<RelateOrUpdateStatement<T, R, C>>
-             From<RelateStatement<T, R, C>>
-             From<ReturnStatement>
-             From<SelectStatement>
-             From<UpdateStatement<T, R, C>>
-             From<UpsertStatement<T, R, C>>
-   = note: required for `umbriel::RecordId<User>` to implement `Into<umbriel::statements::Subquery>`
-   = note: required for `umbriel::RecordId<User>` to implement `IntoNodeClause<Post>`
+   = help: the trait `IntoNodeClause<Post>` is not implemented for `umbriel::RecordId<User>`
+   = note: a record id of another model cannot reach `Post`
+help: the following other types implement trait `IntoNodeClause<N>`
+  --> $WORKSPACE/crates/orm/src/query/clause.rs
+   |
+   | impl<N: Model> IntoNodeClause<N> for RecordId<N> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `umbriel::RecordId<N>`
+...
+   | impl<N: Model> IntoNodeClause<N> for &RecordId<N> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `&umbriel::RecordId<N>`
 note: required by a bound in `__4User5likesOutEdge::post`
   --> tests/ui/fail/relate_wrong_endpoint.rs:3:1
    |

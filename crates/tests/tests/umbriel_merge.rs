@@ -1,14 +1,225 @@
 //! Typed merges (`orm/src/query/merge.rs` and the generated `<Model>Merge`): each `Merge` value
 //! renders as its row of the M1 table, nested objects merge field by field, and an empty merge is
-//! a `SELECT` through `SurrealCrud::merge` but a real `MERGE {}` through the builder.
+//! a `SELECT` through `SurrealCrud::merge` but a real `MERGE {}` through the builder. Typed maps,
+//! optional objects, dynamic objects and caller-defined merges cover the values outside generated
+//! object merges.
 
-use surrealdb::{Surreal, engine::local::Db};
+use std::collections::{BTreeMap, HashMap};
+
+use surrealdb::{
+    Surreal,
+    engine::local::Db,
+    types::{Object, SurrealValue, Value},
+};
 use umbriel::{
-    FlatMerge, Merge, Model, Operatable, Raw, RecordId, Runnable, SchemaGetter, SurrealCrud,
-    SurrealCrudNode, model,
+    FlatMerge, Merge, MergeFields, MergeObject, Model, Operatable, Raw, RecordId, Runnable,
+    SchemaGetter, SurrealCrud, SurrealCrudNode, model,
     statements::{Returning, update, update_only},
 };
 use umbriel_tests::{assert_sql, db, read};
+
+/// A value that is not a `#[model(object)]`: its stored fields are stated by [`GeoMerge`].
+#[derive(Debug, Clone, Default, SurrealValue)]
+#[surreal(crate = "umbriel::types")]
+pub struct Geo {
+    pub lat: f64,
+    pub lon: f64,
+}
+
+#[derive(Default)]
+pub struct GeoMerge {
+    pub lat: Merge<f64>,
+    pub lon: Merge<f64>,
+}
+
+impl MergeFields for GeoMerge {
+    fn push_entries(self, object: &mut MergeObject) {
+        self.lat.push_entry("lat", object);
+        self.lon.push_entry("lon", object);
+    }
+}
+
+#[model(node, table = "profile")]
+#[derive(Debug, Clone, Default)]
+pub struct Profile {
+    pub id: RecordId<Self>,
+    pub scores: HashMap<String, u32>,
+    pub labels: BTreeMap<String, String>,
+    #[orm(nest_object = "Address")]
+    pub shipping: Option<Address>,
+    #[orm(ty = "object")]
+    pub extra: Object,
+    #[orm(ty = "object", merge = "GeoMerge")]
+    pub geo: Geo,
+}
+
+fn profile() -> Profile {
+    Profile {
+        id: Profile::id("p"),
+        scores: HashMap::from([("a".to_owned(), 1), ("b".to_owned(), 2)]),
+        labels: BTreeMap::from([("x".to_owned(), "1".to_owned())]),
+        shipping: Some(Address {
+            street: "Main".to_owned(),
+            city: "Springfield".to_owned(),
+        }),
+        extra: Object::from(BTreeMap::from([("k1".to_owned(), 1_i64.into_value())])),
+        geo: Geo { lat: 1.0, lon: 2.0 },
+    }
+}
+
+async fn merge_profile(db: &Surreal<Db>, merge: ProfileMerge) {
+    update::<Profile>(Profile::id("p"))
+        .merge(merge)
+        .return_none()
+        .execute(db)
+        .await
+        .expect("merged");
+}
+
+/// A partial map through `Set` keeps the stored keys it omits, so key-wise merging needs no
+/// variant of its own.
+#[tokio::test]
+async fn a_partial_map_merges_by_key() {
+    let db = db().await;
+    profile().create(&db).await.expect("p");
+    merge_profile(
+        &db,
+        ProfileMerge {
+            scores: Merge::Set(HashMap::from([("b".to_owned(), 5), ("c".to_owned(), 3)])),
+            labels: Merge::Set(BTreeMap::from([("y".to_owned(), "2".to_owned())])),
+            ..Default::default()
+        },
+    )
+    .await;
+    let scores: BTreeMap<String, u32> = read(&db, "RETURN profile:p.scores;").await;
+    assert_eq!(
+        scores,
+        BTreeMap::from([
+            ("a".to_owned(), 1),
+            ("b".to_owned(), 5),
+            ("c".to_owned(), 3)
+        ])
+    );
+    let labels: BTreeMap<String, String> = read(&db, "RETURN profile:p.labels;").await;
+    assert_eq!(labels.len(), 2);
+}
+
+/// `Option<Object>` merges field by field into an existing, an absent and a null object, and
+/// `Keep`, `None` and `Null` stay distinct.
+#[tokio::test]
+async fn an_optional_object_merges_by_field_in_every_state() {
+    let db = db().await;
+    profile().create(&db).await.expect("p");
+    let city = |city: &str| {
+        Merge::Fields(AddressMerge {
+            city: Merge::Set(city.to_owned()),
+            ..Default::default()
+        })
+    };
+    let stored = |db: &Surreal<Db>| {
+        let db = db.clone();
+        async move { read::<Value>(&db, "RETURN profile:p.shipping;").await }
+    };
+
+    // Existing: the street survives.
+    merge_profile(
+        &db,
+        ProfileMerge {
+            shipping: city("Paris"),
+            ..Default::default()
+        },
+    )
+    .await;
+    let street: String = read(&db, "RETURN profile:p.shipping.street;").await;
+    assert_eq!(street, "Main");
+
+    // Keep leaves it as it is.
+    let before = stored(&db).await;
+    merge_profile(&db, ProfileMerge::default()).await;
+    assert_eq!(stored(&db).await, before);
+
+    // Null stores null, and fields then merge into a new object.
+    merge_profile(
+        &db,
+        ProfileMerge {
+            shipping: Merge::Null,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(stored(&db).await, Value::Null);
+    merge_profile(
+        &db,
+        ProfileMerge {
+            shipping: city("Rome"),
+            ..Default::default()
+        },
+    )
+    .await;
+    let rome: String = read(&db, "RETURN profile:p.shipping.city;").await;
+    assert_eq!(rome, "Rome");
+
+    // None removes it, and fields then merge into a new object.
+    merge_profile(
+        &db,
+        ProfileMerge {
+            shipping: Merge::None,
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(stored(&db).await, Value::None);
+    merge_profile(
+        &db,
+        ProfileMerge {
+            shipping: city("Oslo"),
+            ..Default::default()
+        },
+    )
+    .await;
+    let oslo: String = read(&db, "RETURN profile:p.shipping.city;").await;
+    assert_eq!(oslo, "Oslo");
+}
+
+/// A dynamic `Object` merges recursively at run time; its keys are not known when compiling.
+#[tokio::test]
+async fn a_dynamic_object_merges_at_run_time() {
+    let db = db().await;
+    profile().create(&db).await.expect("p");
+    merge_profile(
+        &db,
+        ProfileMerge {
+            extra: Merge::Set(Object::from(BTreeMap::from([(
+                "k2".to_owned(),
+                2_i64.into_value(),
+            )]))),
+            ..Default::default()
+        },
+    )
+    .await;
+    let keys: Vec<String> = read(&db, "RETURN object::keys(profile:p.extra);").await;
+    assert_eq!(keys, ["k1", "k2"]);
+}
+
+/// `#[orm(merge = "GeoMerge")]` merges a non-model struct through the caller's own field list.
+#[tokio::test]
+async fn a_caller_defined_merge_merges_by_field() {
+    let db = db().await;
+    profile().create(&db).await.expect("p");
+    merge_profile(
+        &db,
+        ProfileMerge {
+            geo: Merge::Fields(GeoMerge {
+                lat: Merge::Set(9.0),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    )
+    .await;
+    let geo: (f64, f64) = read(&db, "RETURN [profile:p.geo.lat, profile:p.geo.lon];").await;
+    assert_eq!(geo, (9.0, 2.0));
+}
 
 #[model(object)]
 #[derive(Debug, Clone, Default, PartialEq)]

@@ -23,6 +23,7 @@ pub(crate) mod patch;
 pub(crate) mod projection;
 pub(crate) mod record_id;
 pub(crate) mod return_type;
+pub(crate) mod table_of;
 pub(crate) mod value_like;
 
 pub use access::*;
@@ -48,4 +49,5 @@ pub use patch::*;
 pub use projection::*;
 pub use record_id::*;
 pub use return_type::*;
+pub use table_of::{TableOf, TableSpec};
 pub use value_like::*;

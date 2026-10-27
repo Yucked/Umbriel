@@ -24,8 +24,8 @@ note: required by a bound in `UpdateStatement::<T, R, C>::return_value`
    |
   ::: $WORKSPACE/crates/orm/src/statements/update.rs
    |
-   | return_methods!([T: Model] UpdateStatement<T> { none, before, after, diff, value, fields, links });
-   | -------------------------------------------------------------------------------------------------- in this macro invocation
+   | return_methods!([T: Model] UpdateStatement<T> { none, null, before, after, diff, value, fields, links });
+   | -------------------------------------------------------------------------------------------------------- in this macro invocation
    = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` which comes from the expansion of the macro `return_methods` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `__6Planet4dataField<u32>: Into<SetterArg<u64>>` is not satisfied

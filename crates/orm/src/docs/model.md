@@ -25,6 +25,24 @@ Nodes and edges carry their id as `id: RecordId<Self>`. The key is always chosen
 `RecordId::rand()`, `RecordId::ulid()`, `RecordId::uuid()` or `User::id(key)`. Decoding checks the
 table, so a `RecordId<User>` never holds a `post:…` id. Embedded objects have no id.
 
+# Table families
+
+`table_prefix = "log_"` stores a node or edge in tables chosen at run time as well as its default
+table: `Log::table_of("log_2026_10")?` checks the name once and returns a [`TableOf`]. A member is
+the default table, or a longer name starting with the prefix; table names are escaped when
+rendered, so a member may hold any characters.
+
+- [`TableOf::id`] builds an id in the member, and a `RecordId<Log>` keeps its table through
+  decoding, links and graph paths.
+- Statements accept a `TableOf` as their target, and `insert(…).into_table(…)` inserts into it; a
+  record whose id names another member fails before the statement runs.
+- Table-based helpers (`find_where`, `count_where`, `count_all`, `delete_where`, `insert_many`)
+  are on `TableOf`; the `SurrealCrud` versions use the default table. Id-based helpers use the id's
+  table.
+- Membership is a typing contract, not an authorization boundary. The generated schema defines
+  only the default table, and a family's link fields are typed `record`, since a prefix cannot be
+  written as a SurrealQL kind.
+
 # Field names
 
 Stored names come from the same attributes the `SurrealValue` derive reads:
@@ -101,8 +119,9 @@ let patch = UserPatch {
 
 # Settings
 
-The attribute itself takes the model kind, `table = "…"` for nodes and edges, and
-`value = manual` to keep a hand-written `SurrealValue` implementation instead of deriving one.
+The attribute itself takes the model kind, `table = "…"` for nodes and edges, `table_prefix =
+"…"` for a table family, and `value = manual` to keep a hand-written `SurrealValue`
+implementation instead of deriving one.
 
 Database-only settings stay in `#[orm(…)]`:
 
@@ -118,7 +137,8 @@ Database-only settings stay in `#[orm(…)]`:
 | --- | --- |
 | `ty = "…"` | The stored type, written as in SurrealQL (`option<array<record<user>>>`); inferred from the Rust type when omitted. On `id` it is the record key's type (`int`, `string`, `uuid`, …); without it, `id` is not defined and takes any key. |
 | `link_one`, `link_self`, `link_many` | The node a record link points to. |
-| `nest_object`, `nest_array` | The embedded object type of the field or of its elements. |
+| `nest_object`, `nest_array` | The embedded object type of the field or of its elements. `nest_object` also applies to an `Option<Object>` field. |
+| `merge = "…"` | A hand-written [`MergeFields`] type, so a field whose value is not a `#[model(object)]` merges field by field in `<Model>Merge`. |
 | `relate(model = …, connection = "->edge->node")` | A read-only relation reached through an edge; never stored. |
 | `value = …` | The field's default: `DEFAULT …` in the generated `DEFINE FIELD`, applied when a record is created without the field. Values written explicitly, falsy ones (`0`, `false`, `''`) included, are kept, and updates never re-apply it. |
 | `assert`, `permissions`, `item_assert` | Clauses of the generated `DEFINE FIELD`. |

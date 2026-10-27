@@ -58,5 +58,6 @@ create_custom_type_wrapper!(LinkSelfAttrType);
 create_custom_type_wrapper!(LinkOneAttrType);
 create_custom_type_wrapper!(LinkManyAttrType);
 create_custom_type_wrapper!(NestObjectAttrType);
+create_custom_type_wrapper!(MergeAttrType);
 create_custom_type_wrapper!(NestArrayAttrType);
 create_custom_type_wrapper!(ArrayItemType);

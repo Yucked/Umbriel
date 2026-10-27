@@ -1,0 +1,17 @@
+error[E0080]: evaluation panicked: two variants of `SameTable` have overlapping table families
+  --> tests/ui/fail/models_overlap.rs:31:10
+   |
+31 | #[derive(Models)]
+   |          ^^^^^^ evaluation of `_` failed here
+
+error[E0080]: evaluation panicked: two variants of `FixedInFamily` have overlapping table families
+  --> tests/ui/fail/models_overlap.rs:38:10
+   |
+38 | #[derive(Models)]
+   |          ^^^^^^ evaluation of `_` failed here
+
+error[E0080]: evaluation panicked: two variants of `NestedPrefixes` have overlapping table families
+  --> tests/ui/fail/models_overlap.rs:45:10
+   |
+45 | #[derive(Models)]
+   |          ^^^^^^ evaluation of `_` failed here

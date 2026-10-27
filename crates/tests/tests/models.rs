@@ -886,6 +886,40 @@ mod setters {
         );
     }
 
+    /// The SDK's `PatchOps` holds a list of its `PatchOp`s: Umbriel's operations convert into it
+    /// and back through the per-operation conversions, with no direct conversion of their own.
+    #[test]
+    fn patch_operation_lists_convert_to_and_from_the_sdks_patch_ops() {
+        use surrealdb::opt::{PatchOp as SdkPatchOp, PatchOps};
+        use umbriel::PatchOp;
+
+        let org = Organization::schema();
+        let ops = vec![
+            org.name.patch_add("Acme Corp"),
+            org.name.patch_replace("Globex"),
+            org.name.patch_remove(),
+        ];
+        let sdk: PatchOps = ops
+            .into_iter()
+            .map(SdkPatchOp::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("supported")
+            .into();
+        let back = sdk
+            .into_iter()
+            .map(PatchOp::from)
+            .map(|op| op.to_debug_sql())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            back,
+            [
+                "{ op: 'add', path: '/name', value: 'Acme Corp' }",
+                "{ op: 'replace', path: '/name', value: 'Globex' }",
+                "{ op: 'remove', path: '/name' }",
+            ]
+        );
+    }
+
     #[test]
     fn patch_operations_convert_to_and_from_the_sdk() {
         use surrealdb::opt::PatchOp as SdkPatchOp;
@@ -917,8 +951,7 @@ mod setters {
             ));
         }
         assert_eq!(
-            SdkPatchOp::try_from(Organization::schema().users([0usize]).name.patch_remove())
-                .err(),
+            SdkPatchOp::try_from(Organization::schema().users([0usize]).name.patch_remove()).err(),
             Some(PatchOpConversionError::InvalidPath)
         );
 
@@ -1586,7 +1619,10 @@ mod record_operations {
 
         assert!(matches!(
             apollo.create(&db).await,
-            Err(umbriel::Error::RecordExists { statement: None, .. })
+            Err(umbriel::Error::RecordExists {
+                statement: None,
+                ..
+            })
         ));
     }
 
@@ -1595,7 +1631,10 @@ mod record_operations {
         let db = db().await;
         let inserted = SpaceShip::insert_many(
             &db,
-            vec![space_ship("apollo", "Apollo"), space_ship("gemini", "Gemini")],
+            vec![
+                space_ship("apollo", "Apollo"),
+                space_ship("gemini", "Gemini"),
+            ],
         )
         .await
         .expect("inserted");
@@ -1604,14 +1643,24 @@ mod record_operations {
         // A batch holding an existing id fails as a whole.
         let duplicate = SpaceShip::insert_many(
             &db,
-            vec![space_ship("mercury", "Mercury"), space_ship("apollo", "Apollo")],
+            vec![
+                space_ship("mercury", "Mercury"),
+                space_ship("apollo", "Apollo"),
+            ],
         )
         .await;
         assert!(
-            matches!(&duplicate, Err(umbriel::Error::RecordExists { statement: None, .. })),
+            matches!(
+                &duplicate,
+                Err(umbriel::Error::RecordExists {
+                    statement: None,
+                    ..
+                })
+            ),
             "{duplicate:?}"
         );
-        let names: Vec<String> = read(&db, "SELECT VALUE name FROM space_ship ORDER BY name;").await;
+        let names: Vec<String> =
+            read(&db, "SELECT VALUE name FROM space_ship ORDER BY name;").await;
         assert_eq!(names, ["Apollo", "Gemini"]);
     }
 
@@ -1628,9 +1677,8 @@ mod record_operations {
             .await
             .expect("created");
         }
-        let names = |ships: Vec<SpaceShip>| {
-            ships.into_iter().map(|ship| ship.name).collect::<Vec<_>>()
-        };
+        let names =
+            |ships: Vec<SpaceShip>| ships.into_iter().map(|ship| ship.name).collect::<Vec<_>>();
         let range = SpaceShip::get_range(&db, SpaceShip::id(2)..SpaceShip::id(4))
             .await
             .expect("read");
@@ -1649,7 +1697,12 @@ mod record_operations {
         let mut many = names(many);
         many.sort();
         assert_eq!(many, ["Ship 1", "Ship 5"]);
-        assert!(SpaceShip::get_many(&db, &[]).await.expect("read").is_empty());
+        assert!(
+            SpaceShip::get_many(&db, &[])
+                .await
+                .expect("read")
+                .is_empty()
+        );
     }
 
     #[tokio::test]

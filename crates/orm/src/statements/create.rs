@@ -3,20 +3,26 @@
 // 	[ CONTENT @value
 // 	  | SET @field = @value ...
 // 	]
+// The parser also accepts `MERGE`, `PATCH`, `REPLACE` and `UNSET`, which the engine applies to the
+// new, empty document through the same path as every other write (`doc/alter.rs`
+// `process_record_data` in 3.3.4).
 // 	[ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... | RETURN VALUE @statement_param ]
 // 	[ TIMEOUT @duration ]
 // ;
 use std::{marker::PhantomData, ops::Range};
 
-use surrealdb::types::{self, Table, Value};
+use surrealdb::types::{self, SurrealValue, Table, ToSql, Value};
 
 use crate::{
-    DurationLike, Model, Node, RecordId, Renderer, Setter, ValueLike, render::Checked,
+    DurationLike, Model, ModelMerge, Node, PatchOp, RecordId, Renderer, Setter, TableOf, TableSpec,
+    ValueLike, render::Checked,
 };
 
 use super::{
-    Cardinality, Many, One, ReturnAfter, ReturnMode, Returning, Statement, data::DataClause,
-    impl_statement, returning::return_methods,
+    Cardinality, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
+    data::{DataClause, Unsettables},
+    impl_statement,
+    returning::return_methods,
 };
 
 /// Creates a `CREATE` statement over one or more targets of `T`'s table: the table, record ids,
@@ -80,8 +86,8 @@ pub struct CreateTarget<T> {
 
 #[derive(Debug, Clone)]
 enum TargetKind {
-    /// The table, written as its name; checked against `T`'s table.
-    Table(Checked<ValueLike>),
+    /// The table, written as its name, with the error when it is not in `T`'s family.
+    Table(Table, Option<String>),
     /// One record, bound as a value.
     Record(types::RecordId),
     /// `|t:N|`: `N` records with random ids.
@@ -98,12 +104,9 @@ impl<T: Model> CreateTarget<T> {
         }
     }
 
-    /// `T`'s table: one record with a generated id, or the id given in the content.
+    /// `T`'s default table: one record with a generated id, or the id given in the content.
     pub fn table() -> Self {
-        Self::of(TargetKind::Table(Checked::new(
-            ValueLike::table(T::table()),
-            None,
-        )))
+        Self::of(TargetKind::Table(T::table(), None))
     }
 
     /// `|t:count|`: `count` records with random ids.
@@ -134,11 +137,32 @@ impl<T> std::fmt::Debug for CreateTarget<T> {
 }
 
 impl<T: Model> CreateTarget<T> {
+    /// The error when the content's record id `id` cannot be created at this target: a table
+    /// other than the id's, or a different record.
+    fn content_error(&self, id: &types::RecordId) -> Option<String> {
+        match &self.kind {
+            TargetKind::Table(table, _) if id.table != *table => Some(format!(
+                "the content's record `{}` is not in the target table `{}`",
+                id.to_sql(),
+                table.as_str()
+            )),
+            TargetKind::Record(target) if id != target => Some(format!(
+                "the content's record `{}` is not the target record `{}`",
+                id.to_sql(),
+                target.to_sql()
+            )),
+            _ => None,
+        }
+    }
+
     fn render(&self, out: &mut Renderer) {
         let table = T::table();
         match &self.kind {
-            TargetKind::Table(table) => {
-                out.push(table);
+            TargetKind::Table(table, error) => {
+                out.push(&Checked::new(
+                    ValueLike::table(table.clone()),
+                    error.clone(),
+                ));
             }
             TargetKind::Record(id) => {
                 out.push_value(&Value::RecordId(id.clone()));
@@ -180,18 +204,30 @@ impl<T: Model> From<&RecordId<T>> for CreateTarget<T> {
     }
 }
 
-/// A table, which must be `T`'s own: another table fails when the statement is rendered.
+/// A table, which must be in `T`'s family: another table fails when the statement is rendered.
 impl<T: Model> From<Table> for CreateTarget<T> {
     fn from(table: Table) -> Self {
-        let expected = T::table();
-        let error = (table != expected).then(|| {
+        let error = (!TableSpec::of::<T>().accepts(table.as_str())).then(|| {
             format!(
-                "table `{}` is not the table `{}` of the model",
+                "table `{}` is not a table of the model `{}`",
                 table.as_str(),
-                expected.as_str()
+                T::TABLE
             )
         });
-        Self::of(TargetKind::Table(Checked::new(ValueLike::table(table), error)))
+        Self::of(TargetKind::Table(table, error))
+    }
+}
+
+/// A checked member of `T`'s family.
+impl<T: Model> From<TableOf<T>> for CreateTarget<T> {
+    fn from(table: TableOf<T>) -> Self {
+        Self::of(TargetKind::Table(table.into(), None))
+    }
+}
+
+impl<T: Model> From<TableOf<T>> for CreateTargets<T> {
+    fn from(table: TableOf<T>) -> Self {
+        Self(vec![table.into()])
     }
 }
 
@@ -258,9 +294,10 @@ pub struct CreateStatement<T, R = ReturnAfter<T>, C = Many> {
 }
 
 impl<T: Node, R: ReturnMode, C: Cardinality> CreateStatement<T, R, C> {
-    /// The record's data as a whole model (`CONTENT`).
+    /// The record's data as a whole model (`CONTENT`). Its record id must be in a table target's
+    /// table, or equal a record target; otherwise the statement fails when it is rendered.
     pub fn content(mut self, content: T) -> Self {
-        self.body.data = Some(DataClause::Content(ValueLike::value(content)));
+        self.body.data = Some(DataClause::content(content));
         self
     }
 
@@ -272,6 +309,35 @@ impl<T: Node, R: ReturnMode, C: Cardinality> CreateStatement<T, R, C> {
     ///   `object!` macro.
     pub fn set(mut self, settables: impl Into<Vec<Setter>>) -> Self {
         self.body.data = Some(DataClause::set(self.body.data.take(), settables.into()));
+        self
+    }
+
+    /// The record's data as a merge into the new, empty record (`MERGE`): the non-`Keep` fields
+    /// of a generated `<Model>Merge`.
+    pub fn merge(mut self, merge: impl ModelMerge<Model = T>) -> Self {
+        self.body.data = Some(DataClause::Merge(ValueLike::new(merge.into_object())));
+        self
+    }
+
+    /// The record's data as JSON Patch operations on the new, empty record (`PATCH`); repeated
+    /// calls add to the operations. An operation on a path that does not exist yet, such as a
+    /// `replace`, fails the statement.
+    pub fn patch(mut self, patch_op: impl Into<Vec<PatchOp>>) -> Self {
+        self.body.data = Some(DataClause::patch(self.body.data.take(), patch_op.into()));
+        self
+    }
+
+    /// The record's data as a whole value (`REPLACE`). Unlike `CONTENT` it respects `READONLY`
+    /// fields.
+    pub fn replace(mut self, replacement: impl SurrealValue) -> Self {
+        self.body.data = Some(DataClause::Replace(ValueLike::value(replacement)));
+        self
+    }
+
+    /// Fields to remove from the new record (`UNSET`); repeated calls add to the fields. Fields
+    /// with a `DEFAULT` or `VALUE` clause are computed after the data clause.
+    pub fn unset(mut self, fields: impl Into<Unsettables>) -> Self {
+        self.body.data = Some(DataClause::unset(self.body.data.take(), fields.into().0));
         self
     }
 
@@ -291,7 +357,7 @@ impl<T: Node, R: ReturnMode, C: Cardinality> CreateStatement<T, R, C> {
 }
 
 // `RETURN BEFORE` is not offered: SurrealDB documents it as `NONE` for `CREATE`.
-return_methods!([T: Node] CreateStatement<T> { none, after, diff, value, fields, links });
+return_methods!([T: Node] CreateStatement<T> { none, null, after, diff, value, fields, links });
 
 impl<T: Node, R: ReturnMode, C: Cardinality> Statement for CreateStatement<T, R, C> {
     fn render_body(&self, out: &mut Renderer) {
@@ -308,6 +374,15 @@ impl<T: Node, R: ReturnMode, C: Cardinality> Statement for CreateStatement<T, R,
         }
         if body.targets.is_empty() {
             out.push_error("a CREATE statement needs at least one target");
+        }
+        if let Some(id) = DataClause::content_id(body.data.as_ref()) {
+            for error in body
+                .targets
+                .iter()
+                .filter_map(|target| target.content_error(id))
+            {
+                out.push_error(error);
+            }
         }
         out.push(&body.data);
         self.mode.render(out);

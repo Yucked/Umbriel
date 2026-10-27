@@ -38,8 +38,8 @@ impl<T, F> Merge<T, F> {
 }
 
 impl<T: SurrealValue, F: MergeFields> Merge<T, F> {
-    /// Adds the field's entry under `name`, unless it is kept.
-    #[doc(hidden)]
+    /// Adds the field's entry under its stored `name`, unless it is kept. A hand-written
+    /// [`MergeFields`] calls it once per field.
     pub fn push_entry(self, name: &'static str, object: &mut MergeObject) {
         let value = match self {
             Merge::Keep => return,
@@ -98,10 +98,36 @@ impl<T: Object, F: MergeFields> FlatMerge<T, F> {
     }
 }
 
-/// The fields of a generated `<Model>Merge` or `<Object>Merge`.
+/// The fields of a merge: a generated `<Model>Merge` or `<Object>Merge`, or a caller's own type
+/// for a field whose value is not a `#[model(object)]`, named with `#[orm(merge = "…")]`.
+///
+/// A struct's `SurrealValue` implementation does not reveal its stored field names, so a
+/// hand-written merge states them: one [`Merge`] per field, each pushed under its stored name.
+///
+/// # Examples
+///
+/// ```
+/// use umbriel::*;
+///
+/// #[derive(Default)]
+/// pub struct GeoMerge {
+///     pub lat: Merge<f64>,
+///     pub lon: Merge<f64>,
+/// }
+///
+/// impl MergeFields for GeoMerge {
+///     fn push_entries(self, object: &mut MergeObject) {
+///         self.lat.push_entry("lat", object);
+///         self.lon.push_entry("lon", object);
+///     }
+/// }
+///
+/// let mut object = MergeObject::default();
+/// GeoMerge { lat: Merge::Set(1.5), ..Default::default() }.push_entries(&mut object);
+/// assert!(!object.is_empty());
+/// ```
 pub trait MergeFields {
     /// Adds an entry for every field that is not `Keep`, in declaration order.
-    #[doc(hidden)]
     fn push_entries(self, object: &mut MergeObject);
 }
 

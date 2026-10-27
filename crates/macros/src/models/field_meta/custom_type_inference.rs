@@ -310,12 +310,9 @@ impl<'a> FieldTypeInference<'a> {
         let crate_name = get_crate_name(false);
         let ty = &field_ty.inner();
         // The linked model's table is only known once the generated code compiles, so the
-        // macro's own copy of the type leaves the record's tables empty.
-        let record_of = |model: proc_macro2::TokenStream| {
-            quote!(#crate_name::types::Kind::Record(::std::vec![
-                <#model as #crate_name::Model>::table()
-            ]))
-        };
+        // macro's own copy of the type leaves the record's tables empty. The id's own kind is
+        // `record<table>`, or `record` for a model with a `table_prefix`.
+        let record_of = |model: proc_macro2::TokenStream| quote!(<#crate_name::RecordId<#model> as #crate_name::types::SurrealValue>::kind_of());
         // An unset single link is written as NONE, so its stored type must allow it.
         let optional_record_of = |model: proc_macro2::TokenStream| {
             let record = record_of(model);

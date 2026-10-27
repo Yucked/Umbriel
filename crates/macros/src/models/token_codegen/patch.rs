@@ -1,5 +1,5 @@
 use crate::helpers::get_crate_name;
-use quote::quote;
+use quote::{ToTokens, quote};
 
 use crate::models::*;
 
@@ -48,12 +48,25 @@ impl Codegen<'_> {
             .into(),
         );
 
-        // An embedded object merges field by field through its own `<Object>Merge`.
-        let merge_type = match field_receiver.to_relation_type(model_attributes) {
-            RelationType::NestObject(nest_object) => quote!(
+        // An embedded object merges field by field through its own `<Object>Merge`; another value
+        // through the `MergeFields` type its `merge = "…"` names.
+        let merge_type = match (
+            field_receiver.to_relation_type(model_attributes),
+            &field_receiver.merge,
+        ) {
+            (RelationType::NestObject(_), Some(merge)) => {
+                return Err(syn::Error::new_spanned(
+                    merge.to_token_stream(),
+                    "`merge` names the merge of a value that is not a `#[model(object)]`; a \
+                     `nest_object` field already merges through the object's own merge",
+                )
+                .into());
+            }
+            (RelationType::NestObject(nest_object), None) => quote!(
                 #crate_name::Merge<#field_type, <#nest_object as #crate_name::Object>::Merge>
             ),
-            _ => quote!(#crate_name::Merge<#field_type>),
+            (_, Some(merge)) => quote!(#crate_name::Merge<#field_type, #merge>),
+            (_, None) => quote!(#crate_name::Merge<#field_type>),
         };
         self.merge_fields
             .push(quote!(#vis #field_ident: #merge_type));

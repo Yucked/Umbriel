@@ -62,6 +62,16 @@ pub enum Error {
         statement: Option<StatementContext>,
     },
 
+    /// A table name chosen at run time is not one of the model's tables: neither its default
+    /// table nor a longer name starting with its `table_prefix`.
+    #[error("table `{table}` is not a table of `{model}`")]
+    TableNotInFamily {
+        /// The rejected name.
+        table: String,
+        /// The model's default table.
+        model: &'static str,
+    },
+
     /// A value returned by the database did not convert into the requested type.
     #[error("unexpected value from the database: {0}")]
     Conversion(#[source] surrealdb::Error),

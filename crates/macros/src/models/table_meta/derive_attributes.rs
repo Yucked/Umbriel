@@ -62,6 +62,11 @@ pub struct ModelReceiver {
     #[darling(default)]
     pub(crate) relax_table: Option<bool>,
 
+    /// `table_prefix = "log_"`: the model is also stored in tables chosen at run time, each the
+    /// prefix followed by at least one more character.
+    #[darling(default)]
+    pub(crate) table_prefix: Option<String>,
+
     #[darling(default)]
     pub(crate) schemafull: Option<bool>,
 
@@ -116,6 +121,29 @@ impl ModelReceiver {
             )
             .into()),
         }
+    }
+
+    /// The `table_prefix`, checked: only a node or edge has one, and it is not empty. Table names
+    /// are escaped when rendered, so it may hold any characters.
+    pub fn table_prefix(&self) -> ExtractorResult<Option<&str>> {
+        let Some(prefix) = &self.table_prefix else {
+            return Ok(None);
+        };
+        if matches!(self.data_type()?, DataType::Object) {
+            return Err(syn::Error::new_spanned(
+                &self.ident,
+                "an embedded `object` model has no table, so no `table_prefix`",
+            )
+            .into());
+        }
+        if prefix.is_empty() {
+            return Err(syn::Error::new_spanned(
+                &self.ident,
+                "`table_prefix` cannot be empty: every table would be a member",
+            )
+            .into());
+        }
+        Ok(Some(prefix))
     }
 
     /// The struct's `#[surreal(rename_all = "…")]`.

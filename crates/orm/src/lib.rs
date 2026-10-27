@@ -28,6 +28,7 @@ pub use errors::*;
 pub use helpers::*;
 pub use query::*;
 pub use render::{Fragment, GENERATED_PARAM_PREFIX, Query, Render, Renderer};
+pub use statements::Models;
 pub use statements::select::CanOrder;
 pub use statements::utils::*;
 pub use traits::*;
@@ -45,7 +46,7 @@ pub mod migrations;
 pub use umbriel_macros::model;
 
 pub use umbriel_macros::{
-    Pickable, TableResources, block, chain, define_function, for_, pick, query, query_raw,
+    Models, Pickable, TableResources, block, chain, define_function, for_, pick, query, query_raw,
     transaction,
 };
 
@@ -69,6 +70,7 @@ pub mod internal_tools {
 /// Items `#[model]` expands to; not part of the public API.
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::statements::any::overlapping_members;
     pub use umbriel_macros::ModelCodegen;
 
     /// Implemented by `#[model]` for every field wrapper it generates: `M` is the model or object
