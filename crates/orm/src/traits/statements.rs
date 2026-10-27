@@ -154,9 +154,8 @@ where
     /// Sets the return type to projections and fetches all records links.
     /// Defaults values to null for referenced records that do not exist.
     fn load_links(self, linked_fields_to_fetch: Vec<impl Into<Field>>) -> Result<Self> {
-        let projections = fetch_projections::<T>(
-            linked_fields_to_fetch.into_iter().map(Into::into).collect(),
-        )?;
+        let projections =
+            fetch_projections::<T>(linked_fields_to_fetch.into_iter().map(Into::into).collect())?;
         Ok(self.set_return_type(ReturnType::Projections(projections)))
     }
 
