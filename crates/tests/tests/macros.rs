@@ -4,7 +4,7 @@
 
 use surrealdb::{Surreal, engine::local::Db};
 use umbriel::{
-    All, E, Field, Model, NONE, Operatable, Param, Pickable, Render, ReturnableSelect, Runnable,
+    All, E, Field, Model, NONE, Operatable, Param, Pickable, Render, Runnable,
     SchemaGetter, SetterAssignable, SetterNumeric, Table, block, chain, define_function, for_,
     functions::math,
     object, object_partial, pick, query, query_raw,
@@ -284,7 +284,8 @@ mod chain_macros {
 
         let accounts: Vec<Account> = select(All)
             .from(one..=two)
-            .return_many(db.clone())
+            .decode()
+            .execute(&db)
             .await
             .expect("accounts");
         assert_eq!(

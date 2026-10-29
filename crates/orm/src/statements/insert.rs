@@ -175,14 +175,14 @@ impl<T: Model> From<T> for Insertables<T> {
     }
 }
 
-impl<T: Model> From<SelectStatement> for Insertables<T> {
-    fn from(value: SelectStatement) -> Self {
+impl<T: Model, O: 'static, D: Cardinality> From<SelectStatement<O, D>> for Insertables<T> {
+    fn from(value: SelectStatement<O, D>) -> Self {
         Self::FromSubQuery(value.into())
     }
 }
 
-impl<T: Model> From<&SelectStatement> for Insertables<T> {
-    fn from(value: &SelectStatement) -> Self {
+impl<T: Model, O: 'static, D: Cardinality> From<&SelectStatement<O, D>> for Insertables<T> {
+    fn from(value: &SelectStatement<O, D>) -> Self {
         Self::FromSubQuery(value.clone().into())
     }
 }

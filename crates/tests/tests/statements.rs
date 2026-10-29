@@ -13,7 +13,7 @@ use umbriel::{
     AliasName, Aliasable, All,
     CrudType::*,
     E, Error, Field, JwtAlgorithm, LinkOne, Merge, Model, NONE, Namespace, Node, Operatable, Param,
-    Patchable, Raw, Render, ReturnableSelect, Runnable, SchemaGetter, SetterArray,
+    Patchable, Raw, Render, Runnable, SchemaGetter, SetterArray,
     SetterAssignable, SetterNumeric, StatementContext, SurrealCrud, SurrealCrudNode, Table,
     ValueLike, arr, block, chain, cond, count,
     functions::{math, search, string},
@@ -1999,7 +1999,8 @@ mod select {
             .order_by(order(&age).desc())
             .limit(2)
             .start(1)
-            .return_many(db.clone())
+            .decode()
+            .execute(&db)
             .await
             .expect("read");
         assert_eq!(names, ["Alice", "Bob"]);
@@ -2014,7 +2015,8 @@ mod select {
         let groups: Vec<BTreeMap<String, Value>> = select(arr![count!().__as__("total"), &country])
             .from(&user)
             .group_by(&country)
-            .return_many(db.clone())
+            .decode()
+            .execute(&db)
             .await
             .expect("grouped");
         assert_eq!(groups.len(), 2);
@@ -2022,7 +2024,7 @@ mod select {
         let split: Vec<Value> = select(All)
             .from(&user)
             .split(Field::new("emails"))
-            .return_many(db.clone())
+            .execute(&db)
             .await
             .expect("split");
         assert_eq!(split.len(), 4);
@@ -2030,7 +2032,8 @@ mod select {
         let omitted: Vec<BTreeMap<String, Value>> = select(All)
             .omit(Field::new("emails"))
             .from(&user)
-            .return_many(db.clone())
+            .decode()
+            .execute(&db)
             .await
             .expect("omitted");
         assert!(omitted.iter().all(|row| !row.contains_key("emails")));
@@ -2050,13 +2053,13 @@ mod select {
         }
         let in_range: Vec<Value> = select(All)
             .from(Weapon::id(2)..Weapon::id(5))
-            .return_many(db.clone())
+            .execute(&db)
             .await
             .expect("read");
         assert_eq!(in_range.len(), 3);
         let inclusive: Vec<Value> = select(All)
             .from(Weapon::id(2)..=Weapon::id(5))
-            .return_many(db.clone())
+            .execute(&db)
             .await
             .expect("read");
         assert_eq!(inclusive.len(), 4);
@@ -2074,14 +2077,16 @@ mod select {
         .await;
         let balance: Vec<i64> = select_value(Field::new("account.balance"))
             .from(User::id("alice"))
-            .return_many(db.clone())
+            .decode()
+            .execute(&db)
             .await
             .expect("read");
         assert_eq!(balance, [5]);
         let fetched: BTreeMap<String, Value> = select(All)
-            .from(User::id("alice"))
+            .from_only(User::id("alice"))
             .fetch(Field::new("account"))
-            .return_one(db.clone())
+            .decode()
+            .execute(&db)
             .await
             .expect("read")
             .expect("alice");
@@ -2647,7 +2652,8 @@ mod definitions {
         let found: Vec<String> = select_value(content.clone())
             .from(Table::from("post"))
             .where_(content.matches("hello"))
-            .return_many(db.clone())
+            .decode()
+            .execute(&db)
             .await
             .expect("searched");
         assert_eq!(found, ["Hello world"]);
@@ -2658,7 +2664,8 @@ mod definitions {
         ])
         .from(Table::from("post"))
         .where_(content.matches_with_ref(1, "hello"))
-        .return_many(db.clone())
+        .decode()
+        .execute(&db)
         .await
         .expect("scored");
         assert_eq!(scored.len(), 1);

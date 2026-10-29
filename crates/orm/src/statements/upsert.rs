@@ -1,5 +1,6 @@
 // Statement syntax
 // UPSERT [ ONLY ] @targets
+// 	[ WITH NOINDEX | WITH INDEX @indexes ]
 // 	[ CONTENT @value
 // 	  | MERGE @value
 // 	  | PATCH @value

@@ -5,7 +5,7 @@
 use surrealdb::types::{self, Kind, SurrealValue};
 use umbriel::{
     E, Error, Field, LinkOne, Model, NONE, Node, Operatable, RecordId, Relate, Render,
-    ReturnableStandard, SchemaGetter, SetterAssignable, SurrealCrud, SurrealCrudNode, TableOf,
+    SchemaGetter, SetterAssignable, SurrealCrud, SurrealCrudNode, TableOf,
     model,
     statements::{
         Returning, create, create_only, delete_only, insert, relate, update, upsert_only,
@@ -210,17 +210,17 @@ async fn a_member_supports_every_record_operation() {
         .await
         .expect("range");
     assert_eq!(range.len(), 2);
-    assert_eq!(table.count_all().get(db.clone()).await.expect("count"), 5);
+    assert_eq!(table.count_all().execute(&db).await.expect("count"), 5);
     let found = table
         .find_where(schema.id.is_not(NONE))
-        .return_many(db.clone())
+        .execute(&db)
         .await
         .expect("found");
     assert_eq!(found.len(), 5);
     assert!(found.iter().all(|log| log.id.table_of() == table));
     // Nothing was written to the default table, so it was never created.
     assert!(matches!(
-        Log::count_all().get(db.clone()).await,
+        Log::count_all().execute(&db).await,
         Err(Error::TableNotFound { table, .. }) if table == "log"
     ));
 
@@ -229,7 +229,7 @@ async fn a_member_supports_every_record_operation() {
         .execute(&db)
         .await
         .expect("deleted");
-    assert_eq!(table.count_all().get(db.clone()).await.expect("count"), 0);
+    assert_eq!(table.count_all().execute(&db).await.expect("count"), 0);
     let deleted = delete_only::<Log>(table.id(1))
         .return_before()
         .execute(&db)

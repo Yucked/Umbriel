@@ -62,7 +62,7 @@ macro_rules! subquery_from {
     };
 }
 
-subquery_from!(SelectStatement);
+subquery_from!([O: 'static, C: Cardinality] SelectStatement<O, C>);
 subquery_from!(IfElseStatement);
 subquery_from!(ReturnStatement);
 subquery_from!([T: Node, R: ReturnMode, C: Cardinality] CreateStatement<T, R, C>);

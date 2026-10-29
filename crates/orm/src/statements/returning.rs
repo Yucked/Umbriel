@@ -158,6 +158,29 @@ impl<T: SurrealValue + 'static> ReturnMode for ReturnAfter<T> {
     }
 }
 
+/// What a `SELECT` returns: its rows, each decoded as `T`. It writes no clause, and is only a
+/// type: a `SELECT` holds no mode value.
+pub struct Rows<T> {
+    model: PhantomData<fn() -> T>,
+}
+
+phantom_mode!(Rows<T> {});
+
+impl<T: SurrealValue + 'static> ReturnMode for Rows<T> {
+    type Many = Vec<T>;
+    type One = Option<T>;
+
+    fn render(&self, _: &mut Renderer) {}
+
+    fn decode_many(results: IndexedResults) -> Result<Vec<T>> {
+        take_many(results)
+    }
+
+    fn decode_one(results: IndexedResults) -> Result<Option<T>> {
+        take_one(results)
+    }
+}
+
 /// `RETURN BEFORE`: the records as they were before the statement.
 pub struct ReturnBefore<T> {
     model: PhantomData<fn() -> T>,
@@ -571,9 +594,10 @@ macro_rules! return_methods {
 }
 pub(crate) use return_methods;
 
-/// A write statement whose return mode, and so its result type, is part of its type.
+/// A statement whose result type is part of its type: a write statement's return mode, or a
+/// `SELECT`'s output type.
 pub trait Returning: Queryable + Sync {
-    /// The return mode.
+    /// The return mode, or [`Rows`] for a `SELECT`.
     type Mode: ReturnMode;
     /// Whether the statement is written with `ONLY`.
     type Cardinality: Cardinality;
@@ -646,3 +670,130 @@ impl Statement for Explained {
 }
 
 super::impl_statement!(Explained);
+
+/// The output format of an `EXPLAIN` prefix: [`PlanText`] or [`PlanJson`].
+pub trait PlanFormat: sealed::Sealed + Send + Sync + 'static {
+    /// What the plan decodes into.
+    type Plan: SurrealValue;
+
+    /// Writes the `FORMAT` clause, with its trailing space, or nothing for the default.
+    #[doc(hidden)]
+    fn render(out: &mut Renderer);
+}
+
+/// `FORMAT TEXT`, the default: the plan as one string, a tree of operators.
+#[derive(Debug, Clone, Copy)]
+pub struct PlanText;
+
+/// `FORMAT JSON`: the plan as an object of `operator`, `context`, `attributes` and
+/// `expressions`, with `metrics` and `total_rows` under `ANALYZE`.
+#[derive(Debug, Clone, Copy)]
+pub struct PlanJson;
+
+impl sealed::Sealed for PlanText {}
+impl sealed::Sealed for PlanJson {}
+
+impl PlanFormat for PlanText {
+    type Plan = String;
+
+    fn render(_: &mut Renderer) {}
+}
+
+impl PlanFormat for PlanJson {
+    type Plan = Value;
+
+    fn render(out: &mut Renderer) {
+        out.push_str("FORMAT JSON ");
+    }
+}
+
+/// `EXPLAIN [ANALYZE] [FORMAT JSON] SELECT …`: the plan of a `SELECT` instead of its records.
+///
+/// SurrealDB documents the prefix for statements that do not modify data, so it takes a
+/// `SELECT` only; a write statement's `explain()` is the suffix form. The plan is informational and its format may change between SurrealDB releases, so it
+/// is not typed beyond text or JSON.
+///
+/// # Example
+///
+/// ```
+/// use umbriel::{*, statements::{explain, select}};
+///
+/// let plan = explain(select(All).from(Table::new("user"))).analyze().json();
+/// assert_eq!(plan.to_debug_sql(), "EXPLAIN ANALYZE FORMAT JSON SELECT * FROM user;");
+/// ```
+pub fn explain<O: 'static, C: Cardinality>(
+    statement: super::SelectStatement<O, C>,
+) -> ExplainStatement {
+    ExplainStatement {
+        statement: Fragment::new(Body(statement)),
+        analyze: false,
+        format: PhantomData,
+    }
+}
+
+/// An `EXPLAIN` prefix over a `SELECT`; `F` is its output format.
+pub struct ExplainStatement<F = PlanText> {
+    statement: Fragment,
+    analyze: bool,
+    format: PhantomData<fn() -> F>,
+}
+
+impl<F> Clone for ExplainStatement<F> {
+    fn clone(&self) -> Self {
+        Self {
+            statement: self.statement.clone(),
+            analyze: self.analyze,
+            format: PhantomData,
+        }
+    }
+}
+
+impl<F> fmt::Debug for ExplainStatement<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExplainStatement")
+            .field("statement", &self.statement)
+            .field("analyze", &self.analyze)
+            .finish()
+    }
+}
+
+impl<F: PlanFormat> ExplainStatement<F> {
+    /// `ANALYZE`: runs the statement and adds each operator's metrics (rows, batches and elapsed
+    /// time) to the plan.
+    pub fn analyze(mut self) -> Self {
+        self.analyze = true;
+        self
+    }
+
+    /// `FORMAT JSON`: the plan as an object instead of text.
+    pub fn json(self) -> ExplainStatement<PlanJson> {
+        ExplainStatement {
+            statement: self.statement,
+            analyze: self.analyze,
+            format: PhantomData,
+        }
+    }
+
+    /// Runs the statement and returns its plan.
+    ///
+    /// # Errors
+    ///
+    /// Fails as [`Returning::execute`] does.
+    pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<F::Plan> {
+        let mut results = execute(db, self.to_query()?).await?;
+        results.take::<F::Plan>(0).map_err(Error::Conversion)
+    }
+}
+
+impl<F: PlanFormat> Statement for ExplainStatement<F> {
+    fn render_body(&self, out: &mut Renderer) {
+        out.push_str("EXPLAIN ");
+        if self.analyze {
+            out.push_str("ANALYZE ");
+        }
+        F::render(out);
+        out.push(&self.statement);
+    }
+}
+
+super::impl_statement!([F: PlanFormat] ExplainStatement<F>);

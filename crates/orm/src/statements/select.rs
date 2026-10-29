@@ -1,33 +1,38 @@
-/*
- * Syntax from specs:https://surrealdb.com/docs/surrealql/statements/select
- * SELECT @projections
-    FROM @targets
-    [  @condition ]
-    [ SPLIT [ AT ] @field ... ]
-    [ GROUP [ BY ] @field ... ]
-    [ ORDER [ BY ]
-        RAND()
-        | @field [ COLLATE ] [ NUMERIC ] [ ASC | DESC ] ...
-    ]
-    [ LIMIT [ BY ] @limit ]
-    [ START [ AT ] @start ]
-    [ FETCH @field ... ]
-    [ TIMEOUT @duration ]
-; */
-use std::marker::PhantomData;
+// Syntax, in the order the SurrealDB 3.3.4 parser reads it
+// (https://surrealdb.com/docs/surrealql/statements/select):
+// SELECT [ VALUE ] @projections [ OMIT @fields ]
+//     FROM [ ONLY ] @targets
+//     [ WITH NOINDEX | WITH INDEX @indexes ]
+//     [ WHERE @condition ]
+//     [ SPLIT [ ON ] @field, ... ]
+//     [ GROUP [ BY ] @field, ... | GROUP ALL ]
+//     [ ORDER [ BY ] RAND() | @field [ COLLATE ] [ NUMERIC ] [ ASC | DESC ], ... ]
+//     [ LIMIT [ BY ] @limit ]
+//     [ START [ AT ] @start ]
+//     [ FETCH @fields ]
+//     [ VERSION @datetime ]
+//     [ TIMEOUT @duration ]
+//     [ FOR UPDATE ]
+//     [ TEMPFILES ]
+//     [ EXPLAIN [ FULL ] ]
+// ;
+use std::{fmt, marker::PhantomData};
 
 use surrealdb::{
     Connection, Surreal,
-    types::{self, SurrealValue, Table},
+    types::{self, SurrealValue, Table, Value},
 };
 
 use crate::{
-    Aliasable, All, Conditional, DurationLike, Field, Filter, Function, IndexName, Model,
-    NumberLike, Projections, RecordId, RecordRange, Render, Renderer, Result, ReturnType,
-    ReturnableSelect, ReturnableStandard, ValueLike,
+    Aliasable, All, Conditional, DatetimeLike, DurationLike, Field, Filter, Function, Model,
+    NumberLike, Projections, RecordId, RecordRange, Render, Renderer, Result, ValueLike,
+    traits::statements::{fetch_projections, link_projections},
 };
 
-use super::{Statement, Subquery, impl_statement};
+use super::{
+    Cardinality, Explained, Many, One, Returning, Rows, Statement, Subquery, impl_statement,
+    index_hint::IndexHint,
+};
 
 /// Creates a new `Order` instance with the specified database field.
 ///
@@ -189,127 +194,140 @@ enum OrderOption {
 
 /// What a `SELECT` reads from: tables, record ids, record ranges, subqueries or functions.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TargettablesForSelect(Vec<ValueLike>);
+pub struct TargettablesForSelect {
+    targets: Vec<ValueLike>,
+    /// Whether every target is a record id, which `FOR UPDATE` requires.
+    records: bool,
+}
 
 impl TargettablesForSelect {
     fn one(node: impl Into<ValueLike>) -> Self {
-        Self(vec![node.into()])
+        Self {
+            targets: vec![node.into()],
+            records: false,
+        }
     }
 
-    fn tables<'a>(tables: impl IntoIterator<Item = &'a Table>) -> Self {
-        Self(tables.into_iter().cloned().map(ValueLike::table).collect())
+    fn tables(tables: impl IntoIterator<Item = Table>) -> Self {
+        Self {
+            targets: tables.into_iter().map(ValueLike::table).collect(),
+            records: false,
+        }
     }
 
-    fn values<V: SurrealValue>(values: impl IntoIterator<Item = V>) -> Self {
-        Self(values.into_iter().map(ValueLike::value).collect())
+    fn records<V: SurrealValue>(records: impl IntoIterator<Item = V>) -> Self {
+        Self {
+            targets: records.into_iter().map(ValueLike::value).collect(),
+            records: true,
+        }
     }
 }
 
 impl From<Table> for TargettablesForSelect {
     fn from(value: Table) -> Self {
-        Self::one(ValueLike::table(value))
+        Self::tables([value])
     }
 }
 
 impl From<&Table> for TargettablesForSelect {
     fn from(value: &Table) -> Self {
-        Self::tables([value])
+        Self::tables([value.clone()])
     }
 }
 
 impl From<Vec<Table>> for TargettablesForSelect {
     fn from(value: Vec<Table>) -> Self {
-        Self(value.into_iter().map(ValueLike::table).collect())
+        Self::tables(value)
     }
 }
 
 impl From<Vec<&Table>> for TargettablesForSelect {
     fn from(value: Vec<&Table>) -> Self {
-        Self::tables(value)
+        Self::tables(value.into_iter().cloned())
     }
 }
 
 impl<const N: usize> From<&[Table; N]> for TargettablesForSelect {
     fn from(value: &[Table; N]) -> Self {
-        Self::tables(value)
+        Self::tables(value.iter().cloned())
     }
 }
 
 impl<const N: usize> From<&[&Table; N]> for TargettablesForSelect {
     fn from(value: &[&Table; N]) -> Self {
-        Self::tables(value.iter().copied())
+        Self::tables(value.iter().map(|&table| table.clone()))
     }
 }
 
 impl From<types::RecordId> for TargettablesForSelect {
     fn from(value: types::RecordId) -> Self {
-        Self::values([value])
+        Self::records([value])
     }
 }
 
 impl From<&types::RecordId> for TargettablesForSelect {
     fn from(value: &types::RecordId) -> Self {
-        Self::values([value.clone()])
+        Self::records([value.clone()])
     }
 }
 
 impl From<Vec<types::RecordId>> for TargettablesForSelect {
     fn from(value: Vec<types::RecordId>) -> Self {
-        Self::values(value)
+        Self::records(value)
     }
 }
 
 impl<const N: usize> From<&[types::RecordId; N]> for TargettablesForSelect {
     fn from(value: &[types::RecordId; N]) -> Self {
-        Self::values(value.iter().cloned())
+        Self::records(value.iter().cloned())
     }
 }
 
 impl<T: Model> From<RecordId<T>> for TargettablesForSelect {
     fn from(value: RecordId<T>) -> Self {
-        Self::values([value])
+        Self::records([value])
     }
 }
 
 impl<T: Model> From<&RecordId<T>> for TargettablesForSelect {
     fn from(value: &RecordId<T>) -> Self {
-        Self::values([value.clone()])
+        Self::records([value.clone()])
     }
 }
 
 impl<T: Model> From<Vec<RecordId<T>>> for TargettablesForSelect {
     fn from(value: Vec<RecordId<T>>) -> Self {
-        Self::values(value)
+        Self::records(value)
     }
 }
 
 impl<T: Model> From<Vec<&RecordId<T>>> for TargettablesForSelect {
     fn from(value: Vec<&RecordId<T>>) -> Self {
-        Self::values(value.into_iter().cloned())
+        Self::records(value.into_iter().cloned())
     }
 }
 
 impl<T: Model> From<&[RecordId<T>]> for TargettablesForSelect {
     fn from(value: &[RecordId<T>]) -> Self {
-        Self::values(value.iter().cloned())
+        Self::records(value.iter().cloned())
     }
 }
 
 impl<T: Model> From<&[&RecordId<T>]> for TargettablesForSelect {
     fn from(value: &[&RecordId<T>]) -> Self {
-        Self::values(value.iter().map(|&id| id.clone()))
+        Self::records(value.iter().map(|&id| id.clone()))
     }
 }
 
 impl<const N: usize, T: Model> From<&[RecordId<T>; N]> for TargettablesForSelect {
     fn from(value: &[RecordId<T>; N]) -> Self {
-        Self::values(value.iter().cloned())
+        Self::records(value.iter().cloned())
     }
 }
 
 impl<const N: usize, T: Model> From<&[&RecordId<T>; N]> for TargettablesForSelect {
     fn from(value: &[&RecordId<T>; N]) -> Self {
-        Self::values(value.iter().map(|&id| id.clone()))
+        Self::records(value.iter().map(|&id| id.clone()))
     }
 }
 
@@ -498,25 +516,14 @@ enum SelectionType {
     SelectValue,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-enum WithIndexType {
-    NoIndex,
-    Indexes(Vec<IndexName>),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum ExplainMode {
-    Simple,
-    Full,
-}
-
 /// Select statement initializer
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectStatementInit {
     selection_type: SelectionType,
     projections: Vec<ValueLike>,
     targets: Vec<ValueLike>,
-    only: bool,
+    /// Whether every target is a record id.
+    record_targets: bool,
     where_: Option<Filter>,
     split: Vec<Field>,
     group_by: Vec<Field>,
@@ -527,16 +534,16 @@ pub struct SelectStatementInit {
     start: Option<NumberLike>,
     fetch: Vec<Field>,
     omitted_fields: Vec<Field>,
-    with_index_type: Option<WithIndexType>,
+    index_hint: Option<IndexHint>,
+    version: Option<DatetimeLike>,
     timeout: Option<DurationLike>,
-    explain_mode: Option<ExplainMode>,
+    for_update: bool,
+    tempfiles: bool,
 }
 
-impl Aliasable for SelectStatement {}
+impl<O: 'static, C: Cardinality> Aliasable for SelectStatement<O, C> {}
 
-impl ReturnableSelect for SelectStatement {}
-
-impl Conditional for SelectStatement {}
+impl<O: 'static, C: Cardinality> Conditional for SelectStatement<O, C> {}
 
 /// Creates a SELECT statement.
 ///
@@ -629,7 +636,7 @@ pub fn select(selectables: impl Into<Selectables>) -> SelectStatementInit {
         selection_type: SelectionType::Select,
         projections: selectables.0,
         targets: vec![],
-        only: false,
+        record_targets: false,
         where_: None,
         split: vec![],
         group_by: vec![],
@@ -637,16 +644,20 @@ pub fn select(selectables: impl Into<Selectables>) -> SelectStatementInit {
         order_by: vec![],
         order_rand: false,
         limit: None,
-        with_index_type: None,
-        explain_mode: None,
         start: None,
         fetch: vec![],
         omitted_fields: vec![],
+        index_hint: None,
+        version: None,
         timeout: None,
+        for_update: false,
+        tempfiles: false,
     }
 }
 
-/// Just like normal select statement but useful for selecting a single value out of the returned object.
+/// `SELECT VALUE field`: one value per record instead of an object. The result is untyped until
+/// [`decode`](SelectStatement::decode) names its type; a model's
+/// [`select_value`](crate::SurrealCrud::select_value) types it by the field.
 pub fn select_value(selectable_value: impl Into<Field>) -> SelectStatementInit {
     let mut select_statement = select(selectable_value);
     select_statement.selection_type = SelectionType::SelectValue;
@@ -681,40 +692,193 @@ impl SelectStatementInit {
         self.with_targets(targettables)
     }
 
-    /// Same as normal from but only selects from a single table
+    /// `FROM ONLY`: one value instead of a list, so the result is an `Option`. A table target
+    /// fails unless the statement has `LIMIT 1`, since it could return several records.
     #[expect(
         clippy::wrong_self_convention,
         reason = "a builder step named after SurrealQL's `FROM ONLY`, not a conversion"
     )]
-    pub fn from_only(mut self, targettables: impl Into<TargettablesForSelect>) -> SelectStatement {
-        self.only = true;
+    pub fn from_only(
+        self,
+        targettables: impl Into<TargettablesForSelect>,
+    ) -> SelectStatement<Value, One> {
         self.with_targets(targettables)
     }
 
-    fn with_targets(mut self, targettables: impl Into<TargettablesForSelect>) -> SelectStatement {
-        self.targets.extend(targettables.into().0);
-        SelectStatement(self)
+    fn with_targets<C: Cardinality>(
+        mut self,
+        targettables: impl Into<TargettablesForSelect>,
+    ) -> SelectStatement<Value, C> {
+        let targettables = targettables.into();
+        self.record_targets = targettables.records;
+        self.targets = targettables.targets;
+        SelectStatement::new(self)
     }
 
-    /// Omits a field or multiple fields from the query return values.
+    /// Omits fields from the result, including nested and destructured paths such as
+    /// `opts.{ security, enabled }`. Omitting every field of a nested object leaves `{}`.
     pub fn omit(mut self, fetchables: impl Into<Omittables>) -> Self {
         self.omitted_fields
             .extend(Vec::<Field>::from(fetchables.into()));
         self
     }
-}
 
-/// The query builder struct used to construct complex database queries.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SelectStatement(SelectStatementInit);
+    /// Writes the statement; `only` is its cardinality's `FROM ONLY`.
+    fn render_select(&self, only: bool, out: &mut Renderer) {
+        out.push_str(match self.selection_type {
+            SelectionType::Select => "SELECT ",
+            SelectionType::SelectValue => "SELECT VALUE ",
+        });
+        out.push(&self.projections).push_str(" ");
 
-impl From<SelectStatementInit> for SelectStatement {
-    fn from(value: SelectStatementInit) -> Self {
-        Self(value)
+        if !self.omitted_fields.is_empty() {
+            out.push_str("OMIT ")
+                .push(&self.omitted_fields)
+                .push_str(" ");
+        }
+
+        out.push_str("FROM ");
+        if only {
+            out.push_str("ONLY ");
+        }
+        out.push(&self.targets).push(&self.index_hint);
+
+        if let Some(condition) = &self.where_ {
+            out.push_str(" WHERE ").push(condition);
+        }
+
+        let grouped = !self.group_by.is_empty() || self.group_all;
+        if !self.split.is_empty() {
+            if grouped {
+                out.push_error(
+                    "SPLIT and GROUP cannot be combined in one SELECT; split or group in a subquery",
+                );
+            }
+            out.push_str(" SPLIT ").push(&self.split);
+        }
+
+        if !self.group_by.is_empty() {
+            out.push_str(" GROUP BY ").push(&self.group_by);
+        } else if self.group_all {
+            out.push_str(" GROUP ALL");
+        }
+
+        if self.order_rand {
+            if !self.order_by.is_empty() {
+                out.push_error("ORDER BY RAND() cannot be combined with ordering by fields");
+            }
+            out.push_str(" ORDER BY RAND()");
+        } else if !self.order_by.is_empty() {
+            out.push_str(" ORDER BY ").push(&self.order_by);
+        }
+
+        if let Some(limit) = &self.limit {
+            out.push_str(" LIMIT ").push(limit);
+        }
+
+        if let Some(start) = &self.start {
+            out.push_str(" START AT ").push(start);
+        }
+
+        if !self.fetch.is_empty() {
+            out.push_str(" FETCH ").push(&self.fetch);
+        }
+
+        if let Some(version) = &self.version {
+            out.push_str(" VERSION ").push(version);
+        }
+
+        if let Some(timeout) = &self.timeout {
+            out.push_str(" TIMEOUT ").push_inlined(timeout);
+        }
+
+        if self.for_update {
+            self.push_for_update_errors(grouped, out);
+            out.push_str(" FOR UPDATE");
+        }
+
+        if self.tempfiles {
+            out.push_str(" TEMPFILES");
+        }
+    }
+
+    /// The combinations SurrealDB documents `FOR UPDATE` as refusing.
+    fn push_for_update_errors(&self, grouped: bool, out: &mut Renderer) {
+        if !self.record_targets {
+            out.push_error("FOR UPDATE needs record id targets, not tables, ranges or subqueries");
+        }
+        if self.version.is_some() {
+            out.push_error("FOR UPDATE cannot be combined with VERSION");
+        }
+        if grouped {
+            out.push_error("FOR UPDATE cannot be combined with GROUP");
+        }
+        if !self.split.is_empty() {
+            out.push_error("FOR UPDATE cannot be combined with SPLIT");
+        }
+        if self.limit.is_some() && self.targets.len() > 1 {
+            out.push_error("FOR UPDATE cannot be combined with LIMIT over several targets");
+        }
     }
 }
 
-impl SelectStatement {
+/// A `SELECT` statement. `O` is the type each result decodes into and `C` whether it is written
+/// with `ONLY`; both decide the type [`Returning::execute`] returns: `Vec<O>`, or `Option<O>`
+/// with `ONLY`.
+///
+/// What `O` guarantees depends on how it was chosen. A model's
+/// [`select`](crate::SurrealCrud::select) and [`select_value`](crate::SurrealCrud::select_value)
+/// type it from the model and its field. [`decode`](Self::decode) names it, which types the
+/// decoding but checks nothing about the selected shape: a projection, `FETCH`, `OMIT`, `GROUP`
+/// or `SPLIT` that does not match fails with [`Error::Conversion`](crate::Error::Conversion)
+/// when the result is decoded. Those clauses reset `O` to [`Value`] for that reason, so the
+/// shape they produce is always named by the caller.
+pub struct SelectStatement<O = Value, C = Many> {
+    select: SelectStatementInit,
+    output: PhantomData<fn() -> (O, C)>,
+}
+
+impl<O, C> Clone for SelectStatement<O, C> {
+    fn clone(&self) -> Self {
+        Self {
+            select: self.select.clone(),
+            output: PhantomData,
+        }
+    }
+}
+
+impl<O, C> fmt::Debug for SelectStatement<O, C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("SelectStatement")
+            .field(&self.select)
+            .finish()
+    }
+}
+
+impl<O, C> PartialEq for SelectStatement<O, C> {
+    fn eq(&self, other: &Self) -> bool {
+        self.select == other.select
+    }
+}
+
+impl<O, C: Cardinality> SelectStatement<O, C> {
+    fn new(select: SelectStatementInit) -> Self {
+        Self {
+            select,
+            output: PhantomData,
+        }
+    }
+
+    fn retype<P>(self) -> SelectStatement<P, C> {
+        SelectStatement::new(self.select)
+    }
+
+    /// Names the type each result decodes into. It types the decoding only: a result that does
+    /// not match `P` fails with [`Error::Conversion`](crate::Error::Conversion) when it is
+    /// executed.
+    pub fn decode<P: SurrealValue>(self) -> SelectStatement<P, C> {
+        self.retype()
+    }
     /// Adds a condition to the `` clause of the SQL query.
     ///
     /// # Arguments
@@ -744,19 +908,19 @@ impl SelectStatement {
     ///                     .or(city.is("Toronto"))
     ///                 );
     pub fn where_(mut self, condition: impl Conditional + Clone) -> Self {
-        self.0.where_ = Some(Filter::new(condition));
+        self.select.where_ = Some(Filter::new(condition));
         self
     }
 
-    /// Makes sure no index is used for the query.
+    /// `WITH NOINDEX`: the planner reads through the table iterator and uses no index.
     pub fn with_no_index(mut self) -> Self {
-        self.0.with_index_type = Some(WithIndexType::NoIndex);
+        self.select.index_hint = Some(IndexHint::NoIndex);
         self
     }
 
-    /// Adds an index or multiple indexes to the `WITH INDEX` clause of the query.
+    /// `WITH INDEX …`: the planner may use only the named indexes.
     pub fn with_index(mut self, indexes: impl Into<IndexNames>) -> Self {
-        self.0.with_index_type = Some(WithIndexType::Indexes(indexes.into().into()));
+        self.select.index_hint = Some(IndexHint::indexes(indexes));
         self
     }
 
@@ -791,9 +955,14 @@ impl SelectStatement {
     ///     .from(country)
     ///     .split(locations.cities);
     /// ```
-    pub fn split(mut self, splittables: impl Into<Splittables>) -> Self {
-        self.0.split.extend(Vec::<Field>::from(splittables.into()));
-        self
+    ///
+    /// Splitting changes each result's shape, so the result is untyped until
+    /// [`decode`](Self::decode) names it.
+    pub fn split(mut self, splittables: impl Into<Splittables>) -> SelectStatement<Value, C> {
+        self.select
+            .split
+            .extend(Vec::<Field>::from(splittables.into()));
+        self.retype()
     }
 
     /// Sets the GROUP BY clause for the query.
@@ -858,17 +1027,21 @@ impl SelectStatement {
     ///     .from(article)
     ///     .group_by(settings.published);
     /// ```
-    pub fn group_by(mut self, groupables: impl Into<Groupables>) -> Self {
-        self.0
+    ///
+    /// Grouping changes each result's shape, so the result is untyped until
+    /// [`decode`](Self::decode) names it.
+    pub fn group_by(mut self, groupables: impl Into<Groupables>) -> SelectStatement<Value, C> {
+        self.select
             .group_by
             .extend(Vec::<Field>::from(groupables.into()));
-        self
+        self.retype()
     }
 
-    /// Groups all records in the query result into a single group.
-    pub fn group_all(mut self) -> Self {
-        self.0.group_all = true;
-        self
+    /// Groups all records in the query result into a single group. The result is untyped until
+    /// [`decode`](Self::decode) names it; an empty table gives no group at all, not an empty one.
+    pub fn group_all(mut self) -> SelectStatement<Value, C> {
+        self.select.group_all = true;
+        self.retype()
     }
 
     /// Sets the ORDER BY clause for the query. Multiple values can also be set within same call.
@@ -915,8 +1088,12 @@ impl SelectStatement {
     ///     .order_by(order(age).numeric().desc())
     ///     .order_by(order(state).collate().asc());
     /// ```
+    ///
+    /// The fields need not be projected: since SurrealDB 3.3.0 the full record is sorted before
+    /// the projection runs, and ties keep their order. Only field paths are accepted; to order by
+    /// a computed value, project it with an alias, order by the alias and `omit` it.
     pub fn order_by(mut self, orderables: impl Into<Orderables>) -> Self {
-        self.0
+        self.select
             .order_by
             .extend(Vec::<Order>::from(orderables.into()));
         self
@@ -933,7 +1110,7 @@ impl SelectStatement {
     /// assert_eq!(query.to_debug_sql(), "SELECT * FROM user ORDER BY RAND() LIMIT 3;");
     /// ```
     pub fn order_rand(mut self) -> Self {
-        self.0.order_rand = true;
+        self.select.order_rand = true;
         self
     }
 
@@ -963,7 +1140,7 @@ impl SelectStatement {
     ///     .limit(50);
     /// ```
     pub fn limit(mut self, limit: impl Into<NumberLike>) -> Self {
-        self.0.limit = Some(limit.into());
+        self.select.limit = Some(limit.into());
         self
     }
 
@@ -986,7 +1163,7 @@ impl SelectStatement {
     ///     .limit(50);
     /// ```
     pub fn start(mut self, start: impl Into<NumberLike>) -> Self {
-        self.0.start = Some(start.into());
+        self.select.start = Some(start.into());
         self
     }
 
@@ -1038,8 +1215,23 @@ impl SelectStatement {
     ///     // Fetch nested field
     ///     .fetch(&[account, account.users]);
     /// ```
-    pub fn fetch(mut self, fetchables: impl Into<Fetchables>) -> Self {
-        self.0.fetch.extend(Vec::<Field>::from(fetchables.into()));
+    ///
+    /// Fetching replaces links with records, so the result is untyped until
+    /// [`decode`](Self::decode) names it. A model's own links decode either way; for those,
+    /// [`load_links`](Self::load_links) keeps the model type.
+    pub fn fetch(mut self, fetchables: impl Into<Fetchables>) -> SelectStatement<Value, C> {
+        self.select
+            .fetch
+            .extend(Vec::<Field>::from(fetchables.into()));
+        self.retype()
+    }
+
+    /// `VERSION datetime`: reads the records as they were at that time.
+    ///
+    /// It needs a versioned store, such as SurrealKV opened with `versioned`; the in-memory engine
+    /// refuses it since SurrealDB 3.3.0. A time before a record existed gives no record.
+    pub fn version(mut self, datetime: impl Into<DatetimeLike>) -> Self {
+        self.select.version = Some(datetime.into());
         self
     }
 
@@ -1050,193 +1242,111 @@ impl SelectStatement {
     /// * `duration` - a value that can represent a duration for the timeout: a duration, a
     ///   `Field` or a `Param`. It is written as a literal.
     pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
-        self.0.timeout = Some(duration.into());
+        self.select.timeout = Some(duration.into());
         self
     }
 
-    /// Indicates that the query should be explained.
-    pub fn explain(mut self) -> Self {
-        self.0.explain_mode = Some(ExplainMode::Simple);
+    /// `FOR UPDATE` (SurrealDB 3.3.0): registers the selected records with the transaction, so
+    /// its `COMMIT` fails with a conflict if another transaction changed one of them first.
+    ///
+    /// It takes no lock, and no transaction waits on another; a conflict is retryable. It applies
+    /// to record id targets only, and fails when rendered with a table, range or subquery target,
+    /// with `VERSION`, `GROUP` or `SPLIT`, or with `LIMIT` over several targets. A read-only
+    /// transaction rejects it.
+    pub fn for_update(mut self) -> Self {
+        self.select.for_update = true;
         self
     }
 
-    /// Indicates that the query should be explained in full.
-    pub fn explain_full(mut self) -> Self {
-        self.0.explain_mode = Some(ExplainMode::Full);
+    /// `TEMPFILES`: processes the statement in temporary files instead of memory, trading speed
+    /// for memory use.
+    ///
+    /// It takes effect only when the database has a temporary directory, such as the SDK's
+    /// `Config::temporary_directory`; without one the statement runs in memory and nothing
+    /// reports it.
+    pub fn tempfiles(mut self) -> Self {
+        self.select.tempfiles = true;
         self
     }
 }
 
-impl Statement for SelectStatement {
+impl<O: 'static, C: Cardinality> SelectStatement<O, C> {
+    /// `EXPLAIN`: returns the query plan instead of the records.
+    pub fn explain(self) -> Explained {
+        Explained::new(self, false)
+    }
+
+    /// `EXPLAIN FULL`: runs the query and returns the plan with each step's metrics, such as the
+    /// number of records it processed.
+    pub fn explain_full(self) -> Explained {
+        Explained::new(self, true)
+    }
+}
+
+impl<T: Model, C: Cardinality> SelectStatement<T, C> {
+    /// Selects every field with the given record links fetched (`SELECT *, link.*`). A link to a
+    /// missing record becomes `NULL`. The result still decodes as the model, whose links hold
+    /// either an id or a record.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::FieldsUnfetchableNotARecordLink`](crate::Error::FieldsUnfetchableNotARecordLink)
+    /// when a field is not one of the model's links.
+    pub fn load_links(
+        mut self,
+        linked_fields: impl IntoIterator<Item = impl Into<Field>>,
+    ) -> Result<Self> {
+        let Projections(projections) =
+            fetch_projections::<T>(linked_fields.into_iter().map(Into::into).collect())?;
+        self.select.projections = projections;
+        Ok(self)
+    }
+
+    /// Selects every field with every record link fetched.
+    pub fn load_all_links(mut self) -> Self {
+        let Projections(projections) = link_projections(T::get_linked_fields());
+        self.select.projections = projections;
+        self
+    }
+}
+
+impl<O, C: Cardinality> Statement for SelectStatement<O, C> {
     fn render_body(&self, out: &mut Renderer) {
-        let statement = &self.0;
-        out.push_str(match statement.selection_type {
-            SelectionType::Select => "SELECT ",
-            SelectionType::SelectValue => "SELECT VALUE ",
-        });
-        out.push(&statement.projections).push_str(" ");
-
-        if !statement.omitted_fields.is_empty() {
-            out.push_str("OMIT ")
-                .push(&statement.omitted_fields)
-                .push_str(" ");
-        }
-
-        out.push_str("FROM ");
-        if statement.only {
-            out.push_str("ONLY ");
-        }
-        out.push(&statement.targets);
-
-        match &statement.with_index_type {
-            Some(WithIndexType::NoIndex) => {
-                out.push_str(" WITH NOINDEX");
-            }
-            Some(WithIndexType::Indexes(indexes)) => {
-                out.push_str(" WITH INDEX ").push(indexes);
-            }
-            None => {}
-        }
-
-        if let Some(condition) = &statement.where_ {
-            out.push_str(" WHERE ").push(condition);
-        }
-
-        let grouped = !statement.group_by.is_empty() || statement.group_all;
-        if !statement.split.is_empty() {
-            if grouped {
-                out.push_error(
-                    "SPLIT and GROUP cannot be combined in one SELECT; split or group in a subquery",
-                );
-            }
-            out.push_str(" SPLIT ").push(&statement.split);
-        }
-
-        if !statement.group_by.is_empty() {
-            out.push_str(" GROUP BY ").push(&statement.group_by);
-        } else if statement.group_all {
-            out.push_str(" GROUP ALL");
-        }
-
-        if statement.order_rand {
-            if !statement.order_by.is_empty() {
-                out.push_error("ORDER BY RAND() cannot be combined with ordering by fields");
-            }
-            out.push_str(" ORDER BY RAND()");
-        } else if !statement.order_by.is_empty() {
-            out.push_str(" ORDER BY ").push(&statement.order_by);
-        }
-
-        if let Some(limit) = &statement.limit {
-            out.push_str(" LIMIT ").push(limit);
-        }
-
-        if let Some(start) = &statement.start {
-            out.push_str(" START AT ").push(start);
-        }
-
-        if !statement.fetch.is_empty() {
-            out.push_str(" FETCH ").push(&statement.fetch);
-        }
-
-        if let Some(timeout) = &statement.timeout {
-            out.push_str(" TIMEOUT ").push_inlined(timeout);
-        }
-
-        match statement.explain_mode {
-            Some(ExplainMode::Simple) => {
-                out.push_str(" EXPLAIN");
-            }
-            Some(ExplainMode::Full) => {
-                out.push_str(" EXPLAIN FULL");
-            }
-            None => {}
-        }
+        self.select.render_select(C::ONLY, out);
     }
 }
 
-impl_statement!(SelectStatement);
+impl_statement!([O: 'static, C: Cardinality] SelectStatement<O, C>);
 
-/// A mini version of the select statement used as Model convenience method for building select statements.
+impl<O: SurrealValue + 'static, C: Cardinality> Returning for SelectStatement<O, C> {
+    type Mode = Rows<O>;
+    type Cardinality = C;
+}
+
+/// Counts records: `SELECT VALUE count FROM (SELECT count(…) FROM table GROUP ALL)`.
 #[derive(Debug, Clone)]
-pub struct SelectStatementMini<T: Model>(SelectStatement, PhantomData<fn() -> T>);
+pub struct SelectCount(SelectStatement<u64>);
 
-impl<T: Model> SelectStatementMini<T> {
-    /// Order the results by the given fields
-    pub fn order_by(mut self, orderables: impl Into<Orderables>) -> Self {
-        self.0 = self.0.order_by(orderables);
-        self
+impl SelectCount {
+    pub(crate) fn new(statement: SelectStatement) -> Self {
+        Self(statement.decode())
     }
 
-    /// Starts the result at the offset
-    pub fn start(mut self, start: impl Into<NumberLike>) -> Self {
-        self.0 = self.0.start(start);
-        self
-    }
-
-    /// Limits the number of results returned
-    pub fn limit(mut self, limit: impl Into<NumberLike>) -> Self {
-        self.0 = self.0.limit(limit);
-        self
-    }
-
-    /// Orders the results randomly: `ORDER BY RAND()`.
-    pub fn order_rand(mut self) -> Self {
-        self.0 = self.0.order_rand();
-        self
+    /// Runs the count. A `GROUP ALL` over no records returns no group rather than a zero count,
+    /// so that reads as 0.
+    ///
+    /// # Errors
+    ///
+    /// Fails as [`Returning::execute`] does.
+    pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<u64> {
+        Ok(self.0.execute(db).await?.first().copied().unwrap_or(0))
     }
 }
 
-impl<T: Model> From<SelectStatement> for SelectStatementMini<T> {
-    fn from(value: SelectStatement) -> Self {
-        Self(value, PhantomData)
-    }
-}
-
-impl<T: Model> Statement for SelectStatementMini<T> {
+impl Statement for SelectCount {
     fn render_body(&self, out: &mut Renderer) {
         self.0.render_body(out);
     }
 }
 
-impl_statement!([T: Model] SelectStatementMini<T>);
-
-impl<T> ReturnableStandard<T> for SelectStatementMini<T>
-where
-    T: Model + Send + Sync,
-{
-    fn set_return_type(mut self, return_type: ReturnType) -> Self {
-        if let ReturnType::Projections(Projections(projections)) = return_type {
-            self.0.0.projections.extend(projections);
-        }
-        self
-    }
-}
-
-/// A `SELECT VALUE count …` statement returning a single number.
-#[derive(Debug, Clone)]
-pub struct SelectStatementCount(SelectStatement);
-
-impl SelectStatementCount {
-    /// Gets count of the records that would be returned by the select statement.
-    /// Defaults to zero if there is no result.
-    pub async fn get(&self, db: Surreal<impl Connection>) -> Result<usize> {
-        Ok(self.0.return_one(db).await?.unwrap_or_default())
-    }
-}
-
-impl Statement for SelectStatementCount {
-    fn render_body(&self, out: &mut Renderer) {
-        self.0.render_body(out);
-    }
-}
-
-impl_statement!(SelectStatementCount);
-
-impl ReturnableSelect for SelectStatementCount {}
-
-impl From<SelectStatement> for SelectStatementCount {
-    fn from(value: SelectStatement) -> Self {
-        Self(value)
-    }
-}
+impl_statement!(SelectCount);

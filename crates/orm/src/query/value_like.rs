@@ -178,8 +178,8 @@ impl From<E> for ValueLike {
     }
 }
 
-impl From<SelectStatement> for ValueLike {
-    fn from(statement: SelectStatement) -> Self {
+impl<O: 'static, C: Cardinality> From<SelectStatement<O, C>> for ValueLike {
+    fn from(statement: SelectStatement<O, C>) -> Self {
         Self::new(Subquery::from(statement))
     }
 }

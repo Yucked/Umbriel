@@ -10,7 +10,7 @@ use surrealdb::{
     types::{AlreadyExistsError, NotFoundError},
 };
 use umbriel::{
-    All, Error, Model, Raw, ReturnableSelect, Runnable, SchemaGetter, SetterAssignable,
+    All, Error, Model, Raw, Runnable, SchemaGetter, SetterAssignable,
     StatementContext, SurrealCrud, SurrealCrudNode,
     statements::{CreateTarget, Returning, create, create_only, delete, select, update},
 };
@@ -142,7 +142,8 @@ mod table_not_found {
         let db = strict_db().await;
         let read = select(All)
             .from(SpaceShip::table())
-            .return_many::<SpaceShip>(db.clone())
+            .decode::<SpaceShip>()
+            .execute(&db)
             .await
             .expect_err("undefined");
         assert!(is_space_ship_missing(&read, true), "{read:?}");

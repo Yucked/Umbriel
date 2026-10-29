@@ -1,10 +1,10 @@
 use std::fmt::Display;
 
 use crate::{
-    All, Field, Operatable, Raw, Render, ReturnableSelect, Table,
+    All, Field, Operatable, Raw, Render, Table,
     statements::{
-        DefineTableStatement, RemoveTableStatement, begin_transaction, define_field, define_table,
-        order, remove_table, select,
+        DefineTableStatement, RemoveTableStatement, Returning, begin_transaction, define_field,
+        define_table, order, remove_table, select,
     },
 };
 use surrealdb::{
@@ -250,8 +250,10 @@ impl Migration {
                 .from(Self::table())
                 .order_by(order(timestamp).desc())
                 .limit(1)
-                .return_one::<Self>(db)
-                .await,
+                .decode::<Self>()
+                .execute(&db)
+                .await
+                .map(|rows| rows.into_iter().next()),
         )
     }
 
@@ -266,8 +268,10 @@ impl Migration {
             select(All)
                 .from(Self::table())
                 .where_(name.equal(filename.to_string()))
-                .return_one::<Self>(db)
-                .await,
+                .decode::<Self>()
+                .execute(&db)
+                .await
+                .map(|rows| rows.into_iter().next()),
         )
     }
 
@@ -279,7 +283,8 @@ impl Migration {
             select(All)
                 .from(Self::table())
                 .order_by(order(timestamp).desc())
-                .return_many::<Self>(db)
+                .decode::<Self>()
+                .execute(&db)
                 .await,
         )
     }

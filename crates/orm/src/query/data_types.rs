@@ -64,7 +64,13 @@ macro_rules! typed_expression {
         )*
 
         typed_expression!(@expressions $name: Field, &Field, Param, &Param, LetStatement, &LetStatement,
-            Operation, Function, Subquery, SelectStatement, IfElseStatement);
+            Operation, Function, Subquery, IfElseStatement);
+
+        impl<O: 'static, C: Cardinality> From<SelectStatement<O, C>> for $name {
+            fn from(statement: SelectStatement<O, C>) -> Self {
+                Self(statement.into())
+            }
+        }
 
         typed_expression!(@statements $name: Node CreateStatement, Model UpdateStatement,
             Model UpsertStatement, Model DeleteStatement, Edge RelateStatement,

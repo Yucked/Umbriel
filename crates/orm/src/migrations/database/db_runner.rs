@@ -125,7 +125,8 @@ impl MigrationRunner {
                         .from(Migration::table())
                         .order_by(Migration::schema().timestamp.desc())
                         .limit(*count)
-                        .return_many::<Migration>(db.clone())
+                        .decode::<Migration>()
+                        .execute(&db)
                         .await,
                 )?;
 
@@ -174,7 +175,8 @@ impl MigrationRunner {
                                     .and(name.equal(file_cursor.to_string()))),
                         )
                         .order_by(timestamp.desc())
-                        .return_many::<Migration>(db.clone())
+                        .decode::<Migration>()
+                        .execute(&db)
                         .await,
                 )?;
 

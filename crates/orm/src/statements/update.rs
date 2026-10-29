@@ -1,5 +1,6 @@
 // Statement syntax
 // UPDATE [ ONLY ] @targets
+// 	[ WITH NOINDEX | WITH INDEX @indexes ]
 // 	[ CONTENT @value
 // 	  | MERGE @value
 // 	  | PATCH @value
@@ -24,6 +25,7 @@ use super::{
     Cardinality, Explained, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
     data::{DataClause, Unsettables},
     impl_statement,
+    index_hint::IndexHint,
     returning::return_methods,
 };
 
@@ -168,6 +170,7 @@ pub(crate) struct UpdateBody {
     /// The target as given, to check a `CONTENT` record id against.
     pub(crate) target_kind: TargettablesForUpdate,
     pub(crate) target: Checked<ValueLike>,
+    pub(crate) index_hint: Option<IndexHint>,
     pub(crate) data: Option<DataClause>,
     pub(crate) where_: Option<Filter>,
     pub(crate) timeout: Option<DurationLike>,
@@ -178,6 +181,7 @@ impl UpdateBody {
         Self {
             target_kind: target.clone(),
             target: target.checked::<T>(),
+            index_hint: None,
             data: None,
             where_: None,
             timeout: None,
@@ -202,7 +206,7 @@ impl UpdateBody {
         }
     }
 
-    /// Writes `KEYWORD [ONLY] target data [WHERE …]`; the return clause follows.
+    /// Writes `KEYWORD [ONLY] target [WITH …] data [WHERE …]`; the return clause follows.
     pub(crate) fn render_head(&self, keyword: &str, only: bool, out: &mut Renderer) {
         out.push_str(keyword).push_str(" ");
         if only {
@@ -213,7 +217,9 @@ impl UpdateBody {
         {
             out.push_error(error);
         }
-        out.push(&self.target).push(&self.data);
+        out.push(&self.target)
+            .push(&self.index_hint)
+            .push(&self.data);
         if let Some(condition) = &self.where_ {
             out.push_str(" WHERE ").push(condition);
         }
@@ -227,7 +233,8 @@ impl UpdateBody {
     }
 }
 
-/// Implements the data clauses, `WHERE`, `TIMEOUT` and `EXPLAIN` that `UPDATE` and `UPSERT` share.
+/// Implements the index hint, data clauses, `WHERE`, `TIMEOUT` and `EXPLAIN` that `UPDATE` and
+/// `UPSERT` share.
 macro_rules! update_clauses {
     ($statement:ident) => {
         impl<T: Model, R: ReturnMode, C: Cardinality> $statement<T, R, C> {
@@ -340,6 +347,24 @@ macro_rules! update_clauses {
             /// Adds a condition to the `WHERE` clause of the query.
             pub fn where_(mut self, condition: impl Conditional) -> Self {
                 self.body.where_ = Some(Filter::new(condition));
+                self
+            }
+
+            /// `WITH NOINDEX`: the planner finds the records to change through the table
+            /// iterator and uses no index.
+            pub fn with_no_index(mut self) -> Self {
+                self.body.index_hint = Some($crate::statements::index_hint::IndexHint::NoIndex);
+                self
+            }
+
+            /// `WITH INDEX …`: the planner may use only the named indexes to find the records
+            /// to change.
+            pub fn with_index(
+                mut self,
+                indexes: impl Into<$crate::statements::select::IndexNames>,
+            ) -> Self {
+                self.body.index_hint =
+                    Some($crate::statements::index_hint::IndexHint::indexes(indexes));
                 self
             }
 

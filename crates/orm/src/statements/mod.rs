@@ -27,6 +27,7 @@ pub(crate) mod delete;
 pub(crate) mod for_loop;
 pub(crate) mod for_permission;
 pub(crate) mod ifelse;
+pub(crate) mod index_hint;
 pub(crate) mod info;
 pub(crate) mod insert;
 pub(crate) mod let_;
@@ -170,12 +171,13 @@ pub use remove_table::{RemoveTableStatement, remove_table};
 pub use remove_user::{RemoveUserStatement, UserPermissionScope, remove_user};
 pub use return_::{ReturnStatement, return_};
 pub use returning::{
-    Cardinality, DiffOp, Explained, Many, One, ReturnAfter, ReturnBefore, ReturnDefaultNone,
-    ReturnDiff, ReturnFields, ReturnMode, ReturnNone, ReturnNull, ReturnValue, Returning,
+    Cardinality, DiffOp, ExplainStatement, Explained, Many, One, PlanFormat, PlanJson, PlanText,
+    ReturnAfter, ReturnBefore, ReturnDefaultNone, ReturnDiff, ReturnFields, ReturnMode,
+    ReturnNone, ReturnNull, ReturnValue, Returning, Rows, explain,
 };
 pub use select::{
-    Order, Orderables, SelectStatement, SelectStatementMini, Selectables, Splittables, order,
-    select, select_value,
+    Order, Orderables, SelectCount, SelectStatement, Selectables, Splittables, order, select,
+    select_value,
 };
 pub use show::{ChangesSince, ShowChangesStatement, show_changes_for_table};
 pub use sleep::{SleepStatement, sleep};

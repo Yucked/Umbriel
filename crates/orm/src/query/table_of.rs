@@ -5,18 +5,15 @@ use std::{fmt, marker::PhantomData};
 
 use surrealdb::{
     Connection, Surreal,
-    types::{RecordIdKeyRange, Table},
+    types::{RecordIdKeyRange, SurrealValue, Table},
 };
 
 use crate::{
-    All, Conditional, Error, Field, Filter, Model, RecordId, RecordKey, RecordRange, Result, count,
+    All, Conditional, Error, Field, Filter, Model, RecordId, RecordKey, RecordRange, Result,
+    __private::ModelField,
+    count,
     execution::classify,
-    statements::{
-        DeleteStatement, SelectStatementMini,
-        delete::delete,
-        select::{SelectStatementCount, select},
-        select_value,
-    },
+    statements::{DeleteStatement, SelectCount, SelectStatement, delete::delete, select, select_value},
 };
 
 /// The tables a model may be stored in, from its `TABLE` and `TABLE_PREFIX`: the default table,
@@ -211,27 +208,45 @@ impl<T: Model> TableOf<T> {
         select_range(db, &self.table, keys.into()).await
     }
 
+    /// `SELECT * FROM table`: every record of this table, decoded as `T`.
+    pub fn select(&self) -> SelectStatement<T> {
+        select(All).from(self.table.clone()).decode()
+    }
+
+    /// `SELECT VALUE field FROM table`: one value per record, of the field's own type `V`. The
+    /// field must be one of `T`'s generated schema fields.
+    pub fn select_value<F, V>(&self, field: F) -> SelectStatement<V>
+    where
+        F: ModelField<T, V>,
+        V: SurrealValue,
+    {
+        select_value((*field).clone())
+            .from(self.table.clone())
+            .decode()
+    }
+
     /// Finds the records of this table matching `filter`.
-    pub fn find_where(&self, filter: impl Conditional + Clone) -> SelectStatementMini<T> {
-        select(All).from(self.table.clone()).where_(filter).into()
+    pub fn find_where(&self, filter: impl Conditional + Clone) -> SelectStatement<T> {
+        self.select().where_(filter)
     }
 
     /// Counts the records of this table matching `filter`.
-    pub fn count_where(&self, filter: impl Conditional + Clone) -> SelectStatementCount {
-        select_value(Field::new("count"))
-            .from(
+    pub fn count_where(&self, filter: impl Conditional + Clone) -> SelectCount {
+        SelectCount::new(
+            select_value(Field::new("count")).from(
                 select(count!(Filter::new(filter)))
                     .from(self.table.clone())
                     .group_all(),
-            )
-            .into()
+            ),
+        )
     }
 
     /// Counts every record of this table.
-    pub fn count_all(&self) -> SelectStatementCount {
-        select_value(Field::new("count"))
-            .from(select(count!()).from(self.table.clone()).group_all())
-            .into()
+    pub fn count_all(&self) -> SelectCount {
+        SelectCount::new(
+            select_value(Field::new("count"))
+                .from(select(count!()).from(self.table.clone()).group_all()),
+        )
     }
 
     /// Deletes the records of this table matching `filter`.

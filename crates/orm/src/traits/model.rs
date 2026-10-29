@@ -6,13 +6,10 @@ use surrealdb::{
 use crate::{
     Alias, All, Conditional, Error, Field, IntoNodeClause, ModelMerge, ModelPatch, Raw, RecordId,
     RecordKey, RecordRange, Render, Result, StoredFields, TableOf,
+    __private::ModelField,
     execution::{classify, execute},
     query::table_of::select_range,
-    statements::{
-        DeleteStatement, SelectStatementMini,
-        select::{SelectStatementCount, select},
-        update::update,
-    },
+    statements::{DeleteStatement, SelectCount, SelectStatement, select, update::update},
 };
 
 #[doc(hidden)]
@@ -252,19 +249,35 @@ pub trait SurrealCrud: Model + Send {
         }
     }
 
+    /// `SELECT * FROM table` over the default table, decoded as the model;
+    /// [`TableOf::select`] reads another member.
+    fn select() -> SelectStatement<Self> {
+        TableOf::<Self>::default().select()
+    }
+
+    /// `SELECT VALUE field` over the default table, decoded as the field's own type `V`. The
+    /// field must be one of this model's generated schema fields.
+    fn select_value<F, V>(field: F) -> SelectStatement<V>
+    where
+        F: ModelField<Self, V>,
+        V: SurrealValue,
+    {
+        TableOf::<Self>::default().select_value(field)
+    }
+
     /// Finds records of the default table by filtering; [`TableOf::find_where`] searches
     /// another member.
-    fn find_where(filter: impl Conditional + Clone) -> SelectStatementMini<Self> {
+    fn find_where(filter: impl Conditional + Clone) -> SelectStatement<Self> {
         TableOf::<Self>::default().find_where(filter)
     }
 
     /// Counts filtered records of the default table.
-    fn count_where(filter: impl Conditional + Clone) -> SelectStatementCount {
+    fn count_where(filter: impl Conditional + Clone) -> SelectCount {
         TableOf::<Self>::default().count_where(filter)
     }
 
     /// Counts every record of the default table.
-    fn count_all() -> SelectStatementCount {
+    fn count_all() -> SelectCount {
         TableOf::<Self>::default().count_all()
     }
 

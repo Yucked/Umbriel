@@ -13,7 +13,7 @@ use umbriel::{
     CrudType::*,
     E, Edge, Field, FlatPatch, LinkMany, LinkOne, LinkSelf, Model, ModelPatch, NONE, Node,
     Nullable, Operatable, Patch, Patchable, Raw, RecordId, RecordRange, Reference, Relate, Render,
-    ReturnableStandard, Runnable, SchemaGetter, SetterArray, SetterAssignable, SetterNumeric,
+    Runnable, SchemaGetter, SetterArray, SetterAssignable, SetterNumeric,
     SurrealCrud, SurrealCrudNode, cond, model,
     statements::{Returning, define_field, define_table, for_permission, relate, select},
     types::{self, Kind, RecordIdKey, SurrealValue, Value},
@@ -1217,8 +1217,15 @@ mod links {
         .expect("alice");
     }
 
-    fn alice() -> umbriel::statements::SelectStatementMini<Alien> {
+    fn alice() -> umbriel::statements::SelectStatement<Alien> {
         Alien::find_where(Alien::schema().name.equal("Alice"))
+    }
+
+    /// The one record `statement` reads.
+    async fn one(statement: umbriel::statements::SelectStatement<Alien>, db: &Surreal<Db>) -> Alien {
+        let mut found = statement.execute(db).await.expect("read");
+        assert_eq!(found.len(), 1, "one record");
+        found.remove(0)
     }
 
     #[tokio::test]
@@ -1226,7 +1233,7 @@ mod links {
         let db = db().await;
         armed_alien(&db).await;
 
-        let alice = alice().get_one(db.clone()).await.expect("alice");
+        let alice = one(alice(), &db).await;
         assert_eq!(alice.weapon.key(), Some(&Weapon::id(1)));
         assert!(alice.weapon.value().is_none());
         assert_eq!(alice.ally.key(), Some(&Alien::id("bob")));
@@ -1239,12 +1246,7 @@ mod links {
         let db = db().await;
         armed_alien(&db).await;
 
-        let alice = alice()
-            .load_all_links()
-            .expect("links")
-            .get_one(db.clone())
-            .await
-            .expect("alice");
+        let alice = one(alice().load_all_links(), &db).await;
         assert_eq!(alice.weapon.value().map(|w| w.strength), Some(10.0));
         assert_eq!(
             alice.ally.value().map(|ally| ally.name.as_str()),
@@ -1264,31 +1266,34 @@ mod links {
         let db = db().await;
         armed_alien(&db).await;
 
-        let ones = alice()
-            .load_link_ones()
-            .expect("links")
-            .get_one(db.clone())
-            .await
-            .expect("alice");
+        let ones = one(
+            alice()
+                .load_links(Alien::get_link_one_fields())
+                .expect("links"),
+            &db,
+        )
+        .await;
         assert!(ones.weapon.value().is_some());
         assert!(ones.ally.value().is_none());
         assert_eq!(ones.space_ships.values_truthy_count(), 0);
 
-        let selfs = alice()
-            .load_link_selfs()
-            .expect("links")
-            .get_one(db.clone())
-            .await
-            .expect("alice");
+        let selfs = one(
+            alice()
+                .load_links(Alien::get_link_self_fields())
+                .expect("links"),
+            &db,
+        )
+        .await;
         assert!(selfs.ally.value().is_some());
         assert!(selfs.weapon.value().is_none());
 
-        let manys = alice()
-            .load_link_manys()
-            .expect("links")
-            .get_one(db.clone())
-            .await
-            .expect("alice");
+        let manys = one(
+            alice()
+                .load_links(Alien::get_link_many_fields())
+                .expect("links"),
+            &db,
+        )
+        .await;
         assert_eq!(manys.space_ships.values_truthy_count(), 2);
         assert!(manys.weapon.value().is_none());
     }
@@ -1304,12 +1309,13 @@ mod links {
         .await
         .expect("alice");
 
-        let alice = alice()
-            .load_link_ones()
-            .expect("links")
-            .get_one(db.clone())
-            .await
-            .expect("alice");
+        let alice = one(
+            alice()
+                .load_links(Alien::get_link_one_fields())
+                .expect("links"),
+            &db,
+        )
+        .await;
         assert!(alice.weapon.value().is_none());
     }
 
@@ -1785,36 +1791,24 @@ mod record_operations {
             .expect("saved");
         let SpaceShipSchema { id, name, .. } = SpaceShip::schema();
 
-        let all = SpaceShip::find_where(id.is_not(NONE))
-            .return_many(db.clone())
+        let all: Vec<SpaceShip> = SpaceShip::find_where(id.is_not(NONE))
+            .execute(&db)
             .await
             .expect("read");
         assert_eq!(all.len(), 2);
 
-        let apollo = SpaceShip::find_where(name.equal("Apollo"));
-        let found = apollo.return_many(db.clone()).await.expect("read");
+        let found = SpaceShip::find_where(name.equal("Apollo"))
+            .execute(&db)
+            .await
+            .expect("read");
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].id, SpaceShip::id("apollo"));
-        assert!(apollo.return_one(db.clone()).await.expect("read").is_some());
-        let one = apollo.get_one(db.clone()).await.expect("one");
-        assert_eq!(one.id, SpaceShip::id("apollo"));
 
-        let none = SpaceShip::find_where(name.equal("Mercury"));
-        assert!(none.return_one(db.clone()).await.expect("read").is_none());
-        assert!(none.get_one(db.clone()).await.is_err());
-        assert!(matches!(
-            SpaceShip::find_where(id.is_not(NONE))
-                .return_one(db.clone())
-                .await,
-            Err(umbriel::Error::TooManyItemsReturned { expected: 1 })
-        ));
-        assert!(
-            SpaceShip::find_where(id.is_not(NONE))
-                .return_first(db.clone())
-                .await
-                .expect("read")
-                .is_some()
-        );
+        let none = SpaceShip::find_where(name.equal("Mercury"))
+            .execute(&db)
+            .await
+            .expect("read");
+        assert!(none.is_empty());
     }
 
     async fn weapons(db: &Surreal<Db>) {
@@ -1837,17 +1831,17 @@ mod record_operations {
             query.to_debug_sql(),
             "SELECT VALUE count FROM (SELECT count(strength >= 50) FROM weapon GROUP ALL);"
         );
-        assert_eq!(query.get(db.clone()).await.expect("count"), 50);
+        assert_eq!(query.execute(&db).await.expect("count"), 50);
 
         let query = Weapon::count_where(cond(strength.gte(50)).and(strength.lt(73)));
         assert_eq!(
             query.to_debug_sql(),
             "SELECT VALUE count FROM (SELECT count((strength >= 50) AND (strength < 73)) FROM weapon GROUP ALL);"
         );
-        assert_eq!(query.get(db.clone()).await.expect("count"), 23);
+        assert_eq!(query.execute(&db).await.expect("count"), 23);
 
         let none = Weapon::count_where(strength.gt(1000));
-        assert_eq!(none.get(db.clone()).await.expect("count"), 0);
+        assert_eq!(none.execute(&db).await.expect("count"), 0);
     }
 
     #[tokio::test]
@@ -1863,10 +1857,10 @@ mod record_operations {
             query.to_debug_sql(),
             "SELECT VALUE count FROM (SELECT count() FROM weapon GROUP ALL);"
         );
-        assert_eq!(query.get(db.clone()).await.expect("count"), 0);
+        assert_eq!(query.execute(&db).await.expect("count"), 0);
 
         weapons(&db).await;
-        assert_eq!(query.get(db.clone()).await.expect("count"), 100);
+        assert_eq!(query.execute(&db).await.expect("count"), 100);
     }
 
     #[tokio::test]
@@ -1888,7 +1882,7 @@ mod record_operations {
             .expect("deleted");
 
         let left = SpaceShip::find_where(name.is_not(NONE))
-            .return_many(db.clone())
+            .execute(&db)
             .await
             .expect("read");
         assert_eq!(

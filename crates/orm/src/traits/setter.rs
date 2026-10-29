@@ -142,9 +142,14 @@ setter_arg_from_expression!(
     LetStatement,
     &LetStatement,
     Subquery,
-    SelectStatement,
     IfElseStatement,
 );
+
+impl<T, O: 'static, C: Cardinality> From<SelectStatement<O, C>> for SetterArg<T> {
+    fn from(value: SelectStatement<O, C>) -> Self {
+        Self::Expression(value.into())
+    }
+}
 
 impl<T> From<Block> for SetterArg<T> {
     fn from(value: Block) -> Self {

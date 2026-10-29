@@ -23,7 +23,7 @@ use surrealdb::{
     types::{SurrealValue, Value},
 };
 use umbriel::{
-    E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate, ReturnableStandard,
+    E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate,
     Runnable, SchemaGetter, SurrealCrud, SurrealCrudNode, model,
     statements::{Returning, relate, return_},
 };
@@ -285,7 +285,7 @@ mod scenarios {
         person("bob", "Bob", 40).create(db).await.expect("created");
         let ServerPersonSchema { age, .. } = ServerPerson::schema();
         let older = ServerPerson::find_where(age.gt(35))
-            .return_many(db.clone())
+            .execute(db)
             .await
             .expect("read");
         assert_eq!(
@@ -293,10 +293,7 @@ mod scenarios {
             ["Bob"]
         );
         assert_eq!(
-            ServerPerson::count_all()
-                .get(db.clone())
-                .await
-                .expect("count"),
+            ServerPerson::count_all().execute(db).await.expect("count"),
             3
         );
 
