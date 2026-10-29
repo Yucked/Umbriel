@@ -33,7 +33,13 @@ the default table, or a longer name starting with the prefix; table names are es
 rendered, so a member may hold any characters.
 
 - [`TableOf::id`] builds an id in the member, and a `RecordId<Log>` keeps its table through
-  decoding, links and graph paths.
+  decoding, links and graph paths. For an edge model, a member id given as the edge step, as in
+  `App::with(…).wrote__(member.id(1)).log(…)`, relates into that member table.
+- A `RELATE … CONTENT` must agree with the ids its path was built from: the edge record, or a
+  record of the step's edge table, and the `in` and `out` endpoints. A contradiction fails before
+  the statement runs. Without the check, a table step would let SurrealDB silently move a record
+  of another table into the edge table and replace `in` and `out` with the path's endpoints, and
+  an edge record step would fail at run time.
 - Statements accept a `TableOf` as their target, and `insert(…).into_table(…)` inserts into it; a
   record whose id names another member fails before the statement runs.
 - Table-based helpers (`find_where`, `count_where`, `count_all`, `delete_where`, `insert_many`)

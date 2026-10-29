@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use surrealdb::types::Table;
+use surrealdb::types::{self, Table};
 
 use crate::{
     Aliasable, Arrow, Clause, Conditional, Filter, Fragment, Ident, NumberLike, Operatable, Param,
@@ -34,6 +34,9 @@ pub enum IdiomPart {
     Raw(Cow<'static, str>),
     /// A leading expression: a parameter, record id or subquery.
     Expr(Fragment),
+    /// A leading record id or list of them, rendered from the fragment and kept as ids so a
+    /// statement can check them before it runs.
+    Records(Fragment, Vec<types::RecordId>),
     /// A field name, `.name` after another part.
     Field(Ident),
     /// `.*`, every field.
@@ -65,6 +68,30 @@ enum GraphTarget {
         condition: Option<Filter>,
     },
     Expr(Fragment),
+    /// Record ids, as for [`IdiomPart::Records`].
+    Records(Fragment, Vec<types::RecordId>),
+}
+
+/// The record ids and edge step a `from->edge->to` path names when it is built, for a `RELATE` to
+/// check its data against before it runs. An endpoint given as a parameter or subquery has no ids.
+#[derive(Debug)]
+pub(crate) struct Relation<'a> {
+    /// The records the edges start from (`in`).
+    pub(crate) r#in: &'a [types::RecordId],
+    pub(crate) edge: EdgeStep<'a>,
+    /// The records the edges point to (`out`).
+    pub(crate) out: &'a [types::RecordId],
+}
+
+/// The edge step of a [`Relation`].
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum EdgeStep<'a> {
+    /// `->table->`: the edge's table.
+    Table(&'a Table),
+    /// `->table:key->`: one edge record.
+    Record(&'a types::RecordId),
+    /// A parameter, subquery or several tables.
+    Unknown,
 }
 
 impl Graph {
@@ -85,6 +112,24 @@ impl Graph {
             target: GraphTarget::Expr(expr),
         }
     }
+
+    pub(crate) fn records(
+        arrow: Option<Arrow>,
+        expr: Fragment,
+        records: Vec<types::RecordId>,
+    ) -> Self {
+        Self {
+            arrow,
+            target: GraphTarget::Records(expr, records),
+        }
+    }
+
+    fn known_records(&self) -> &[types::RecordId] {
+        match &self.target {
+            GraphTarget::Records(_, records) => records,
+            _ => &[],
+        }
+    }
 }
 
 impl Render for Graph {
@@ -103,7 +148,7 @@ impl Render for Graph {
                     out.push_str(")");
                 }
             },
-            GraphTarget::Expr(expr) => {
+            GraphTarget::Expr(expr) | GraphTarget::Records(expr, _) => {
                 out.push(expr);
             }
         }
@@ -206,6 +251,42 @@ impl Field {
         }
         (!pointer.is_empty()).then_some(pointer)
     }
+
+    /// What the path names when it has the `from->edge->to` shape of a `RELATE`; `None` for any
+    /// other shape. With `<-` arrows the far end is `in`.
+    pub(crate) fn relation(&self) -> Option<Relation<'_>> {
+        let [from, IdiomPart::Graph(edge), IdiomPart::Graph(to)] = self.parts.as_slice() else {
+            return None;
+        };
+        let from: &[types::RecordId] = match from {
+            IdiomPart::Records(_, records) => records,
+            _ => &[],
+        };
+        let step = match &edge.target {
+            GraphTarget::Tables {
+                tables,
+                condition: None,
+            } => match tables.as_slice() {
+                [table] => EdgeStep::Table(table),
+                _ => EdgeStep::Unknown,
+            },
+            GraphTarget::Records(_, records) => match records.as_slice() {
+                [record] => EdgeStep::Record(record),
+                _ => EdgeStep::Unknown,
+            },
+            _ => EdgeStep::Unknown,
+        };
+        let to = to.known_records();
+        let (r#in, out) = match edge.arrow {
+            Some(Arrow::Left) => (to, from),
+            _ => (from, to),
+        };
+        Some(Relation {
+            r#in,
+            edge: step,
+            out,
+        })
+    }
 }
 
 fn is_plain_segment(segment: &str) -> bool {
@@ -258,7 +339,7 @@ impl Render for Field {
                 IdiomPart::Raw(text) => {
                     out.push_str(text);
                 }
-                IdiomPart::Expr(expr) => {
+                IdiomPart::Expr(expr) | IdiomPart::Records(expr, _) => {
                     out.push(expr);
                 }
                 IdiomPart::Field(name) => {

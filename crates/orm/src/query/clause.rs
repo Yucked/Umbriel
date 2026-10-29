@@ -120,19 +120,26 @@ impl Clause {
             Some(_) => IdiomPart::Graph(Graph::expr(arrow, node)),
             None => IdiomPart::Expr(node),
         };
+        // Record ids keep their values beside the rendered fragment, for checks before running.
+        let records = |node: Fragment, records: Vec<types::RecordId>| match arrow {
+            Some(_) => IdiomPart::Graph(Graph::records(arrow, node, records)),
+            None => IdiomPart::Records(node, records),
+        };
 
         match kind {
             ClauseType::Id(id) => {
                 let error = name.as_ref().and_then(|name| name.id_error(&id));
+                let known = vec![id.clone()];
                 let id = Checked::new(ValueLike::value(id), error);
-                parts.push(target(Fragment::new(id)));
+                parts.push(records(Fragment::new(id), known));
             }
             ClauseType::Ids(ids) => {
                 let error = name
                     .as_ref()
                     .and_then(|name| ids.iter().find_map(|id| name.id_error(id)));
+                let known = ids.clone();
                 let ids = Checked::new(ValueLike::value(ids), error);
-                parts.push(target(Fragment::new(ids)));
+                parts.push(records(Fragment::new(ids), known));
             }
             ClauseType::Param(param) => parts.push(target(Fragment::new(param))),
             ClauseType::Subquery(subquery) => parts.push(target(subquery.into_fragment())),

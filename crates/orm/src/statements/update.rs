@@ -209,7 +209,7 @@ impl UpdateBody {
             out.push_str("ONLY ");
         }
         if let Some(error) =
-            DataClause::content_id(self.data.as_ref()).and_then(|id| self.content_error(id))
+            DataClause::content_ids(self.data.as_ref()).and_then(|ids| self.content_error(&ids.id))
         {
             out.push_error(error);
         }

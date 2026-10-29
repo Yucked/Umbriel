@@ -10,13 +10,16 @@
 // ;
 use std::marker::PhantomData;
 
-use surrealdb::types::SurrealValue;
+use surrealdb::types::{SurrealValue, ToSql};
 
-use crate::{DurationLike, Edge, Field, ModelMerge, PatchOp, Renderer, Setter, ValueLike};
+use crate::{
+    DurationLike, Edge, Field, ModelMerge, PatchOp, Renderer, Setter, ValueLike,
+    query::field::{EdgeStep, Relation},
+};
 
 use super::{
     Cardinality, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
-    data::{DataClause, Unsettables},
+    data::{ContentIds, DataClause, Unsettables},
     impl_statement,
     returning::return_methods,
 };
@@ -125,6 +128,12 @@ impl RelateBody {
         if or_update {
             out.push_str("OR UPDATE ");
         }
+        if let (Some(content), Some(relation)) = (
+            DataClause::content_ids(self.data.as_ref()),
+            self.relation.relation(),
+        ) {
+            push_content_errors(content, &relation, out);
+        }
         out.push(&self.relation).push(&self.data);
         mode.render(out);
         if let Some(timeout) = &self.timeout {
@@ -133,11 +142,53 @@ impl RelateBody {
     }
 }
 
+/// Adds an error for each record id in `CONTENT` that contradicts what the path names when it is
+/// built: the edge record, the edge table, or the `in` and `out` endpoints. Under an edge record
+/// step SurrealDB would reject them when the statement runs; under a table step it would silently
+/// move a record of another table into the edge table and replace `in` and `out` with the path's
+/// endpoints. Parts of the path given as a parameter or subquery are left to the database.
+fn push_content_errors(content: &ContentIds, relation: &Relation<'_>, out: &mut Renderer) {
+    match relation.edge {
+        EdgeStep::Record(edge) if content.id != *edge => {
+            out.push_error(format!(
+                "the content's record `{}` is not the edge record `{}` in the path",
+                content.id.to_sql(),
+                edge.to_sql()
+            ));
+        }
+        EdgeStep::Table(table) if content.id.table != *table => {
+            out.push_error(format!(
+                "the content's record `{}` is not in the path's edge table `{}`",
+                content.id.to_sql(),
+                table.as_str()
+            ));
+        }
+        _ => {}
+    }
+    for (name, link, endpoints) in [
+        ("in", &content.r#in, relation.r#in),
+        ("out", &content.out, relation.out),
+    ] {
+        let Some(link) = link else {
+            continue;
+        };
+        if let Some(endpoint) = endpoints.iter().find(|endpoint| *endpoint != link) {
+            out.push_error(format!(
+                "the content's `{name}` is `{}`, but the path relates `{}`",
+                link.to_sql(),
+                endpoint.to_sql()
+            ));
+        }
+    }
+}
+
 /// Implements the data clauses and `TIMEOUT` both RELATE builders share.
 macro_rules! relate_clauses {
     ($statement:ident) => {
         impl<T: Edge, R: ReturnMode, C: Cardinality> $statement<T, R, C> {
-            /// Sets the edge's content (`CONTENT`).
+            /// Sets the edge's content (`CONTENT`). Its id, `in` and `out` must agree with the
+            /// record ids the path was built from: the edge record, or a record in the edge
+            /// table, and the endpoints. Otherwise the statement fails when it is rendered.
             pub fn content(mut self, content: T) -> Self {
                 self.body.data = Some(DataClause::content(content));
                 self

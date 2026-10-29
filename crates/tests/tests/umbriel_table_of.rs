@@ -14,10 +14,12 @@ use umbriel::{
 use umbriel_tests::{assert_render_error, db, read};
 
 #[model(node, table = "log", table_prefix = "log_")]
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default)]
 pub struct Log {
     pub id: RecordId<Self>,
     pub message: String,
+    #[orm(relate(model = "AppWroteLog", connection = "<-wrote<-app"))]
+    pub apps: Relate<App>,
 }
 
 #[model(node, table = "app")]
@@ -30,7 +32,7 @@ pub struct App {
     pub logs: Relate<Log>,
 }
 
-#[model(edge, table = "wrote")]
+#[model(edge, table = "wrote", table_prefix = "wrote_")]
 #[derive(Debug, Clone, Default)]
 pub struct Wrote<In: Node, Out: Node> {
     pub id: RecordId<Self>,
@@ -50,6 +52,20 @@ fn entry(table: &TableOf<Log>, key: i64, message: &str) -> Log {
     Log {
         id: table.id(key),
         message: message.to_owned(),
+        ..Default::default()
+    }
+}
+
+fn wrote_october() -> TableOf<AppWroteLog> {
+    AppWroteLog::table_of("wrote_2026_10").expect("a member")
+}
+
+/// An edge from `app:acme` to `log`.
+fn wrote(id: RecordId<AppWroteLog>, log: RecordId<Log>) -> AppWroteLog {
+    AppWroteLog {
+        id,
+        r#in: LinkOne::from(App::id("acme")),
+        out: LinkOne::from(log),
     }
 }
 
@@ -270,5 +286,98 @@ async fn links_and_graph_paths_keep_the_member() {
     assert_render_error(
         &relate::<AppWroteLog>(outside),
         "does not belong to a table of `log`",
+    );
+}
+
+/// A member edge id in the path survives rendering, and matching `CONTENT` is stored in that
+/// member table.
+#[tokio::test]
+async fn a_member_edge_relates_into_its_member_table() {
+    let db = db().await;
+    let edges = wrote_october();
+    let log = october().id(1);
+    let path: Field = App::with(App::id("acme"))
+        .wrote__(edges.id(1))
+        .log(log.clone())
+        .into();
+    assert_eq!(
+        path.to_debug_sql(),
+        "app:acme->wrote_2026_10:1->log_2026_10:1"
+    );
+    let related = relate::<AppWroteLog>(path)
+        .content(wrote(edges.id(1), log))
+        .execute(&db)
+        .await
+        .expect("related");
+    assert_eq!(related[0].id, edges.id(1));
+    let stored: Vec<String> = read(&db, "SELECT VALUE <string> id FROM wrote_2026_10;").await;
+    assert_eq!(stored, ["wrote_2026_10:1"]);
+
+    let outside: Field = App::with(App::id("acme"))
+        .wrote__(types::RecordId::new("audit", 1))
+        .log(october().id(1))
+        .into();
+    assert_render_error(
+        &relate::<AppWroteLog>(outside),
+        "does not belong to a table of `wrote`",
+    );
+}
+
+/// `CONTENT` that contradicts the path fails before it runs: a member edge under the default
+/// table step, which the database would silently move into `wrote`, another edge record, and
+/// endpoints, with `<-` putting the far end in `in`.
+#[test]
+fn relate_content_contradicting_the_path_is_rejected() {
+    let edges = wrote_october();
+    let log = october().id(1);
+    let table_step: Field = App::with(App::id("acme"))
+        .wrote__(E)
+        .log(log.clone())
+        .into();
+    assert_render_error(
+        &relate::<AppWroteLog>(table_step.clone()).content(wrote(edges.id(1), log.clone())),
+        "is not in the path's edge table `wrote`",
+    );
+    assert!(
+        relate::<AppWroteLog>(table_step)
+            .content(wrote(AppWroteLog::id(1), log.clone()))
+            .to_query()
+            .is_ok()
+    );
+
+    let record_step: Field = App::with(App::id("acme"))
+        .wrote__(edges.id(1))
+        .log(log.clone())
+        .into();
+    let november = AppWroteLog::table_of("wrote_2026_11").expect("a member");
+    for id in [edges.id(2), november.id(1)] {
+        assert_render_error(
+            &relate::<AppWroteLog>(record_step.clone()).content(wrote(id, log.clone())),
+            "is not the edge record `wrote_2026_10:1` in the path",
+        );
+    }
+
+    let reversed: Field = Log::with(log.clone())
+        .__wrote(E)
+        .app(App::id("acme"))
+        .into();
+    assert_eq!(reversed.to_debug_sql(), "log_2026_10:1<-wrote<-app:acme");
+    assert!(
+        relate::<AppWroteLog>(reversed.clone())
+            .content(wrote(AppWroteLog::id(2), log.clone()))
+            .to_query()
+            .is_ok()
+    );
+    let other_app = AppWroteLog {
+        r#in: LinkOne::from(App::id("globex")),
+        ..wrote(AppWroteLog::id(3), log)
+    };
+    assert_render_error(
+        &relate::<AppWroteLog>(reversed.clone()).content(other_app),
+        "the content's `in` is `app:globex`, but the path relates `app:acme`",
+    );
+    assert_render_error(
+        &relate::<AppWroteLog>(reversed).content(wrote(AppWroteLog::id(4), october().id(2))),
+        "the content's `out` is `log_2026_10:2`, but the path relates `log_2026_10:1`",
     );
 }

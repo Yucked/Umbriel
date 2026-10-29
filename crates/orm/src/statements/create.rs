@@ -375,11 +375,11 @@ impl<T: Node, R: ReturnMode, C: Cardinality> Statement for CreateStatement<T, R,
         if body.targets.is_empty() {
             out.push_error("a CREATE statement needs at least one target");
         }
-        if let Some(id) = DataClause::content_id(body.data.as_ref()) {
+        if let Some(ids) = DataClause::content_ids(body.data.as_ref()) {
             for error in body
                 .targets
                 .iter()
-                .filter_map(|target| target.content_error(id))
+                .filter_map(|target| target.content_error(&ids.id))
             {
                 out.push_error(error);
             }

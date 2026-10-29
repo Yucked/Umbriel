@@ -1,18 +1,15 @@
 //! The data clause shared by the write statements. Each builder keeps an `Option<DataClause>`, so
 //! a statement without one is explicit, and exposes only the clauses its statement documents.
 
-use surrealdb::types;
+use surrealdb::types::{self, Value};
 
 use crate::{Field, Model, PatchOp, Render, Renderer, Setter, ValueLike};
 
 #[derive(Debug, Clone)]
 pub(crate) enum DataClause {
-    /// `CONTENT value`: the whole record, with the record id it holds, which the statement checks
+    /// `CONTENT value`: the whole record, with the record ids it holds, which the statement checks
     /// against its targets.
-    Content {
-        value: ValueLike,
-        id: types::RecordId,
-    },
+    Content { value: ValueLike, ids: ContentIds },
     /// `MERGE value`: combined into the record, nested objects recursively.
     Merge(ValueLike),
     /// `PATCH [ops]`: JSON Patch operations.
@@ -25,20 +22,42 @@ pub(crate) enum DataClause {
     Unset(Vec<Field>),
 }
 
+/// The record ids a `CONTENT` model holds: its own, and for an edge the `in` and `out` it sets.
+#[derive(Debug, Clone)]
+pub(crate) struct ContentIds {
+    pub(crate) id: types::RecordId,
+    pub(crate) r#in: Option<types::RecordId>,
+    pub(crate) out: Option<types::RecordId>,
+}
+
 impl DataClause {
     /// `CONTENT` with a whole model.
     pub(crate) fn content<T: Model>(content: T) -> Self {
         let id = content.record_id().into();
-        Self::Content {
-            value: ValueLike::value(content),
+        let value = content.into_value();
+        // An unset link is `NONE` and a fetched one an object; only a record id is a known endpoint.
+        let link = |name: &str| match &value {
+            Value::Object(object) => match object.get(name) {
+                Some(Value::RecordId(id)) => Some(id.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        let ids = ContentIds {
             id,
+            r#in: link("in"),
+            out: link("out"),
+        };
+        Self::Content {
+            value: ValueLike::value(value),
+            ids,
         }
     }
 
-    /// The record id a `CONTENT` clause holds; `None` for any other clause.
-    pub(crate) fn content_id(data: Option<&Self>) -> Option<&types::RecordId> {
+    /// The record ids a `CONTENT` clause holds; `None` for any other clause.
+    pub(crate) fn content_ids(data: Option<&Self>) -> Option<&ContentIds> {
         match data {
-            Some(Self::Content { id, .. }) => Some(id),
+            Some(Self::Content { ids, .. }) => Some(ids),
             _ => None,
         }
     }

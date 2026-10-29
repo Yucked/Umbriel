@@ -12,7 +12,7 @@ use surrealdb::{
 use umbriel::{
     AliasName, Aliasable, All,
     CrudType::*,
-    E, Error, Field, JwtAlgorithm, Merge, Model, NONE, Namespace, Node, Operatable, Param,
+    E, Error, Field, JwtAlgorithm, LinkOne, Merge, Model, NONE, Namespace, Node, Operatable, Param,
     Patchable, Raw, Render, ReturnableSelect, Runnable, SchemaGetter, SetterArray,
     SetterAssignable, SetterNumeric, StatementContext, SurrealCrud, SurrealCrudNode, Table,
     ValueLike, arr, block, chain, cond, count,
@@ -609,6 +609,33 @@ mod insert {
             .execute(&db)
             .await;
         assert!(matches!(result, Err(Error::Statement { .. })), "{result:?}");
+        assert!(ships(&db).await.is_empty());
+    }
+
+    /// `TIMEOUT` is applied to `INSERT`, though SurrealDB documents it only for the other writes:
+    /// a record whose field takes longer than the timeout fails the statement and is not stored.
+    #[tokio::test]
+    async fn a_timeout_fails_a_slow_insert_and_stores_nothing() {
+        let db = db().await;
+        run(
+            &db,
+            Raw::new("DEFINE FIELD name ON space_ship VALUE { sleep(500ms); RETURN $value; };"),
+        )
+        .await;
+        let result = insert(space_ship("apollo", "Apollo"))
+            .timeout(Duration::from_millis(10))
+            .execute(&db)
+            .await;
+        match &result {
+            Err(Error::Statement { source, .. }) => assert!(
+                matches!(
+                    source.query_details(),
+                    Some(surrealdb::types::QueryError::TimedOut { .. })
+                ),
+                "expected a timeout, got {source}"
+            ),
+            other => panic!("expected a statement error, got {other:?}"),
+        }
         assert!(ships(&db).await.is_empty());
     }
 
@@ -1614,6 +1641,122 @@ mod relate {
             matches!(&clash, Err(Error::RecordExists { .. })),
             "{clash:?}"
         );
+    }
+
+    /// What SurrealDB 3.3.4 does with ids in a `RELATE`'s data, which the typed check below
+    /// enforces before running. Under a table step nothing is rejected: a record of another table
+    /// is moved into the edge table, and `in` and `out` are replaced by the path's endpoints. Under
+    /// an edge record step, a different id, `in` or `out` fails the statement.
+    #[tokio::test]
+    async fn content_ids_follow_the_database_rules() {
+        let db = db().await;
+        companies_and_users(&db).await;
+        run(
+            &db,
+            Raw::new(
+                "RELATE company:globex->like->user:bob \
+                 CONTENT { id: other:moved, in: company:acme, out: user:alice };",
+            ),
+        )
+        .await;
+        let stored: Vec<Vec<String>> = read(
+            &db,
+            "SELECT VALUE [<string> id, record::id(in), record::id(out)] FROM like;",
+        )
+        .await;
+        assert_eq!(stored, [["like:moved", "globex", "bob"]]);
+
+        for sql in [
+            "RELATE company:acme->like:first->user:alice CONTENT { id: like:other };",
+            "RELATE company:acme->like:second->user:alice CONTENT { in: company:globex };",
+            "RELATE company:acme->like:third->user:alice CONTENT { out: user:bob };",
+        ] {
+            let (_, source, _) = statement_error(Raw::new(sql).run(db.clone()).await);
+            assert!(
+                source
+                    .to_string()
+                    .contains("but a specific record has been specified"),
+                "{sql}: {source}"
+            );
+        }
+    }
+
+    /// A `CONTENT` id, `in` or `out` that contradicts the typed path fails when the statement is
+    /// rendered; matching or unset ones run.
+    #[tokio::test]
+    async fn content_contradicting_the_path_fails_before_it_runs() {
+        let db = db().await;
+        companies_and_users(&db).await;
+        let path = || -> Field {
+            Company::with(Company::id("acme"))
+                .like__(CompanyLikeUser::id("acme_alice"))
+                .user(User::id("alice"))
+                .into()
+        };
+        let like = |key: &str, from: &str, to: &str| CompanyLikeUser {
+            id: CompanyLikeUser::id(key),
+            r#in: LinkOne::from(Company::id(from)),
+            out: LinkOne::from(User::id(to)),
+            ..Default::default()
+        };
+        for (content, message) in [
+            (
+                like("other", "acme", "alice"),
+                "is not the edge record `like:acme_alice` in the path",
+            ),
+            (
+                like("acme_alice", "globex", "alice"),
+                "the content's `in` is `company:globex`, but the path relates `company:acme`",
+            ),
+            (
+                like("acme_alice", "acme", "bob"),
+                "the content's `out` is `user:bob`, but the path relates `user:alice`",
+            ),
+        ] {
+            assert_render_error(&relate::<CompanyLikeUser>(path()).content(content), message);
+        }
+
+        // Every pair of a list must agree, so a single `in` cannot match two endpoints.
+        let pairs: Field = Company::with(vec![Company::id("acme"), Company::id("globex")])
+            .like__(E)
+            .user(User::id("alice"))
+            .into();
+        assert_render_error(
+            &relate::<CompanyLikeUser>(pairs).content(like("pair", "acme", "alice")),
+            "but the path relates `company:globex`",
+        );
+
+        // A parameter endpoint is left to the database, but the known `out` is still checked.
+        let dynamic: Field = Company::with(Param::new("company"))
+            .like__(E)
+            .user(User::id("alice"))
+            .into();
+        assert!(
+            relate::<CompanyLikeUser>(dynamic.clone())
+                .content(like("dynamic", "globex", "alice"))
+                .to_query()
+                .is_ok()
+        );
+        assert_render_error(
+            &relate::<CompanyLikeUser>(dynamic).content(like("dynamic", "globex", "bob")),
+            "the content's `out` is `user:bob`",
+        );
+
+        let edges = relate::<CompanyLikeUser>(path())
+            .content(like("acme_alice", "acme", "alice"))
+            .execute(&db)
+            .await
+            .expect("related");
+        assert_eq!(edges[0].id, CompanyLikeUser::id("acme_alice"));
+        let unset = relate::<CompanyLikeUser>(acme_likes_alice())
+            .content(CompanyLikeUser {
+                id: CompanyLikeUser::id("unset"),
+                ..Default::default()
+            })
+            .execute(&db)
+            .await
+            .expect("related");
+        assert_eq!(unset[0].r#in.key(), Some(&Company::id("acme")));
     }
 
     #[tokio::test]

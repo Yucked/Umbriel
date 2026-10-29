@@ -87,6 +87,7 @@ impl Codegen<'_> {
 
         let node_edge_meta = NodeEdgeMetadata {
             edge_table: edge_table.to_owned(),
+            edge_type: edge_type.to_owned(),
             // We want to take all edge concrete types even for each edge type(with direction)
             // because we want to allow the use of generics in edge.
             edge_types: vec![edge_type.to_owned()],
@@ -246,7 +247,9 @@ create_ident_wrapper!(EdgeNameAsStructOriginalIdent);
 pub struct NodeEdgeMetadata<'a> {
     /// Example value: writes
     edge_table: EdgeTableName,
-    // edge_type: EdgeType,
+    /// The first edge model declared for this table and direction. Every model of one edge table
+    /// is the same struct, so it gives the table family the edge step accepts.
+    edge_type: EdgeType,
     pub edge_types: Vec<EdgeType>,
     // /// The current struct name ident.
     // /// e.g given: struct Student {  }, value = Student
@@ -361,6 +364,7 @@ impl ToTokens for NodeEdgeMetadata<'_> {
             edge_to_foreign_node_connection_method,
             edge_name_as_method_ident,
             edge_table,
+            edge_type,
             edge_types,
             table_derive_attributes,
             ..
@@ -407,7 +411,7 @@ impl ToTokens for NodeEdgeMetadata<'_> {
                     clause: impl ::std::convert::Into<#crate_name::EdgeClause>,
                 ) -> #edge_wrapper {
                     let clause: #crate_name::EdgeClause = clause.into();
-                    let clause = clause.with_arrow(#arrow).with_table(#edge_table_str);
+                    let clause = clause.with_arrow(#arrow).with_family(#crate_name::TableSpec::of::<#edge_type>());
 
                     #edge_schema::#__________connect(
                         self,
@@ -460,7 +464,7 @@ impl ToTokens for NodeEdgeMetadata<'_> {
                     clause: impl ::std::convert::Into<#crate_name::EdgeClause>,
                 ) -> #edge_wrapper #edge_type_ty_generics {
                     let clause: #crate_name::EdgeClause = clause.into();
-                    let clause = clause.with_arrow(#arrow).with_table(#edge_table_str);
+                    let clause = clause.with_arrow(#arrow).with_family(#crate_name::TableSpec::of::<#edge_type>());
 
                     // i.e Edge to Edge
                     #edge_schema::#__________connect(
