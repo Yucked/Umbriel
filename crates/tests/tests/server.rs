@@ -13,19 +13,23 @@
 //!
 //! The tests write only to the tables `server_person`, `server_company` and `server_works_at`,
 //! which they remove before and after each test, and run one at a time.
+//!
+//! The `versioned_*` tests also need the server's store to keep versions (SurrealKV started with
+//! `versioned=true`), since the memory engine refuses `SELECT … VERSION`.
 
 use std::collections::BTreeMap;
 
+use chrono::TimeZone;
 use surrealdb::{
     IndexedResults, Surreal,
     engine::any::{self, Any},
     opt::auth::Root,
-    types::{SurrealValue, Value},
+    types::{self, SurrealValue, Value},
 };
 use umbriel::{
-    E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate,
-    Runnable, SchemaGetter, SurrealCrud, SurrealCrudNode, model,
-    statements::{Returning, relate, return_},
+    All, E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate, Runnable,
+    SchemaGetter, SurrealCrud, SurrealCrudNode, model,
+    statements::{Returning, relate, return_, select},
 };
 use umbriel_tests::{read, statement_error};
 
@@ -409,22 +413,58 @@ mod scenarios {
         .expect("committed");
         assert_eq!(people(db).await, ["carol"]);
     }
+
+    /// `SELECT … VERSION` reads a record as it was at a time, and finds nothing before the record
+    /// existed. The memory engine refuses `VERSION`, so this needs a versioned server store.
+    pub async fn versioned_reads(db: &Surreal<Any>) {
+        define_models(db).await;
+        person("alice", "Alice", 30).create(db).await.expect("created");
+        let before_update: types::Datetime = read(db, "RETURN time::now();").await;
+        Raw::new("UPDATE server_person:alice SET age = 31;")
+            .run(db.clone())
+            .await
+            .expect("updated");
+
+        let then = select(All)
+            .from_only(ServerPerson::id("alice"))
+            .version(before_update)
+            .decode::<ServerPerson>()
+            .execute(db)
+            .await
+            .expect("read")
+            .expect("alice existed then");
+        assert_eq!(then.age, 30);
+
+        let long_ago = chrono::Utc
+            .with_ymd_and_hms(2000, 1, 1, 0, 0, 0)
+            .single()
+            .expect("a time");
+        let none = select(All)
+            .from(ServerPerson::table())
+            .version(long_ago)
+            .decode::<ServerPerson>()
+            .execute(db)
+            .await
+            .expect("read");
+        assert!(none.is_empty());
+    }
 }
 
 /// One ignored test per scenario and transport, holding the server and starting and ending with
-/// the test tables removed.
+/// the test tables removed. `$http` and `$ws` name the modules, and `$reason` says what server
+/// the scenarios need.
 macro_rules! over_each_transport {
-    ($($scenario:ident),* $(,)?) => {
-        over_each_transport!(@transport http, Http; $($scenario),*);
-        over_each_transport!(@transport ws, Ws; $($scenario),*);
+    ($reason:literal, $http:ident, $ws:ident; $($scenario:ident),* $(,)?) => {
+        over_each_transport!(@transport $http, Http, $reason; $($scenario),*);
+        over_each_transport!(@transport $ws, Ws, $reason; $($scenario),*);
     };
-    (@transport $module:ident, $transport:ident; $($scenario:ident),*) => {
+    (@transport $module:ident, $transport:ident, $reason:literal; $($scenario:ident),*) => {
         mod $module {
             use super::*;
 
             $(
                 #[tokio::test]
-                #[ignore = "needs a running SurrealDB server; see tests/server.rs"]
+                #[ignore = $reason]
                 async fn $scenario() {
                     let _server = SERVER.lock().await;
                     let db = connect(Transport::$transport).await;
@@ -450,10 +490,20 @@ macro_rules! over_each_transport {
 }
 
 over_each_transport!(
+    "needs a running SurrealDB server; see tests/server.rs",
+    http,
+    ws;
     connection,
     definitions,
     crud,
     relations,
     statement_errors,
     transactions,
+);
+
+over_each_transport!(
+    "needs a SurrealDB server with a versioned store (SurrealKV, `versioned=true`); see tests/server.rs",
+    versioned_http,
+    versioned_ws;
+    versioned_reads,
 );

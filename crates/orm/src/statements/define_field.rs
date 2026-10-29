@@ -159,15 +159,14 @@ impl DefineFieldStatement {
     ///     .default(false);
     /// assert!(invalid.to_query().is_err());
     ///
-    /// // An escaped name is one top-level field; a nested path and `id` are rejected.
-    /// let computed = |field: &'static str| {
-    ///     define_field(Field::new(field)).on_table(Table::from("user")).computed("Alice")
+    /// // Any name is one top-level field; a nested or raw path and `id` are rejected.
+    /// let computed = |field: Field| {
+    ///     define_field(field).on_table(Table::from("user")).computed("Alice")
     /// };
-    /// assert!(computed("`display-name`").to_query().is_ok());
-    /// assert!(computed("⟨display-name⟩").to_query().is_ok());
-    /// assert!(computed("address.city").to_query().is_err());
-    /// assert!(computed("`address`.`city`").to_query().is_err());
-    /// assert!(computed("`id`").to_query().is_err());
+    /// assert!(computed(Field::new("display-name")).to_query().is_ok());
+    /// assert!(computed(Field::new("address").with_field("city")).to_query().is_err());
+    /// assert!(computed(Field::raw("address.city")).to_query().is_err());
+    /// assert!(computed(Field::new("id")).to_query().is_err());
     /// ```
     pub fn computed(mut self, expression: impl Into<ValueLike>) -> Self {
         self.computed = Some(expression.into());

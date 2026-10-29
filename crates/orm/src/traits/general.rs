@@ -29,6 +29,11 @@ impl<T: Queryable + Clone> Queryable for &T {
 
 /// Used for filters. A condition is the node's expression form, so a `LET` statement stands for
 /// its parameter and a statement for its subquery.
+///
+/// SurrealDB tests a condition for truthiness, not for being `true`: `NONE`, `NULL`, `false`,
+/// `0`, an empty string, array or object are false, and every other value is true. So
+/// `where_(field)` keeps the records whose field is set and non-empty. Comparisons across types
+/// follow SurrealDB's ordering of value kinds rather than failing.
 pub trait Conditional: Render + Into<ValueLike> {
     /// Whether the condition is already a single parenthesized group.
     fn is_grouped(&self) -> bool {

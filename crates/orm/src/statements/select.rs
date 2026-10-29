@@ -551,6 +551,10 @@ impl<O: 'static, C: Cardinality> Conditional for SelectStatement<O, C> {}
 /// Each SELECT statement supports selecting from multiple targets, which can include
 /// tables, records, edges, subqueries, paramaters, s, objects, and other values.
 ///
+/// A computed projection without an alias, such as `math::sum(age)`, is keyed by SurrealDB's own
+/// rendering of the expression, which is not a stable name: alias it with `__as__` before
+/// decoding the result into a type.
+///
 /// Examples
 /// ```rust
 /// use umbriel::{*, statements::{order, select}, functions::{math}, types::RecordId};

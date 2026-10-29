@@ -2172,23 +2172,31 @@ mod definitions {
     #[test]
     fn computed_fields_reject_other_clauses_nested_paths_and_id() {
         let age = Field::new("age");
-        let computed = |field: &'static str| {
-            define_field(Field::new(field))
+        let computed = |field: Field| {
+            define_field(field)
                 .on_table(Table::from("person"))
                 .computed(age.gte(18))
         };
-        assert!(computed("is_adult").to_query().is_ok());
-        assert!(computed("`is-adult`").to_query().is_ok());
-        assert_render_error(&computed("is_adult").default(false), "cannot also have");
-        assert_render_error(&computed("is_adult").value(false), "cannot also have");
+        assert!(computed(Field::new("is_adult")).to_query().is_ok());
+        assert!(computed(Field::new("is-adult")).to_query().is_ok());
         assert_render_error(
-            &computed("is_adult").assert(value().is_not(NONE)),
+            &computed(Field::new("is_adult")).default(false),
             "cannot also have",
         );
-        assert_render_error(&computed("flags.is_adult"), "top-level field");
-        assert_render_error(&computed("`flags`.`is_adult`"), "top-level field");
-        assert_render_error(&computed("id"), "`id` field");
-        assert_render_error(&computed("`id`"), "`id` field");
+        assert_render_error(
+            &computed(Field::new("is_adult")).value(false),
+            "cannot also have",
+        );
+        assert_render_error(
+            &computed(Field::new("is_adult")).assert(value().is_not(NONE)),
+            "cannot also have",
+        );
+        assert_render_error(
+            &computed(Field::new("flags").with_field("is_adult")),
+            "top-level field",
+        );
+        assert_render_error(&computed(Field::raw("flags.is_adult")), "top-level field");
+        assert_render_error(&computed(Field::new("id")), "`id` field");
     }
 
     #[test]
