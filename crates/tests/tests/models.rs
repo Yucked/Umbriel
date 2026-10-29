@@ -414,7 +414,7 @@ DEFINE FIELD data ON TABLE planet TYPE int;"
         let schema = StudentWithGranularAttributes::schema();
         let fields = StudentWithGranularAttributes::define_fields();
         let age = |name: &'static str| {
-            define_field(Field::ident(name))
+            define_field(Field::new(name))
                 .on_table(table.clone())
                 .type_(Kind::Int)
         };
@@ -478,7 +478,7 @@ DEFINE FIELD data ON TABLE planet TYPE int;"
             [paths.to_debug_sql()]
         );
 
-        let week = define_field(Field::ident("timeToKelowna"))
+        let week = define_field(Field::new("timeToKelowna"))
             .on_table(table.clone())
             .type_(Kind::Duration)
             .assert(value().is_not(NONE))
@@ -497,7 +497,7 @@ DEFINE FIELD data ON TABLE planet TYPE int;"
     #[test]
     fn item_assertions_define_the_array_elements() {
         let table = StudentWithGranularAttributes::table();
-        let items = define_field(Field::ident("semesterCourses").all())
+        let items = define_field(Field::new("semesterCourses").all())
             .on_table(table.clone())
             .assert(value().is_not(NONE));
         assert_eq!(

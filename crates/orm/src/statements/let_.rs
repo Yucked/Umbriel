@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 
+use surrealdb::types::{Kind, SurrealValue};
+
 use crate::{Clause, Conditional, Expression, Operatable, Param, Renderer, SchemaGetter};
 
 use super::{Statement, impl_statement};
@@ -24,6 +26,7 @@ use super::{Statement, impl_statement};
 pub fn let_(name: impl Into<Cow<'static, str>>) -> LetStatement {
     LetStatement {
         parameter: Param::new(name),
+        kind: None,
         value: None,
     }
 }
@@ -57,6 +60,7 @@ pub use let_statement as let_;
 #[derive(Debug, Clone)]
 pub struct LetStatement {
     parameter: Param,
+    kind: Option<Kind>,
     value: Option<Expression>,
 }
 
@@ -83,6 +87,25 @@ impl LetStatement {
         self
     }
 
+    /// `LET $name: type = …`: the value must be of `V`'s SurrealDB type, or the statement fails.
+    ///
+    /// The type is `V`'s own kind, such as `int`, `option<string>`, `array<int>` or
+    /// `record<user>`. A model's kind is an object literal type, whose rendering is still being
+    /// settled (Umbriel #28).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use umbriel::{*, statements::let_};
+    ///
+    /// let statement = let_("count").typed::<i64>().equal_to(5);
+    /// assert_eq!(statement.to_debug_sql(), "LET $count: int = 5;");
+    /// ```
+    pub fn typed<V: SurrealValue>(mut self) -> Self {
+        self.kind = Some(V::kind_of());
+        self
+    }
+
     /// helper function for getting assigned param from the LET statement
     pub fn get_param(&self) -> Param {
         self.parameter.clone()
@@ -97,6 +120,9 @@ impl LetStatement {
 impl Statement for LetStatement {
     fn render_body(&self, out: &mut Renderer) {
         out.push_str("LET ").push(&self.parameter);
+        if let Some(kind) = &self.kind {
+            out.push_str(": ").push(kind);
+        }
         if let Some(value) = &self.value {
             out.push_str(" = ").push(value);
         }

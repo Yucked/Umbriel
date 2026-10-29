@@ -149,6 +149,20 @@ mod rendering {
         );
     }
 
+    /// Q02a: `type::table` and `type::record` are untyped functions (#16), taken as `Function`
+    /// targets.
+    #[test]
+    fn computed_targets() {
+        assert_sql(
+            &select(All).from(umbriel::functions::type_::table!("organization")),
+            "SELECT * FROM type::table('organization');",
+        );
+        assert_sql(
+            &select(All).from(umbriel::functions::type_::record!("organization", "acme")),
+            "SELECT * FROM type::record('organization', 'acme');",
+        );
+    }
+
     #[test]
     fn model_entry_points_select_the_default_table() {
         assert_sql(&Organization::select(), "SELECT * FROM organization;");

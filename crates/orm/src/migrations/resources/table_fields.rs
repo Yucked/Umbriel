@@ -66,8 +66,8 @@ pub(crate) fn field_changes(
     {
         let meta = FieldChangeMeta {
             table: Table::new(table),
-            old_name: Field::new(old.to_owned()),
-            new_name: Field::new(new.to_owned()),
+            old_name: Field::raw(old.to_owned()),
+            new_name: Field::raw(new.to_owned()),
         };
         let answer = prompter.prompt_single_field_rename_or_delete(
             SingleFieldChangeType::Delete(meta.clone()),
@@ -99,7 +99,7 @@ pub(crate) fn field_changes(
         match (renamed_from, renamed_to) {
             (Some(_), Some(_)) => {
                 return Err(MigrationError::RenamingToSameOldFieldDisallowed {
-                    field: Field::new(field.to_owned()),
+                    field: Field::raw(field.to_owned()),
                     table: Table::new(table),
                 });
             }
@@ -125,9 +125,9 @@ pub(crate) fn field_changes(
                         continue;
                     }
                     return Err(MigrationError::InvalidOldFieldName {
-                        new_name: Box::new(Field::new(field.to_owned())),
+                        new_name: Box::new(Field::raw(field.to_owned())),
                         table: Table::new(table),
-                        old_name: Box::new(Field::new(old)),
+                        old_name: Box::new(Field::raw(old)),
                         renamables: join(&left_names),
                     });
                 }

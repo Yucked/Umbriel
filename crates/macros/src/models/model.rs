@@ -439,7 +439,7 @@ impl ModelReceiver {
 
                 fn get_serializable_fields() -> ::std::vec::Vec<#crate_name::Field> {
                     let mut fields = ::std::vec::Vec::new();
-                    #stored_fields.for_each(&mut |name| fields.push(#crate_name::Field::ident(name)));
+                    #stored_fields.for_each(&mut |name| fields.push(#crate_name::Field::new(name)));
                     fields
                 }
 

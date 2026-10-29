@@ -62,17 +62,20 @@ macro_rules! create_param_name_fn {
 // it's important to note that you cannot declare new parameters with any of the names listed below:
 
 create_param_name_fn!(
-    /// $auth: Represents the currently authenticated scope user
+    /// $auth: Represents the currently authenticated scope user. Protected: it can never be set
+    /// with `LET`.
     => auth
 );
 
 create_param_name_fn!(
-    /// $token: Represents values held inside the JWT token used for the current session
+    /// $token: Represents values held inside the JWT token used for the current session.
+    /// Protected: it can never be set with `LET`.
     => token
 );
 
 create_param_name_fn!(
-    /// $session: Represents values from the session functions as an object
+    /// $session: Represents values from the session functions as an object. Protected: it can
+    /// never be set with `LET`.
     => session
 );
 
@@ -109,4 +112,36 @@ create_param_name_fn!(
 create_param_name_fn!(
     /// $this: Represents the current record in a query
     => this
+);
+
+create_param_name_fn!(
+    /// $access: The access method the session authenticated with. Protected: it can never be
+    /// set with `LET`.
+    => access
+);
+
+create_param_name_fn!(
+    /// $reference: The reference being handled, in a record reference's `ON DELETE` clause
+    => reference
+);
+
+create_param_name_fn!(
+    /// $request: The incoming request (body, headers, params, method, query, context), in a
+    /// `DEFINE API` handler
+    => request
+);
+
+create_param_name_fn!(
+    /// $action: The bucket operation being checked, in `DEFINE BUCKET` permissions
+    => action
+);
+
+create_param_name_fn!(
+    /// $file: The path of the file being accessed, in `DEFINE BUCKET` permissions
+    => file
+);
+
+create_param_name_fn!(
+    /// $target: The target path of a copy or rename, in `DEFINE BUCKET` permissions
+    => target
 );

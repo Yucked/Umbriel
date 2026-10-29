@@ -306,7 +306,7 @@ mod create {
 
         let explicit = create_only::<SpaceShip>(CreateTarget::table())
             .content(space_ship("apollo", "Apollo"))
-            .return_fields::<BTreeMap<String, Value>>(Field::new("*"))
+            .return_fields::<BTreeMap<String, Value>>(vec![ValueLike::from(All)])
             .execute(&db)
             .await
             .expect("created")
@@ -836,7 +836,7 @@ mod update {
              { op: 'move', path: '/name', from: '/title' }];",
         );
         assert_render_error(
-            &update::<Organization>(&acme).patch(org.name.patch_copy(Field::new("tags[0]"))),
+            &update::<Organization>(&acme).patch(org.name.patch_copy(Field::raw("tags[0]"))),
             "The path you have provided is invalid",
         );
     }
@@ -1529,7 +1529,7 @@ mod relate {
                 CompanyLikeUser::schema()
                     .time()
                     .connected
-                    .equal_to(Field::new("time::now()")),
+                    .equal_to(Field::from_expr(umbriel::functions::time::now!())),
             ),
             "RELATE ONLY company:acme->like->user:alice SET time.connected = time::now();",
         );
@@ -1841,7 +1841,7 @@ mod relate {
             CompanyLikeUser::schema()
                 .time()
                 .connected
-                .equal_to(Field::new("time::now()")),
+                .equal_to(Field::from_expr(umbriel::functions::time::now!())),
         )
         .execute(&db)
         .await
@@ -2075,7 +2075,7 @@ mod select {
             ),
         )
         .await;
-        let balance: Vec<i64> = select_value(Field::new("account.balance"))
+        let balance: Vec<i64> = select_value(Field::new("account").with_field("balance"))
             .from(User::id("alice"))
             .decode()
             .execute(&db)
@@ -2241,7 +2241,11 @@ mod definitions {
         assert_sql(
             &define_event("email_changed")
                 .on_table(Table::from("user"))
-                .when(Field::new("$before.email").not_equal(Field::new("$after.email")))
+                .when(
+                    Field::from(Param::new("before"))
+                        .with_field("email")
+                        .not_equal(Field::from(Param::new("after")).with_field("email")),
+                )
                 .then(
                     create::<SpaceShip>(SpaceShip::table())
                         .set(SpaceShip::schema().name.equal_to("Apollo")),
@@ -2683,7 +2687,7 @@ mod definitions {
             &db,
             define_event("ship_created")
                 .on_table(Table::from("space_ship"))
-                .when(Field::new("$event").equal("CREATE"))
+                .when(Param::new("event").equal("CREATE"))
                 .then(
                     create::<WeaponStats>(WeaponStats::table())
                         .set(WeaponStats::schema().averageStrength.equal_to(1.5)),
@@ -2754,7 +2758,7 @@ mod definitions {
             &db,
             define_event("audit")
                 .on_table(user.clone())
-                .when(Field::new("$event").equal("CREATE"))
+                .when(Param::new("event").equal("CREATE"))
                 .then(select(All).from(user.clone())),
         )
         .await;
@@ -3012,7 +3016,7 @@ mod control_flow {
         .await;
         assert_eq!(ships(&db).await, ["Apollo", "Gemini"]);
 
-        let age = Field::new("$age");
+        let age = Param::new("age");
         let branch = chain(let_("age").equal_to(20))
             .chain(if_(age.gte(18)).then("adult").else_("minor").end());
         let result: Option<String> = branch
@@ -3024,7 +3028,7 @@ mod control_flow {
         assert_eq!(result.as_deref(), Some("adult"));
 
         let block_value: Option<i64> = return_(block(
-            chain(let_("total").equal_to(41)).chain(return_(Field::new("$total").add(1))),
+            chain(let_("total").equal_to(41)).chain(return_(Field::from(Param::new("total")).add(1))),
         ))
         .run(db.clone())
         .await

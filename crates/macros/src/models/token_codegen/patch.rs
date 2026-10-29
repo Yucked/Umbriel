@@ -43,7 +43,7 @@ impl Codegen<'_> {
             .push(quote!(#field_ident: #crate_name::Patch::Keep).into());
         self.patch_setters.push(
             quote!(
-                setters.extend(self.#field_ident.into_setter(#crate_name::Field::ident(#db_field_name)));
+                setters.extend(self.#field_ident.into_setter(#crate_name::Field::new(#db_field_name)));
             )
             .into(),
         );

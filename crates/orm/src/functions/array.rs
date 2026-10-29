@@ -194,11 +194,11 @@ pub fn append_fn(arr: impl Into<ArrayLike>, value: impl Into<ValueLike>) -> Func
 /// array::append!(vec![1, 2, 3, 4, 5], value_param);
 ///
 /// # let numbers = Field::new("numbers");
-/// # let value = Field::new("value");
-/// let result = array::append!(numbers, value);
+/// # let item = Field::new("item");
+/// let result = array::append!(numbers, item);
 /// assert_eq!(
 ///         result.to_debug_sql(),
-///         "array::append(numbers, value)"
+///         "array::append(numbers, item)"
 ///     );
 /// ```
 #[macro_export]

@@ -26,10 +26,23 @@ impl Codegen<'_> {
             self.static_assertions
                 .push(self.create_static_assertions(relate)?);
             self.relate(relate)?;
-            let connection = &relate.connection;
+            // The connection is parsed here into its two graph steps, so the path is built from
+            // typed parts rather than written as text.
+            let RelateAttribute {
+                edge_table,
+                foreign_node_table,
+                edge_direction,
+            } = RelateAttribute::try_from(relate)?;
+            let arrow = match edge_direction {
+                EdgeDirection::Out => quote!(#crate_name::Arrow::Right),
+                EdgeDirection::In => quote!(#crate_name::Arrow::Left),
+            };
+            let edge_table = edge_table.into_inner().to_string();
+            let foreign_node_table = foreign_node_table.into_inner().to_string();
             self.fields_relations_aliased.push(
                 quote!(#crate_name::Aliasable::__as__(
-                    &#crate_name::Field::new(#connection),
+                    &#crate_name::Field::graph_step(#arrow, #crate_name::Table::new(#edge_table))
+                        .with_graph_step(#arrow, #crate_name::Table::new(#foreign_node_table)),
                     #crate_name::AliasName::new(#db_field_name),
                 ))
                 .into(),

@@ -7,7 +7,7 @@ use surrealdb::types::{self, SurrealValue, Value};
 use umbriel::{
     AliasName, Aliasable, All, CrudType, Database, E, EdgeDirection, Event, Field, Fragment,
     GENERATED_PARAM_PREFIX, Ident, Interval, JwtAlgorithm, Last, Model, NONE, NULL, Namespace,
-    Node, NumberLike, Operatable, Param, ParamNameError, Raw, Render, ReturnType, Runnable,
+    Node, NumberLike, Operatable, Param, ParamNameError, Raw, Render, Runnable,
     SchemaGetter, Table, TableIndex, ValueLike, any_other_edges, arr, bracket, cast, chain, cond,
     index,
     statements::{let_, return_, select, select_value},
@@ -179,12 +179,15 @@ mod fields {
     #[test]
     fn names_and_paths() {
         assert_eq!(Field::new("name").to_debug_sql(), "name");
-        assert_eq!(Field::new("address.city").to_debug_sql(), "address.city");
         assert_eq!(
-            Field::ident("display-name").to_debug_sql(),
+            Field::new("address").with_field("city").to_debug_sql(),
+            "address.city"
+        );
+        assert_eq!(
+            Field::new("display-name").to_debug_sql(),
             "`display-name`"
         );
-        assert_eq!(Field::ident("name").to_debug_sql(), "name");
+        assert_eq!(Field::from("name").to_debug_sql(), "name");
         assert_eq!(Field::new("tags").all().to_debug_sql(), "tags.*");
         assert_eq!(
             Field::from(Param::new("user")).all().to_debug_sql(),
@@ -194,8 +197,32 @@ mod fields {
             Field::from_expr(ValueLike::from(User::id("alice"))).to_debug_sql(),
             "user:alice"
         );
-        assert!(Field::new("").is_empty());
-        assert!(Field::ident("").to_query().is_err());
+        assert!(Field::new("").to_query().is_err());
+    }
+
+    /// T28: a name is always one escaped identifier, whatever it holds, and verbatim idiom text
+    /// is the tracked `Field::raw`.
+    #[test]
+    fn names_are_escaped_and_raw_fields_are_tracked() {
+        assert_eq!(Field::new("select").to_debug_sql(), "`select`");
+        assert_eq!(Field::new("address.city").to_debug_sql(), "`address.city`");
+        assert_eq!(Field::new("time::now()").to_debug_sql(), "`time::now()`");
+        assert_parses(&format!(
+            "SELECT {} FROM user;",
+            Field::new("select").to_debug_sql()
+        ));
+
+        assert_eq!(Field::raw("tags[*]").to_debug_sql(), "tags[*]");
+        let raw_with_value = umbriel::statements::select(Field::raw("tags[*]"))
+            .from(Table::from("user"))
+            .where_(Field::new("name").equal("Alice"));
+        assert!(raw_with_value.to_query().is_err());
+        assert!(
+            umbriel::statements::select(Field::raw("tags[*]"))
+                .from(Table::from("user"))
+                .to_query()
+                .is_ok()
+        );
     }
 
     #[test]
@@ -547,7 +574,8 @@ mod operators {
     #[tokio::test]
     async fn operators_evaluate_as_surrealdb_defines_them() {
         let db = db().await;
-        let tags = Field::new("$tags");
+        let tags = Field::from(Param::new("tags"));
+        let value = |value: &'static str| Field::from_expr(ValueLike::value(value));
         let checks: Vec<(umbriel::Operation, bool)> = vec![
             (tags.contains("rust"), true),
             (tags.contains_not("go"), true),
@@ -556,12 +584,15 @@ mod operators {
             (tags.contains_none(vec!["go"]), true),
             (tags.any_equal("rust"), true),
             (tags.all_equal("rust"), false),
-            (Field::new("'rust'").inside(Field::new("$tags")), true),
-            (Field::new("5").between(1, 10), true),
-            (Field::new("10").within(1, 10), true),
-            (Field::new("10").between(1, 10), false),
+            (value("rust").inside(tags.clone()), true),
+            (Field::from_expr(ValueLike::value(5)).between(1, 10), true),
+            (Field::from_expr(ValueLike::value(10)).within(1, 10), true),
+            (Field::from_expr(ValueLike::value(10)).between(1, 10), false),
             (
-                Field::new("(1, 1)").inside(geo::Polygon::new(
+                Field::from_expr(ValueLike::from(umbriel::GeometryLike::from(geo::Point::new(
+                    1.0, 1.0,
+                ))))
+                .inside(geo::Polygon::new(
                     geo::LineString::from(vec![
                         (0.0, 0.0),
                         (2.0, 0.0),
@@ -856,14 +887,6 @@ mod names_and_keywords {
         assert_eq!(JwtAlgorithm::HS512.as_str(), "HS512");
         assert_eq!(JwtAlgorithm::EDDSA.to_string(), "EDDSA");
         assert_eq!(Interval::Day.to_string(), "day");
-        assert_eq!(ReturnType::None.to_debug_sql(), "RETURN NONE");
-        assert_eq!(ReturnType::Before.to_debug_sql(), "RETURN BEFORE");
-        assert_eq!(ReturnType::After.to_debug_sql(), "RETURN AFTER");
-        assert_eq!(ReturnType::Diff.to_debug_sql(), "RETURN DIFF");
-        assert_eq!(
-            ReturnType::from(vec![ValueLike::from(Field::new("name"))]).to_debug_sql(),
-            "RETURN name"
-        );
         assert_eq!(umbriel::Operator::Matches.as_str(), "@@");
     }
 

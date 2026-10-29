@@ -1,6 +1,5 @@
 //! The exported macros: `query!`/`query_raw!`, `chain!`/`block!`/`transaction!`, `for_!`,
-//! `define_function!`, `object!`/`object_partial!`, `let_!`, `pick!`/`Pickable`, and the
-//! deprecated `block_deprecated!`.
+//! `define_function!`, `object!`/`object_partial!`, `let_!` and `pick!`/`Pickable`.
 
 use surrealdb::{Surreal, engine::local::Db};
 use umbriel::{
@@ -458,23 +457,6 @@ mod definitions {
             PersonName {
                 name: "Alice".to_owned()
             }
-        );
-    }
-}
-
-mod deprecated_macros {
-    use super::*;
-
-    #[test]
-    fn block_deprecated_still_renders() {
-        let user = &Table::from("user");
-        let code = umbriel::statements::utils::block_deprecated! {
-            let total = select_value(Field::new("age")).from(user);
-            return total;
-        };
-        assert_eq!(
-            code.to_debug_sql(),
-            "{\nLET $total = (SELECT VALUE age FROM user);\n\nRETURN $total;\n}"
         );
     }
 }

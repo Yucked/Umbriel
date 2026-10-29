@@ -233,7 +233,9 @@ fn remove(key: &ResourceKey) -> String {
         ResourceKind::Access => remove_access(name).on_database().to_debug_sql(),
         ResourceKind::User => remove_user(name).on_database().to_debug_sql(),
         ResourceKind::Table => remove_table(Table::new(name)).to_debug_sql(),
-        ResourceKind::Field => remove_field(Field::new(name))
+        // A field key is SurrealDB's own rendering of the path, such as `address.city` or
+        // `tags[*]`, so it is written as it is; the statement binds no values.
+        ResourceKind::Field => remove_field(Field::raw(name))
             .on_table(table())
             .to_debug_sql(),
         ResourceKind::Index => remove_index(name).on_table(table()).to_debug_sql(),

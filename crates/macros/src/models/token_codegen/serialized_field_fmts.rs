@@ -21,7 +21,7 @@ impl Codegen<'_> {
         self.serialized_fmt_db_field_names_instance
             .push(quote!(#db_field_name).into());
 
-        let field = || quote!(#crate_name::Field::ident(#db_field_name));
+        let field = || quote!(#crate_name::Field::new(#db_field_name));
 
         match relation_type {
             RelationType::LinkOne(_) => {

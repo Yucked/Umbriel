@@ -1,5 +1,4 @@
 use proc_macro2::Span;
-use quote::format_ident;
 
 use crate::models::*;
 
@@ -179,11 +178,25 @@ impl TryFrom<&Relate> for RelateAttribute {
             .split(edge_direction_str.as_str())
             .filter(|this| !this.is_empty());
 
+        // Each step names one table: anything else (a filter, a parameter, a nested path) is not a
+        // connection the derive can type.
+        let table = |name: &str| {
+            syn::parse_str::<syn::Ident>(name).map_err(|_| {
+                syn::Error::new(
+                    Span::call_site(),
+                    format!(
+                        "`{name}` is not a table name: a connection is `->edge->node` or \
+                         `<-edge<-node` over table names, {}",
+                        get_relation_error(relation)
+                    ),
+                )
+            })
+        };
         let (edge_action, node_object) =
             match (substrings.next(), substrings.next(), substrings.next()) {
                 (Some(action), Some(node_obj), None) => (
-                    EdgeTableName(format_ident!("{action}")),
-                    NodeTableName(format_ident!("{node_obj}")),
+                    EdgeTableName(table(action)?),
+                    NodeTableName(table(node_obj)?),
                 ),
                 _ => {
                     return Err(syn::Error::new(

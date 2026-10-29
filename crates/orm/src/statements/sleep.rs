@@ -1,8 +1,14 @@
-use crate::{DurationLike, Renderer};
+use surrealdb::types::Duration;
+
+use crate::Renderer;
 
 use super::{Statement, impl_statement};
 
 /// Creates a SLEEP statement.
+///
+/// SurrealDB parses only a duration literal here, so it takes a duration, never a field or
+/// parameter; the `sleep()` function in [`functions::sleep`](crate::functions::sleep) takes an
+/// expression.
 ///
 /// Examples
 ///
@@ -12,7 +18,7 @@ use super::{Statement, impl_statement};
 ///
 /// assert_eq!(sleep(Duration::from_secs(43)).to_debug_sql(), "SLEEP 43s;");
 /// ```
-pub fn sleep(duration: impl Into<DurationLike>) -> SleepStatement {
+pub fn sleep(duration: impl Into<Duration>) -> SleepStatement {
     SleepStatement {
         duration: duration.into(),
     }
@@ -20,13 +26,12 @@ pub fn sleep(duration: impl Into<DurationLike>) -> SleepStatement {
 
 /// Sleep statement initialization builder
 pub struct SleepStatement {
-    duration: DurationLike,
+    duration: Duration,
 }
 
 impl Statement for SleepStatement {
     fn render_body(&self, out: &mut Renderer) {
-        // SLEEP takes a duration literal.
-        out.push_str("SLEEP ").push_inlined(&self.duration);
+        out.push_str("SLEEP ").push_syntax(&self.duration);
     }
 }
 

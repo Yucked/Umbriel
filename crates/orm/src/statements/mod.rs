@@ -190,7 +190,7 @@ pub use use_::{UseStatement, use_};
 
 /// helpers for statements
 pub mod utils {
-    pub use super::utils_block::{Block, block, block_deprecated};
+    pub use super::utils_block::{Block, block};
     pub use super::utils_chain::{Chainable, QueryChain, chain};
 }
 

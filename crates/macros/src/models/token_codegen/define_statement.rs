@@ -91,7 +91,7 @@ impl Codegen<'_> {
         // kept, as SurrealDB applies both to the record key.
         if !untyped_id || !define_field_methods.is_empty() {
             all_field_defintions.push(raw(quote!(
-                #crate_name::statements::define_field(#crate_name::Field::ident(#db_field_name))
+                #crate_name::statements::define_field(#crate_name::Field::new(#db_field_name))
                 .on_table(#_____table.clone())
                 #type_clause
                 #( # define_field_methods) *
@@ -101,7 +101,7 @@ impl Codegen<'_> {
         if !define_array_field_item_methods.is_empty() {
             // `field.*` defines every element of an array field.
             all_field_defintions.push(raw(quote!(
-                #crate_name::statements::define_field(#crate_name::Field::ident(#db_field_name).all())
+                #crate_name::statements::define_field(#crate_name::Field::new(#db_field_name).all())
                     .on_table(#_____table.clone())
                     #( # define_array_field_item_methods) *
             )));

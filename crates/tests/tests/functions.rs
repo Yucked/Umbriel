@@ -678,7 +678,7 @@ mod type_functions {
             (type_::is_record!(User::id("alice")), "true"),
             (type_::is_string!("a"), "true"),
             (
-                type_::is_uuid!(Field::new("u'018a6680-bef9-701b-9025-e1754f296a0f'")),
+                type_::is_uuid!(Field::raw("u'018a6680-bef9-701b-9025-e1754f296a0f'")),
                 "true",
             ),
         ];

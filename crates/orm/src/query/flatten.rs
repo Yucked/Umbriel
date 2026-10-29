@@ -143,7 +143,7 @@ impl<T: Object> FlatPatch<T> {
             if let Some(error) = error.take() {
                 value = ValueLike::new(Checked::new(value, Some(error)));
             }
-            setters.push(Setter::new(Field::ident(name), Operator::Equal, value));
+            setters.push(Setter::new(Field::new(name), Operator::Equal, value));
         });
         setters
     }

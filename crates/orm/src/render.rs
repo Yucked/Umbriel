@@ -293,14 +293,31 @@ impl<N: Render> Render for Checked<N> {
     }
 }
 
+/// The words SurrealDB reserves where an identifier can stand, matched in any case: the 3.3.4
+/// formatter quotes a name equal to one (`surrealdb-common` `keywords::RESERVED_KEYWORD`), since
+/// the parser would read it as the keyword.
+const RESERVED_KEYWORDS: &[&str] = &[
+    "ALTER", "BEGIN", "BREAK", "CANCEL", "COMMIT", "CONTINUE", "CREATE", "DEFINE", "DELETE",
+    "FOR", "IF", "INFO", "INSERT", "KILL", "LIVE", "OPTION", "REBUILD", "RETURN", "RELATE",
+    "REMOVE", "SELECT", "LET", "SHOW", "SLEEP", "THROW", "UPDATE", "UPSERT", "USE", "DIFF",
+    "RAND", "NONE", "NULL", "AFTER", "BEFORE", "VALUE", "BY", "ALL", "TRUE", "FALSE", "WHERE",
+    "TABLE", "TB", "SEQUENCE", "FUNCTION",
+];
+
 /// Writes `name` as a SurrealQL identifier: bare when it is a plain identifier, otherwise
-/// backtick-quoted with the same escapes SurrealDB uses for table names.
+/// backtick-quoted with the same escapes SurrealDB uses for table names. A reserved keyword, or
+/// `NaN` and `Infinity`, which read as numbers, is quoted too.
 pub(crate) fn write_ident(out: &mut String, name: &str) {
     let plain = name
         .bytes()
         .next()
         .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
-        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        && name != "NaN"
+        && name != "Infinity"
+        && !RESERVED_KEYWORDS
+            .iter()
+            .any(|keyword| keyword.eq_ignore_ascii_case(name));
     if plain {
         out.push_str(name);
         return;
