@@ -14,10 +14,10 @@ async fn a_branch_reads_a_field_written_earlier_in_the_transaction() {
     let acme = Organization::id("acme");
     let age = Field::from_expr(ValueLike::from(acme.clone())).with_field("age");
     begin_transaction()
-        .query(create::<Organization>(acme.clone()).set([
-            org.name.equal_to("Acme Corp"),
-            org.age.equal_to(30u8),
-        ]))
+        .query(
+            create::<Organization>(acme.clone())
+                .set([org.name.equal_to("Acme Corp"), org.age.equal_to(30u8)]),
+        )
         .query(
             if_(age.gt(18))
                 .then(update::<Organization>(acme.clone()).set(org.name.equal_to("Adult Corp")))

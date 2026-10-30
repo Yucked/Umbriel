@@ -107,7 +107,10 @@ mod evaluation {
             .map(|item| item.keys().cloned().collect::<Vec<_>>())
             .collect::<Vec<_>>();
         assert_eq!(names, [["name", "qty"], ["name", "qty"]]);
-        assert_eq!(items[0][0].get("name"), Some(&Value::String("pen".to_owned())));
+        assert_eq!(
+            items[0][0].get("name"),
+            Some(&Value::String("pen".to_owned()))
+        );
     }
 
     #[tokio::test]

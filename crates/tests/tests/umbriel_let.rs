@@ -1,7 +1,10 @@
 //! LET (`orm/src/statements/let_.rs`): typed parameters, rendered with each value's SurrealDB
 //! type and checked by the database.
 
-use umbriel::{Model, RecordId, Render, Runnable, chain, statements::{let_, return_}};
+use umbriel::{
+    Model, RecordId, Render, Runnable, chain,
+    statements::{let_, return_},
+};
 use umbriel_tests::*;
 
 #[test]
@@ -19,7 +22,9 @@ fn a_typed_let_renders_the_value_type() {
         "LET $nickname: none | string = 'Al';",
     );
     assert_sql(
-        &let_("owner").typed::<RecordId<User>>().equal_to(User::id("alice")),
+        &let_("owner")
+            .typed::<RecordId<User>>()
+            .equal_to(User::id("alice")),
         "LET $owner: record<user> = user:alice;",
     );
 }

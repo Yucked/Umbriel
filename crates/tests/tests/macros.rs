@@ -3,13 +3,12 @@
 
 use surrealdb::{Surreal, engine::local::Db};
 use umbriel::{
-    All, E, Field, Model, NONE, Operatable, Param, Pickable, Render, Runnable,
-    SchemaGetter, SetterAssignable, SetterNumeric, Table, block, chain, define_function, for_,
+    All, E, Field, Model, NONE, Operatable, Param, Pickable, Render, Runnable, SchemaGetter,
+    SetterAssignable, SetterNumeric, Table, block, chain, define_function, for_,
     functions::math,
     object, object_partial, pick, query, query_raw,
     statements::{
-        CreateTarget, Returning, create, create_only, insert, return_, select, select_value,
-        update,
+        CreateTarget, Returning, create, create_only, insert, return_, select, select_value, update,
     },
     transaction,
 };
@@ -310,14 +309,15 @@ mod chain_macros {
             .collect::<Vec<_>>();
         insert(weapons).run(db.clone()).await.expect("inserted");
 
-        let created = create::<WeaponStats>(WeaponStats::table()).set(object_partial!(WeaponStats {
-            averageStrength: block! {
-                let strengths = select_value(strength).from(weapon);
-                let total = math::sum!(strengths);
-                let count = umbriel::functions::array::len!(strengths);
-                return math::ceil!((((total / count) * (count * total)) / (total + 4)) * 100);
-            }
-        }));
+        let created =
+            create::<WeaponStats>(WeaponStats::table()).set(object_partial!(WeaponStats {
+                averageStrength: block! {
+                    let strengths = select_value(strength).from(weapon);
+                    let total = math::sum!(strengths);
+                    let count = umbriel::functions::array::len!(strengths);
+                    return math::ceil!((((total / count) * (count * total)) / (total + 4)) * 100);
+                }
+            }));
         assert_eq!(
             created.to_debug_sql(),
             "CREATE weapon_stats SET averageStrength = {\n\

@@ -31,13 +31,14 @@ async fn a_subquery_reads_its_parent_record() {
     let older = select_value(Field::new("name"))
         .from(person.clone())
         .where_(Field::new("age").gt(parent_age));
-    let rows: Vec<BTreeMap<String, Value>> = select(arr![Field::new("name"), older.__as__("older")])
-        .from(person)
-        .order_by(order(Field::new("name")))
-        .decode()
-        .execute(&db)
-        .await
-        .expect("read");
+    let rows: Vec<BTreeMap<String, Value>> =
+        select(arr![Field::new("name"), older.__as__("older")])
+            .from(person)
+            .order_by(order(Field::new("name")))
+            .decode()
+            .execute(&db)
+            .await
+            .expect("read");
     let none: Value = read(&db, "RETURN [];").await;
     let alice: Value = read(&db, "RETURN ['Alice'];").await;
     assert_eq!(rows[0].get("older"), Some(&none));

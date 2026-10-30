@@ -10,8 +10,8 @@ use surrealdb::{
     types::{AlreadyExistsError, NotFoundError},
 };
 use umbriel::{
-    All, Error, Model, Raw, Runnable, SchemaGetter, SetterAssignable,
-    StatementContext, SurrealCrud, SurrealCrudNode,
+    All, Error, Model, Raw, Runnable, SchemaGetter, SetterAssignable, StatementContext,
+    SurrealCrud, SurrealCrudNode,
     statements::{CreateTarget, Returning, create, create_only, delete, select, update},
 };
 use umbriel_tests::*;
@@ -88,12 +88,11 @@ mod record_exists {
     async fn the_context_keeps_the_index_and_related_errors() {
         let db = db().await;
         apollo().create(&db).await.expect("created");
-        let error = Raw::new(
-            "RETURN 1; CREATE space_ship:apollo SET name = 'Apollo'; THROW 'later';",
-        )
-        .run(db.clone())
-        .await
-        .expect_err("a duplicate");
+        let error =
+            Raw::new("RETURN 1; CREATE space_ship:apollo SET name = 'Apollo'; THROW 'later';")
+                .run(db.clone())
+                .await
+                .expect_err("a duplicate");
         assert!(
             matches!(
                 &error,

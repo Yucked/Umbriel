@@ -13,9 +13,9 @@ use umbriel::{
     AliasName, Aliasable, All,
     CrudType::*,
     E, Error, Field, JwtAlgorithm, LinkOne, Merge, Model, NONE, Namespace, Node, Operatable, Param,
-    Patchable, Raw, Render, Runnable, SchemaGetter, SetterArray,
-    SetterAssignable, SetterNumeric, StatementContext, SurrealCrud, SurrealCrudNode, Table,
-    ValueLike, arr, block, chain, cond, count,
+    Patchable, Raw, Render, Runnable, SchemaGetter, SetterArray, SetterAssignable, SetterNumeric,
+    StatementContext, SurrealCrud, SurrealCrudNode, Table, ValueLike, arr, block, chain, cond,
+    count,
     functions::{math, search, string},
     statements::{
         AnalyzerFilter, CreateTarget, DiffOp, Returning, SnowballLanguage, Tokenizer, UserRole,
@@ -3036,7 +3036,8 @@ mod control_flow {
         assert_eq!(result.as_deref(), Some("adult"));
 
         let block_value: Option<i64> = return_(block(
-            chain(let_("total").equal_to(41)).chain(return_(Field::from(Param::new("total")).add(1))),
+            chain(let_("total").equal_to(41))
+                .chain(return_(Field::from(Param::new("total")).add(1))),
         ))
         .run(db.clone())
         .await

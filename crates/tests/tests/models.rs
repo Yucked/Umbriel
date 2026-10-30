@@ -13,8 +13,8 @@ use umbriel::{
     CrudType::*,
     E, Edge, Field, FlatPatch, LinkMany, LinkOne, LinkSelf, Model, ModelPatch, NONE, Node,
     Nullable, Operatable, Patch, Patchable, Raw, RecordId, RecordRange, Reference, Relate, Render,
-    Runnable, SchemaGetter, SetterArray, SetterAssignable, SetterNumeric,
-    SurrealCrud, SurrealCrudNode, cond, model,
+    Runnable, SchemaGetter, SetterArray, SetterAssignable, SetterNumeric, SurrealCrud,
+    SurrealCrudNode, cond, model,
     statements::{Returning, define_field, define_table, for_permission, relate, select},
     types::{self, Kind, RecordIdKey, SurrealValue, Value},
     value,
@@ -1222,7 +1222,10 @@ mod links {
     }
 
     /// The one record `statement` reads.
-    async fn one(statement: umbriel::statements::SelectStatement<Alien>, db: &Surreal<Db>) -> Alien {
+    async fn one(
+        statement: umbriel::statements::SelectStatement<Alien>,
+        db: &Surreal<Db>,
+    ) -> Alien {
         let mut found = statement.execute(db).await.expect("read");
         assert_eq!(found.len(), 1, "one record");
         found.remove(0)

@@ -27,8 +27,8 @@ use surrealdb::{
     types::{self, SurrealValue, Value},
 };
 use umbriel::{
-    All, E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate, Runnable,
-    SchemaGetter, SurrealCrud, SurrealCrudNode, model,
+    All, E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate, Runnable, SchemaGetter,
+    SurrealCrud, SurrealCrudNode, model,
     statements::{Returning, relate, return_, select},
 };
 use umbriel_tests::{read, statement_error};
@@ -418,7 +418,10 @@ mod scenarios {
     /// existed. The memory engine refuses `VERSION`, so this needs a versioned server store.
     pub async fn versioned_reads(db: &Surreal<Any>) {
         define_models(db).await;
-        person("alice", "Alice", 30).create(db).await.expect("created");
+        person("alice", "Alice", 30)
+            .create(db)
+            .await
+            .expect("created");
         let before_update: types::Datetime = read(db, "RETURN time::now();").await;
         Raw::new("UPDATE server_person:alice SET age = 31;")
             .run(db.clone())

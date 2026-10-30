@@ -7,9 +7,8 @@ use surrealdb::types::{self, SurrealValue, Value};
 use umbriel::{
     AliasName, Aliasable, All, CrudType, Database, E, EdgeDirection, Event, Field, Fragment,
     GENERATED_PARAM_PREFIX, Ident, Interval, JwtAlgorithm, Last, Model, NONE, NULL, Namespace,
-    Node, NumberLike, Operatable, Param, ParamNameError, Raw, Render, Runnable,
-    SchemaGetter, Table, TableIndex, ValueLike, any_other_edges, arr, bracket, cast, chain, cond,
-    index,
+    Node, NumberLike, Operatable, Param, ParamNameError, Raw, Render, Runnable, SchemaGetter,
+    Table, TableIndex, ValueLike, any_other_edges, arr, bracket, cast, chain, cond, index,
     statements::{let_, return_, select, select_value},
     this, value, where_,
 };
@@ -183,10 +182,7 @@ mod fields {
             Field::new("address").with_field("city").to_debug_sql(),
             "address.city"
         );
-        assert_eq!(
-            Field::new("display-name").to_debug_sql(),
-            "`display-name`"
-        );
+        assert_eq!(Field::new("display-name").to_debug_sql(), "`display-name`");
         assert_eq!(Field::from("name").to_debug_sql(), "name");
         assert_eq!(Field::new("tags").all().to_debug_sql(), "tags.*");
         assert_eq!(
@@ -589,9 +585,9 @@ mod operators {
             (Field::from_expr(ValueLike::value(10)).within(1, 10), true),
             (Field::from_expr(ValueLike::value(10)).between(1, 10), false),
             (
-                Field::from_expr(ValueLike::from(umbriel::GeometryLike::from(geo::Point::new(
-                    1.0, 1.0,
-                ))))
+                Field::from_expr(ValueLike::from(umbriel::GeometryLike::from(
+                    geo::Point::new(1.0, 1.0),
+                )))
                 .inside(geo::Polygon::new(
                     geo::LineString::from(vec![
                         (0.0, 0.0),

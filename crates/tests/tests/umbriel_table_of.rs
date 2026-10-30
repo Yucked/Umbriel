@@ -5,8 +5,7 @@
 use surrealdb::types::{self, Kind, SurrealValue};
 use umbriel::{
     E, Error, Field, LinkOne, Model, NONE, Node, Operatable, RecordId, Relate, Render,
-    SchemaGetter, SetterAssignable, SurrealCrud, SurrealCrudNode, TableOf,
-    model,
+    SchemaGetter, SetterAssignable, SurrealCrud, SurrealCrudNode, TableOf, model,
     statements::{
         Returning, create, create_only, delete_only, insert, relate, update, upsert_only,
     },
