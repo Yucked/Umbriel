@@ -790,8 +790,11 @@ impl<F: PlanFormat> ExplainStatement<F> {
     ///
     /// Fails as [`Returning::execute`] does.
     pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<F::Plan> {
+        // `take` decodes into `Option`, `Vec` or `Value` only, so the plan is decoded from its
+        // value.
         let mut results = execute(db, self.to_query()?).await?;
-        results.take::<F::Plan>(0).map_err(Error::Conversion)
+        let plan = results.take::<Value>(0).map_err(Error::Conversion)?;
+        F::Plan::from_value(plan).map_err(Error::Conversion)
     }
 }
 
