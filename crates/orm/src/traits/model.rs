@@ -4,9 +4,9 @@ use surrealdb::{
 };
 
 use crate::{
+    __private::ModelField,
     Alias, All, Conditional, Error, Field, IntoNodeClause, ModelMerge, ModelPatch, Raw, RecordId,
     RecordKey, RecordRange, Render, Result, StoredFields, TableOf,
-    __private::ModelField,
     execution::{classify, execute},
     query::table_of::select_range,
     statements::{DeleteStatement, SelectCount, SelectStatement, select, update::update},

@@ -23,7 +23,8 @@ pub(crate) fn graph_connection(
     let tokens: Vec<Token> = lexer.by_ref().collect();
     let text = |token: &Token| lexer.span_str(token.span);
     // A table name lexes as an identifier, or as a keyword when it spells one (such as `user`).
-    let is_name = |token: &Token| matches!(token.kind, TokenKind::Identifier | TokenKind::Keyword(_));
+    let is_name =
+        |token: &Token| matches!(token.kind, TokenKind::Identifier | TokenKind::Keyword(_));
     let is_out = |token: &Token| token.kind == TokenKind::ArrowRight;
     let is_in = |chevron: &Token, dash: &Token| {
         chevron.kind == TokenKind::LeftChefron

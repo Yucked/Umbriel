@@ -172,8 +172,8 @@ pub use remove_user::{RemoveUserStatement, UserPermissionScope, remove_user};
 pub use return_::{ReturnStatement, return_};
 pub use returning::{
     Cardinality, DiffOp, ExplainStatement, Explained, Many, One, PlanFormat, PlanJson, PlanText,
-    ReturnAfter, ReturnBefore, ReturnDefaultNone, ReturnDiff, ReturnFields, ReturnMode,
-    ReturnNone, ReturnNull, ReturnValue, Returning, Rows, explain,
+    ReturnAfter, ReturnBefore, ReturnDefaultNone, ReturnDiff, ReturnFields, ReturnMode, ReturnNone,
+    ReturnNull, ReturnValue, Returning, Rows, explain,
 };
 pub use select::{
     Order, Orderables, SelectCount, SelectStatement, Selectables, Splittables, order, select,

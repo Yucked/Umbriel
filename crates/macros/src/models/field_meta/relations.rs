@@ -9,7 +9,6 @@ pub(crate) enum EdgeDirection {
     In,
 }
 
-
 use super::*;
 // Tuple, Array (T, T), [T; N]
 
@@ -169,4 +168,3 @@ impl TryFrom<&Relate> for RelateAttribute {
         })
     }
 }
-

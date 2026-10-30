@@ -9,11 +9,12 @@ use surrealdb::{
 };
 
 use crate::{
-    All, Conditional, Error, Field, Filter, Model, RecordId, RecordKey, RecordRange, Result,
     __private::ModelField,
-    count,
+    All, Conditional, Error, Field, Filter, Model, RecordId, RecordKey, RecordRange, Result, count,
     execution::classify,
-    statements::{DeleteStatement, SelectCount, SelectStatement, delete::delete, select, select_value},
+    statements::{
+        DeleteStatement, SelectCount, SelectStatement, delete::delete, select, select_value,
+    },
 };
 
 /// The tables a model may be stored in, from its `TABLE` and `TABLE_PREFIX`: the default table,

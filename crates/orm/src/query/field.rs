@@ -85,7 +85,10 @@ impl Destructure {
     }
 
     /// `name.{ … }`.
-    pub fn nested(name: impl Into<Ident>, parts: impl IntoIterator<Item = impl Into<Destructure>>) -> Self {
+    pub fn nested(
+        name: impl Into<Ident>,
+        parts: impl IntoIterator<Item = impl Into<Destructure>>,
+    ) -> Self {
         Self::Nested(name.into(), parts.into_iter().map(Into::into).collect())
     }
 }

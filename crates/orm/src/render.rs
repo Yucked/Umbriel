@@ -297,11 +297,11 @@ impl<N: Render> Render for Checked<N> {
 /// formatter quotes a name equal to one (`surrealdb-common` `keywords::RESERVED_KEYWORD`), since
 /// the parser would read it as the keyword.
 const RESERVED_KEYWORDS: &[&str] = &[
-    "ALTER", "BEGIN", "BREAK", "CANCEL", "COMMIT", "CONTINUE", "CREATE", "DEFINE", "DELETE",
-    "FOR", "IF", "INFO", "INSERT", "KILL", "LIVE", "OPTION", "REBUILD", "RETURN", "RELATE",
-    "REMOVE", "SELECT", "LET", "SHOW", "SLEEP", "THROW", "UPDATE", "UPSERT", "USE", "DIFF",
-    "RAND", "NONE", "NULL", "AFTER", "BEFORE", "VALUE", "BY", "ALL", "TRUE", "FALSE", "WHERE",
-    "TABLE", "TB", "SEQUENCE", "FUNCTION",
+    "ALTER", "BEGIN", "BREAK", "CANCEL", "COMMIT", "CONTINUE", "CREATE", "DEFINE", "DELETE", "FOR",
+    "IF", "INFO", "INSERT", "KILL", "LIVE", "OPTION", "REBUILD", "RETURN", "RELATE", "REMOVE",
+    "SELECT", "LET", "SHOW", "SLEEP", "THROW", "UPDATE", "UPSERT", "USE", "DIFF", "RAND", "NONE",
+    "NULL", "AFTER", "BEFORE", "VALUE", "BY", "ALL", "TRUE", "FALSE", "WHERE", "TABLE", "TB",
+    "SEQUENCE", "FUNCTION",
 ];
 
 /// Writes `name` as a SurrealQL identifier: bare when it is a plain identifier, otherwise
