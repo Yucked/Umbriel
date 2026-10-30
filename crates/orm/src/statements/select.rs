@@ -793,7 +793,7 @@ impl SelectStatementInit {
         }
 
         if let Some(timeout) = &self.timeout {
-            out.push_str(" TIMEOUT ").push_inlined(timeout);
+            out.push_str(" TIMEOUT ").push(timeout);
         }
 
         if self.for_update {
@@ -971,8 +971,8 @@ impl<O, C: Cardinality> SelectStatement<O, C> {
 
     /// Sets the GROUP BY clause for the query.
     /// SurrealDB supports data aggregation and grouping, with support for multiple fields, nested fields, and aggregate functions.
-    /// In SurrealDB, every field which appears in the field projections of the select statement
-    /// (and which is not an aggregate function), must also be present in the GROUP BY clause.
+    /// A projected field that is neither grouped nor aggregated is not refused: SurrealDB 3.3.4
+    /// collects its values into an array per group.
     ///
     /// # Arguments
     ///
@@ -1042,7 +1042,8 @@ impl<O, C: Cardinality> SelectStatement<O, C> {
     }
 
     /// Groups all records in the query result into a single group. The result is untyped until
-    /// [`decode`](Self::decode) names it; an empty table gives no group at all, not an empty one.
+    /// [`decode`](Self::decode) names it. Over no records SurrealDB 3.3.4 still gives one group,
+    /// so `count()` reads 0.
     pub fn group_all(mut self) -> SelectStatement<Value, C> {
         self.select.group_all = true;
         self.retype()
@@ -1244,7 +1245,7 @@ impl<O, C: Cardinality> SelectStatement<O, C> {
     /// # Arguments
     ///
     /// * `duration` - a value that can represent a duration for the timeout: a duration, a
-    ///   `Field` or a `Param`. It is written as a literal.
+    ///   `Field` or a `Param`. A duration is bound as a query parameter.
     pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
         self.select.timeout = Some(duration.into());
         self
@@ -1336,8 +1337,8 @@ impl SelectCount {
         Self(statement.decode())
     }
 
-    /// Runs the count. A `GROUP ALL` over no records returns no group rather than a zero count,
-    /// so that reads as 0.
+    /// Runs the count. Over no records SurrealDB 3.3.4 returns a zero count; a result with no
+    /// row at all also reads as 0.
     ///
     /// # Errors
     ///

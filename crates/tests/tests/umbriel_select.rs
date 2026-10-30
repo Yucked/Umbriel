@@ -12,8 +12,8 @@ use surrealdb::{
     types::{Object, Value},
 };
 use umbriel::{
-    All, Error, Field, Model, Operatable, Param, Raw, Render, Runnable, SurrealCrud, Table,
-    Aliasable, arr, count,
+    Aliasable, All, Error, Field, Model, Node, Operatable, Param, Raw, Render, Runnable,
+    SchemaGetter, SetterAssignable, SurrealCrud, Table, arr, count,
     statements::{Returning, explain, order, select, select_value, update},
 };
 use umbriel_tests::*;
@@ -30,11 +30,12 @@ fn organization(key: &str, name: &str, age: u8) -> Organization {
 /// Acme Corp (30), Globex (20) and Initech (40).
 async fn organizations() -> Surreal<Db> {
     let db = db().await;
-    for (key, name, age) in [("acme", "Acme Corp", 30), ("globex", "Globex", 20), ("initech", "Initech", 40)] {
-        organization(key, name, age)
-            .save(&db)
-            .await
-            .expect("saved");
+    for (key, name, age) in [
+        ("acme", "Acme Corp", 30),
+        ("globex", "Globex", 20),
+        ("initech", "Initech", 40),
+    ] {
+        organization(key, name, age).save(&db).await.expect("saved");
     }
     db
 }
@@ -209,7 +210,10 @@ mod typed_results {
             .await
             .expect("read");
         assert_eq!(
-            found.iter().map(|org| org.name.as_str()).collect::<Vec<_>>(),
+            found
+                .iter()
+                .map(|org| org.name.as_str())
+                .collect::<Vec<_>>(),
             ["Globex", "Acme Corp", "Initech"]
         );
     }
@@ -391,19 +395,30 @@ mod ordering_and_grouping {
         assert_eq!(letters, ["a", "a", "b", "b"]);
     }
 
+    /// Pinned on 3.3.4: a non-aggregate field outside the group is not refused; each group
+    /// collects that field's values into an array.
     #[tokio::test]
-    async fn a_non_aggregate_field_outside_the_group_is_refused() {
+    async fn a_non_aggregate_field_outside_the_group_is_collected() {
         let db = organizations().await;
-        let refused = select(&[Field::new("name"), Field::new("age")])
+        let groups: Vec<Value> = select(&[Field::new("name"), Field::new("age")])
             .from(Organization::table())
             .group_by(Field::new("age"))
+            .order_by(order(Field::new("age")))
             .execute(&db)
-            .await;
-        assert!(refused.is_err(), "{refused:?}");
+            .await
+            .expect("grouped");
+        let expected: Vec<Value> = read(
+            &db,
+            "RETURN [{ age: 20, name: ['Globex'] }, { age: 30, name: ['Acme Corp'] }, \
+             { age: 40, name: ['Initech'] }];",
+        )
+        .await;
+        assert_eq!(groups, expected);
     }
 
+    /// Pinned on 3.3.4: `GROUP ALL` over no records still gives one group, with a zero count.
     #[tokio::test]
-    async fn an_empty_group_all_is_no_group() {
+    async fn an_empty_group_all_is_one_zero_group() {
         let db = db().await;
         run(&db, Raw::new("DEFINE TABLE organization;")).await;
         let groups: Vec<Value> = select(count!())
@@ -412,8 +427,12 @@ mod ordering_and_grouping {
             .execute(&db)
             .await
             .expect("read");
-        assert!(groups.is_empty(), "{groups:?}");
-        assert_eq!(Organization::count_all().execute(&db).await.expect("count"), 0);
+        let expected: Vec<Value> = read(&db, "RETURN [{ count: 0 }];").await;
+        assert_eq!(groups, expected);
+        assert_eq!(
+            Organization::count_all().execute(&db).await.expect("count"),
+            0
+        );
     }
 }
 
@@ -475,11 +494,23 @@ mod index_hints {
         assert_parses(&indexed.to_debug_sql());
         assert_parses(&scanned.to_debug_sql());
         let indexed = operations(&indexed.execute(db).await.expect("plan"));
-        assert!(indexed.iter().any(|step| step == "Iterate Index"), "{indexed:?}");
-        assert!(!indexed.iter().any(|step| step == "Iterate Table"), "{indexed:?}");
+        assert!(
+            indexed.iter().any(|step| step == "Iterate Index"),
+            "{indexed:?}"
+        );
+        assert!(
+            !indexed.iter().any(|step| step == "Iterate Table"),
+            "{indexed:?}"
+        );
         let scanned = operations(&scanned.execute(db).await.expect("plan"));
-        assert!(scanned.iter().any(|step| step == "Iterate Table"), "{scanned:?}");
-        assert!(!scanned.iter().any(|step| step.starts_with("Iterate Index")), "{scanned:?}");
+        assert!(
+            scanned.iter().any(|step| step == "Iterate Table"),
+            "{scanned:?}"
+        );
+        assert!(
+            !scanned.iter().any(|step| step.starts_with("Iterate Index")),
+            "{scanned:?}"
+        );
         let names: Vec<String> =
             read(db, "SELECT VALUE name FROM organization ORDER BY name;").await;
         assert_eq!(names, ["Acme Corp", "Globex", "Initech"]);
@@ -489,7 +520,11 @@ mod index_hints {
     async fn select_follows_its_hint() {
         let db = indexed().await;
         let age = Field::new("age");
-        let base = || select(All).from(Organization::table()).where_(age.equal(30));
+        let base = || {
+            select(All)
+                .from(Organization::table())
+                .where_(age.equal(30))
+        };
         let indexed = operators(
             &base()
                 .with_index(Field::new("organization_age"))
@@ -645,7 +680,8 @@ mod for_update {
             .run(db.clone())
             .await
             .expect("committed");
-        let read: Vec<Organization> = results.take(0).expect("records");
+        // 3.3.4 gives `BEGIN` its own `NONE` result (`dbs/executor.rs`), so the SELECT is second.
+        let read: Vec<Organization> = results.take(1).expect("records");
         assert_eq!(read.len(), 1);
     }
 
@@ -702,7 +738,10 @@ mod storage {
     #[tokio::test]
     async fn the_memory_engine_refuses_version() {
         let db = organizations().await;
-        let at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).single().expect("a time");
+        let at = Utc
+            .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
+            .single()
+            .expect("a time");
         let refused = select(All)
             .from(Organization::table())
             .version(at)
@@ -731,10 +770,9 @@ mod storage {
         assert_eq!(names, ["Acme Corp", "Globex"]);
     }
 
-    /// `TEMPFILES` with the SDK's temporary directory: the same rows, and a plan that shows the
-    /// planner took the clause. The plan shows the clause, not whether files were used: the
-    /// planner refuses TopK pushdown for `TEMPFILES` whatever the configuration
-    /// (`exec/planner/select/pipeline.rs`).
+    /// `TEMPFILES` with the SDK's temporary directory: the same rows, and a plan that sorts on
+    /// disk. 3.3.4 plans `ExternalSortByKey` only when the statement has `TEMPFILES` and the
+    /// database has a temporary directory (`exec/planner/select/pipeline.rs`).
     #[tokio::test]
     async fn tempfiles_sorts_through_the_temporary_directory() {
         let directory = tempfile::tempdir().expect("a temporary directory");
@@ -748,10 +786,7 @@ mod storage {
             .await
             .expect("namespace and database");
         for (key, name, age) in [("acme", "Acme Corp", 30), ("globex", "Globex", 20)] {
-            organization(key, name, age)
-                .save(&db)
-                .await
-                .expect("saved");
+            organization(key, name, age).save(&db).await.expect("saved");
         }
         let sorted = || {
             select_value(Field::new("name"))
@@ -763,11 +798,11 @@ mod storage {
         let in_files = sorted().tempfiles().execute(&db).await.expect("read");
         assert_eq!(in_memory, in_files);
 
-        let plan: String = explain(sorted().limit(1).tempfiles())
+        let plan: String = explain(sorted().tempfiles())
             .execute(&db)
             .await
             .expect("plan");
-        assert!(plan.contains("topk_pushdown: no (tempfiles)"), "{plan}");
+        assert!(plan.contains("ExternalSortByKey"), "{plan}");
     }
 }
 
@@ -779,18 +814,91 @@ mod timeout {
     #[tokio::test]
     async fn a_duration_parameter_is_accepted() {
         let db = organizations().await;
-        let mut results = umbriel::chain(
-            umbriel::statements::let_("limit").equal_to(Duration::from_secs(5)),
-        )
-        .chain(
-            select(All)
-                .from(Organization::table())
-                .timeout(Param::new("limit")),
-        )
-        .run(db.clone())
-        .await
-        .expect("ran");
+        let mut results =
+            umbriel::chain(umbriel::statements::let_("limit").equal_to(Duration::from_secs(5)))
+                .chain(
+                    select(All)
+                        .from(Organization::table())
+                        .timeout(Param::new("limit")),
+                )
+                .run(db.clone())
+                .await
+                .expect("ran");
         let found: Vec<Organization> = results.take(1).expect("records");
         assert_eq!(found.len(), 3);
+    }
+
+    /// D6: since a duration parameter works, every statement binds its `TIMEOUT` instead of
+    /// writing it inline. Debug SQL still shows the literal.
+    #[test]
+    fn every_statement_binds_its_timeout() {
+        let five = Duration::from_secs(5);
+        let org = Organization::schema();
+        let queries = [
+            select(All)
+                .from(Organization::table())
+                .timeout(five)
+                .to_query(),
+            umbriel::statements::create::<Organization>(Organization::table())
+                .set(org.name.equal_to("Acme Corp"))
+                .timeout(five)
+                .to_query(),
+            update::<Organization>(Organization::table())
+                .set(org.age.equal_to(1u8))
+                .timeout(five)
+                .to_query(),
+            umbriel::statements::upsert::<Organization>(Organization::table())
+                .set(org.age.equal_to(1u8))
+                .timeout(five)
+                .to_query(),
+            umbriel::statements::delete::<Organization>(Organization::table())
+                .timeout(five)
+                .to_query(),
+            umbriel::statements::insert(organization("acme", "Acme Corp", 30))
+                .timeout(five)
+                .to_query(),
+            umbriel::statements::relate::<CompanyLikeUser>(
+                Company::with(Company::id("acme"))
+                    .like__(umbriel::E)
+                    .user(User::id("alice")),
+            )
+            .timeout(five)
+            .to_query(),
+        ];
+        for query in queries {
+            let query = query.expect("renders");
+            assert!(query.sql().contains(" TIMEOUT $_p"), "{}", query.sql());
+            assert_parses(query.sql());
+        }
+        assert_eq!(
+            select(All)
+                .from(Organization::table())
+                .timeout(five)
+                .to_debug_sql(),
+            "SELECT * FROM organization TIMEOUT 5s;"
+        );
+    }
+
+    /// A bound `TIMEOUT` is enforced: the statement fails with `TimedOut`.
+    #[tokio::test]
+    async fn a_bound_timeout_cuts_a_slow_select_short() {
+        let db = db().await;
+        let failed = select(All)
+            .from(umbriel::functions::sleep::sleep!(Duration::from_millis(
+                500
+            )))
+            .timeout(Duration::from_millis(10))
+            .execute(&db)
+            .await;
+        match failed {
+            Err(Error::Statement { source, .. }) => assert!(
+                matches!(
+                    source.query_details(),
+                    Some(surrealdb::types::QueryError::TimedOut { .. })
+                ),
+                "expected a timeout, got {source}"
+            ),
+            other => panic!("expected a statement error, got {other:?}"),
+        }
     }
 }
