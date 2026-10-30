@@ -4,7 +4,7 @@ use syn::{Expr, Meta, Token, punctuated::Punctuated};
 
 use crate::models::*;
 
-/// Expands `#[umbriel::model(node | edge | object, table = "…", value = manual)]`.
+/// Expands `#[umbriel::model(node | edge | view | object, table = "…", value = manual)]`.
 ///
 /// The struct gains the SDK's `SurrealValue` derive (unless `value = manual`) and the hidden
 /// `ModelCodegen` derive, which receives the model kind and table as `#[orm(..)]`.
@@ -29,12 +29,15 @@ fn expand_model_attribute(args: TokenStream, item: TokenStream) -> syn::Result<T
     for arg in &args {
         match arg {
             Meta::Path(path)
-                if path.is_ident("node") || path.is_ident("edge") || path.is_ident("object") =>
+                if path.is_ident("node")
+                    || path.is_ident("edge")
+                    || path.is_ident("view")
+                    || path.is_ident("object") =>
             {
                 if kind.replace(path.clone()).is_some() {
                     return Err(syn::Error::new_spanned(
                         path,
-                        "a model is exactly one of `node`, `edge` or `object`",
+                        "a model is exactly one of `node`, `edge`, `view` or `object`",
                     ));
                 }
             }
@@ -58,8 +61,8 @@ fn expand_model_attribute(args: TokenStream, item: TokenStream) -> syn::Result<T
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "expected `node`, `edge` or `object`, `table = \"…\"`, `table_prefix = \"…\"` \
-                     or `value = manual`",
+                    "expected `node`, `edge`, `view` or `object`, `table = \"…\"`, \
+                     `table_prefix = \"…\"` or `value = manual`",
                 ));
             }
         }
@@ -68,7 +71,7 @@ fn expand_model_attribute(args: TokenStream, item: TokenStream) -> syn::Result<T
     let kind = kind.ok_or_else(|| {
         syn::Error::new(
             proc_macro2::Span::call_site(),
-            "expected the model kind: `node`, `edge` or `object`",
+            "expected the model kind: `node`, `edge`, `view` or `object`",
         )
     })?;
     let table = table.map(|table| quote!(, table = #table));
@@ -158,7 +161,10 @@ impl ModelReceiver {
         let merge_ident = struct_name_ident.merge_ident();
         let merge_struct = self.merge_struct_tokens(&code_gen)?;
 
+        // A view implements `Model` but not `Node`: `create`, `insert` and graph traversals start
+        // from nodes, and a view's records are never written.
         let model_kind_impl = match data_type {
+            DataType::Node if self.view => quote!(),
             DataType::Node => self.node_tokens(&code_gen)?,
             DataType::Edge => self.edge_tokens(&code_gen)?,
             DataType::Object => quote!(
@@ -201,7 +207,14 @@ impl ModelReceiver {
             )
         });
 
-        let node_only = matches!(data_type, DataType::Node).then(|| {
+        // Every typed write requires `Writable`, which only nodes and edges have.
+        let writable = (matches!(data_type, DataType::Node | DataType::Edge) && !self.view).then(|| {
+            quote!(
+                impl #impl_generics #crate_name::Writable for #struct_name_ident #ty_generics #where_clause {}
+            )
+        });
+
+        let node_only = (matches!(data_type, DataType::Node) && !self.view).then(|| {
             let Codegen {
                 aliases_struct_fields_types_kv,
                 aliases_struct_fields_names_kv,
@@ -244,6 +257,8 @@ impl ModelReceiver {
             }
 
             #model_kind_impl
+
+            #writable
 
             #record_model
 
@@ -377,7 +392,7 @@ impl ModelReceiver {
             ..
         } = VariablesModelMacro::new();
         let Codegen {
-            serialized_fmt_db_field_names_instance: serializable_fields,
+            object_field_names,
             linked_fields,
             link_one_fields,
             link_self_fields,
@@ -398,7 +413,7 @@ impl ModelReceiver {
             stored_fields,
             ..
         } = code_gen.common_idents();
-        let object_keys_count = serializable_fields.len() + flattened_field_keys.len();
+        let object_keys_count = object_field_names.len() + flattened_field_keys.len();
         let record_id_field = record_id_field.as_ref().ok_or_else(|| {
             syn::Error::new_spanned(
                 &self.ident,
@@ -409,14 +424,46 @@ impl ModelReceiver {
             "A partial update of [`{}`]: each field left as `Patch::Keep` is unchanged.",
             self.ident
         );
+        // A view's records are never written, so it has no patch.
+        let patch = (!self.view).then(|| {
+            quote!(
+                #[doc = #patch_doc]
+                #[allow(non_snake_case)]
+                #vis struct #patch_ident #impl_generics #where_clause {
+                    #( #patch_fields, )*
+                    #[doc(hidden)]
+                    #vis #_____struct_marker_ident: #struct_marker,
+                }
+
+                impl #impl_generics ::std::default::Default for #patch_ident #ty_generics #where_clause {
+                    fn default() -> Self {
+                        Self {
+                            #( #patch_defaults, )*
+                            #_____struct_marker_ident: ::std::marker::PhantomData,
+                        }
+                    }
+                }
+
+                impl #impl_generics #crate_name::ModelPatch for #patch_ident #ty_generics #where_clause {
+                    type Model = #struct_name_ident #ty_generics;
+
+                    fn into_setters(self) -> ::std::vec::Vec<#crate_name::Setter> {
+                        let mut setters = ::std::vec::Vec::new();
+                        #( #patch_setters )*
+                        setters
+                    }
+                }
+            )
+        });
 
         Ok(quote!(
             impl #impl_generics #struct_name_ident #ty_generics #where_clause {
-                /// The keys `object!` requires: the stored fields, and each flattened field, which
-                /// it then rejects since a flattened object is not one assignable field.
+                /// The keys `object!` requires: the stored fields other than computed ones, which
+                /// are never written, and each flattened field, which it then rejects since a
+                /// flattened object is not one assignable field.
                 #[doc(hidden)]
                 pub const fn __get_serializable_field_names() -> [&'static str; #object_keys_count] {
-                    [#( #serializable_fields, )* #( #flattened_field_keys, )*]
+                    [#( #object_field_names, )* #( #flattened_field_keys, )*]
                 }
             }
 
@@ -483,32 +530,7 @@ impl ModelReceiver {
                 }
             }
 
-            #[doc = #patch_doc]
-            #[allow(non_snake_case)]
-            #vis struct #patch_ident #impl_generics #where_clause {
-                #( #patch_fields, )*
-                #[doc(hidden)]
-                #vis #_____struct_marker_ident: #struct_marker,
-            }
-
-            impl #impl_generics ::std::default::Default for #patch_ident #ty_generics #where_clause {
-                fn default() -> Self {
-                    Self {
-                        #( #patch_defaults, )*
-                        #_____struct_marker_ident: ::std::marker::PhantomData,
-                    }
-                }
-            }
-
-            impl #impl_generics #crate_name::ModelPatch for #patch_ident #ty_generics #where_clause {
-                type Model = #struct_name_ident #ty_generics;
-
-                fn into_setters(self) -> ::std::vec::Vec<#crate_name::Setter> {
-                    let mut setters = ::std::vec::Vec::new();
-                    #( #patch_setters )*
-                    setters
-                }
-            }
+            #patch
         ))
     }
 
@@ -537,7 +559,10 @@ impl ModelReceiver {
              nested objects combine with the stored ones.",
             self.ident
         );
-        let model_merge = matches!(self.data_type()?, DataType::Node | DataType::Edge).then(|| {
+        // A view's records are never written, so its merge type does not merge into it.
+        let model_merge = (matches!(self.data_type()?, DataType::Node | DataType::Edge)
+            && !self.view)
+            .then(|| {
             quote!(
                 impl #impl_generics #crate_name::ModelMerge for #merge_ident #ty_generics #where_clause {
                     type Model = #struct_name_ident #ty_generics;

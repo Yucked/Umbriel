@@ -35,7 +35,8 @@ impl Codegen<'_> {
     pub fn field_defintion_db(&self) -> ExtractorResult<Vec<DefineFieldStatementToken>> {
         let field_receiver = self.field_receiver();
         let model_attributes = self.table_derive_attributes();
-        if self.skip_field() {
+        // A view's records are computed by its `AS SELECT` query, so it defines no fields.
+        if self.skip_field() || model_attributes.receiver().view {
             return Ok(vec![]);
         }
 
@@ -78,9 +79,34 @@ impl Codegen<'_> {
             define_array_field_item_methods.push(quote!(.assert(#item_assert)));
         }
 
-        // `#[orm(value = …)]` is documented as the field's default, so it emits `DEFAULT`.
+        // `#[orm(value = …)]` is documented as the field's default, so it emits `DEFAULT`;
+        // SurrealQL's `VALUE` is `value_expr`.
         if let Some(value) = field_receiver.value.as_ref() {
             define_field_methods.push(quote!(.default(#value)));
+        }
+
+        if let Some(default_always) = field_receiver.default_always.as_ref() {
+            define_field_methods.push(quote!(.default_always(#default_always)));
+        }
+
+        if let Some(value_expr) = field_receiver.value_expr.as_ref() {
+            define_field_methods.push(quote!(.value(#value_expr)));
+        }
+
+        if let Some(computed) = field_receiver.computed.as_ref() {
+            define_field_methods.push(quote!(.computed(#computed)));
+        }
+
+        if field_receiver.readonly {
+            define_field_methods.push(quote!(.readonly()));
+        }
+
+        if field_receiver.flexible {
+            define_field_methods.push(quote!(.flexible()));
+        }
+
+        if let Some(comment) = field_receiver.comment.as_ref() {
+            define_field_methods.push(quote!(.comment(#comment)));
         }
 
         if let Some(permissions) = field_receiver.permissions.as_ref() {
@@ -114,6 +140,8 @@ impl Codegen<'_> {
         Ok(all_field_defintions)
     }
 
+    /// Checks that `value` and `default_always`, the field's defaults, can hold a value of its
+    /// database type.
     fn static_assertion_field_value(
         &self,
         model_attrs: &ModelAttributes,
@@ -123,20 +151,15 @@ impl Codegen<'_> {
         if self.is_untyped_id()? {
             return Ok(StaticAssertionToken::default());
         }
-        let field_type = field_receiver.field_type_db_original(model_attrs)?;
+        let Some(field_type) = field_receiver.field_type_db_original(model_attrs)? else {
+            return Ok(StaticAssertionToken::default());
+        };
 
-        match field_type {
-            Some(field_type) => {
-                let static_assertion = field_receiver
-                    .value
-                    .as_ref()
-                    .map_or(StaticAssertionToken::default(), |v| {
-                        v.get_default_value_static_assertion(field_type.inner())
-                    });
-                Ok(static_assertion)
-            }
-            None => Ok(StaticAssertionToken::default()),
-        }
+        let assertions = [&field_receiver.value, &field_receiver.default_always]
+            .into_iter()
+            .flatten()
+            .map(|default| default.get_default_value_static_assertion(field_type.inner()));
+        Ok(quote!(#( #assertions )*).into())
     }
 
     fn validate_field_attributes(&self) -> ExtractorResult<()> {
@@ -145,6 +168,12 @@ impl Codegen<'_> {
             define,
             assert: assert_,
             value,
+            default_always,
+            value_expr,
+            computed,
+            readonly,
+            flexible,
+            comment,
             permissions,
             item_assert,
             relate,
@@ -152,33 +181,65 @@ impl Codegen<'_> {
         } = field_receiver;
         let ident = field_receiver.ident()?;
 
-        if define.is_some()
-            && (assert_.is_some()
-                || value.is_some()
-                || permissions.is_some()
-                || item_assert.is_some())
-        {
+        let clauses = assert_.is_some()
+            || value.is_some()
+            || default_always.is_some()
+            || value_expr.is_some()
+            || computed.is_some()
+            || *readonly
+            || *flexible
+            || comment.is_some()
+            || permissions.is_some()
+            || item_assert.is_some();
+
+        if define.is_some() && clauses {
             return Err(syn::Error::new_spanned(
                 &ident,
                 "`define` gives the whole definition, so it cannot be combined with `assert`, \
-                 `value`, `permissions` or `item_assert`",
+                 `value`, `default_always`, `value_expr`, `computed`, `readonly`, `flexible`, \
+                 `comment`, `permissions` or `item_assert`",
             )
             .into());
         }
 
-        if relate.is_some()
-            && (define.is_some()
-                || assert_.is_some()
+        if value.is_some() && default_always.is_some() {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "a field has one default: `value` or `default_always`, not both",
+            )
+            .into());
+        }
+
+        if computed.is_some()
+            && (assert_.is_some()
                 || value.is_some()
-                || permissions.is_some()
+                || default_always.is_some()
+                || value_expr.is_some()
+                || *readonly
+                || *flexible
                 || item_assert.is_some())
         {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "a `computed` field is evaluated on read, so it cannot also have `assert`, \
+                 `value`, `default_always`, `value_expr`, `readonly`, `flexible` or `item_assert`",
+            )
+            .into());
+        }
+
+        if relate.is_some() && (define.is_some() || clauses) {
             return Err(syn::Error::new_spanned(
                 ident,
                 r#"This is a read-only relation field and does not allow the following attributes:
     define,
     assert,
     value,
+    default_always,
+    value_expr,
+    computed,
+    readonly,
+    flexible,
+    comment,
     permissions,
     item_assert"#,
             )

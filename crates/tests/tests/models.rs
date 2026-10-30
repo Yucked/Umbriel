@@ -14,7 +14,7 @@ use umbriel::{
     E, Edge, Field, FlatPatch, LinkMany, LinkOne, LinkSelf, Model, ModelPatch, NONE, Node,
     Nullable, Operatable, Patch, Patchable, Raw, RecordId, RecordRange, Reference, Relate, Render,
     Runnable, SchemaGetter, SetterArray, SetterAssignable, SetterNumeric, SurrealCrud,
-    SurrealCrudNode, cond, model,
+    SurrealCrudNode, SurrealRead, cond, model,
     statements::{Returning, define_field, define_table, for_permission, relate, select},
     types::{self, Kind, RecordIdKey, SurrealValue, Value},
     value,
@@ -387,7 +387,6 @@ DEFINE FIELD data ON TABLE planet TYPE int;"
         let expected = define_table(StudentWithGranularAttributes::table())
             .drop()
             .schemafull()
-            .as_(select(All).from(Student::table()))
             .permissions(student_permissions());
         assert_eq!(
             StudentWithGranularAttributes::define_table().as_str(),

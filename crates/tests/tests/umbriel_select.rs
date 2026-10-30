@@ -13,7 +13,7 @@ use surrealdb::{
 };
 use umbriel::{
     Aliasable, All, Error, Field, Model, Node, Operatable, Param, Raw, Render, Runnable,
-    SchemaGetter, SetterAssignable, SurrealCrud, Table, arr, count,
+    SchemaGetter, SetterAssignable, SurrealCrud, SurrealRead, Table, arr, count,
     statements::{Returning, explain, order, select, select_value, update},
 };
 use umbriel_tests::*;

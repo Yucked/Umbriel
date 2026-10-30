@@ -50,7 +50,7 @@ pub fn table_resources_derive(input: TokenStream) -> TokenStream {
 
 /// Declares a union of models for mixed-model writes; documented on its re-export,
 /// `umbriel::Models`.
-#[proc_macro_derive(Models)]
+#[proc_macro_derive(Models, attributes(models))]
 pub fn models_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     models_union::derive_models(&input)

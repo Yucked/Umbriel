@@ -9,7 +9,7 @@
 use std::{marker::PhantomData, ops::Deref};
 
 use crate::{
-    Conditional, DurationLike, Edge, Field, Filter, Model, Renderer, SchemaGetter, ValueLike,
+    Conditional, DurationLike, Edge, Field, Filter, Model, Renderer, SchemaGetter, ValueLike, Writable,
     render::Checked,
 };
 
@@ -43,12 +43,12 @@ use super::{
 ///     "DELETE user WHERE age < 18 RETURN BEFORE;"
 /// );
 /// ```
-pub fn delete<T: Model>(targettables: impl Into<TargettablesForUpdate>) -> DeleteStatement<T> {
+pub fn delete<T: Writable>(targettables: impl Into<TargettablesForUpdate>) -> DeleteStatement<T> {
     DeleteStatement::new(targettables.into().checked::<T>())
 }
 
 /// Creates a new DELETE ONLY statement over a single record.
-pub fn delete_only<T: Model>(
+pub fn delete_only<T: Writable>(
     targettables: impl Into<TargettablesForUpdate>,
 ) -> DeleteStatement<T, ReturnDefaultNone, One> {
     DeleteStatement::new(targettables.into().checked::<T>())

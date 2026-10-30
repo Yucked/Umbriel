@@ -1,15 +1,35 @@
 //! `#[derive(Models)]`: an enum with one variant per model, each holding that model.
 
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::{Data, DeriveInput, Fields, Type, spanned::Spanned};
 
 use crate::helpers::get_crate_name;
 
+/// Whether the union is marked `#[models(read_only)]`, the only `models` setting.
+fn is_read_only(input: &DeriveInput) -> syn::Result<bool> {
+    let mut read_only = false;
+    for attr in input.attrs.iter().filter(|attr| attr.path().is_ident("models")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("read_only") {
+                read_only = true;
+                Ok(())
+            } else {
+                Err(meta.error("the only `models` setting is `read_only`"))
+            }
+        })?;
+    }
+    Ok(read_only)
+}
+
 /// Implements `SurrealValue`, decoding a record into the variant whose table family holds its id,
 /// and `Models`, with a `const` assertion that no two variants' families overlap.
+///
+/// Unless the union is `#[models(read_only)]`, it also implements `WritableModels`, with a check
+/// that every variant's model is `Writable`, spanned on the variant's type so a view is named.
 pub(crate) fn derive_models(input: &DeriveInput) -> syn::Result<TokenStream> {
     let crate_name = get_crate_name(false);
+    let read_only = is_read_only(input)?;
     let ident = &input.ident;
     if !input.generics.params.is_empty() {
         return Err(syn::Error::new(
@@ -65,6 +85,21 @@ pub(crate) fn derive_models(input: &DeriveInput) -> syn::Result<TokenStream> {
         )
     });
     let overlap_message = format!("two variants of `{ident}` have overlapping table families");
+    let writable = (!read_only).then(|| {
+        let checks = variants.iter().map(|(_, model)| {
+            quote_spanned!(model.span()=> __writable::<#model>();)
+        });
+        quote!(
+            impl #crate_name::WritableModels for #ident {}
+
+            // `insert_any` writes every variant, so each must be writable; a union holding a
+            // view is marked `#[models(read_only)]` instead.
+            const _: fn() = || {
+                fn __writable<T: #crate_name::Writable>() {}
+                #( #checks )*
+            };
+        )
+    });
 
     Ok(quote!(
         impl #types::SurrealValue for #ident {
@@ -116,5 +151,7 @@ pub(crate) fn derive_models(input: &DeriveInput) -> syn::Result<TokenStream> {
                 .is_none(),
             #overlap_message
         );
+
+        #writable
     ))
 }

@@ -28,7 +28,7 @@ pub use errors::*;
 pub use helpers::*;
 pub use query::*;
 pub use render::{Fragment, GENERATED_PARAM_PREFIX, Query, Render, Renderer};
-pub use statements::Models;
+pub use statements::{Models, WritableModels};
 pub use statements::select::CanOrder;
 pub use statements::utils::*;
 pub use traits::*;

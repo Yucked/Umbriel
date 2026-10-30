@@ -28,7 +28,7 @@ use surrealdb::{
 };
 use umbriel::{
     All, E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate, Runnable, SchemaGetter,
-    SurrealCrud, SurrealCrudNode, model,
+    SurrealCrud, SurrealCrudNode, SurrealRead, model,
     statements::{Returning, relate, return_, select},
 };
 use umbriel_tests::{read, statement_error};

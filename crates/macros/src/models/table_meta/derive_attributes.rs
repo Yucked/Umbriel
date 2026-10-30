@@ -56,6 +56,11 @@ pub struct ModelReceiver {
     #[darling(default)]
     pub(crate) object: bool,
 
+    /// `view`: a read-only table defined `AS SELECT`. It is a node for type inference and its
+    /// schema, but implements neither `Node` nor `Writable`, and has no patch, merge or setters.
+    #[darling(default)]
+    pub(crate) view: bool,
+
     #[darling(default)]
     pub(crate) table: Option<TableNameIdent>,
 
@@ -77,6 +82,14 @@ pub struct ModelReceiver {
 
     pub(crate) permissions: Option<Permissions>,
 
+    /// `kind = "any" | "normal"`: the table's `TYPE`. Edges' `TYPE RELATION` belongs to #14.
+    #[darling(default)]
+    pub(crate) kind: Option<syn::LitStr>,
+
+    /// `comment = "…"`: the table definition's `COMMENT`.
+    #[darling(default)]
+    pub(crate) comment: Option<String>,
+
     #[darling(default)]
     pub(crate) define: Option<AttributeDefine>,
 }
@@ -90,14 +103,16 @@ impl ModelReceiver {
         &self.generics
     }
 
+    /// The model's kind. A view is a node here: it is a table of records like one, and only its
+    /// generated traits differ (see [`ModelReceiver::view`]).
     pub fn data_type(&self) -> ExtractorResult<DataType> {
-        match (self.node, self.edge, self.object) {
-            (true, false, false) => Ok(DataType::Node),
-            (false, true, false) => Ok(DataType::Edge),
-            (false, false, true) => Ok(DataType::Object),
+        match (self.node, self.edge, self.object, self.view) {
+            (true, false, false, false) | (false, false, false, true) => Ok(DataType::Node),
+            (false, true, false, false) => Ok(DataType::Edge),
+            (false, false, true, false) => Ok(DataType::Object),
             _ => Err(syn::Error::new_spanned(
                 &self.ident,
-                "a model is exactly one of `node`, `edge` or `object`",
+                "a model is exactly one of `node`, `edge`, `view` or `object`",
             )
             .into()),
         }
@@ -117,7 +132,7 @@ impl ModelReceiver {
             )),
             (_, None) => Err(syn::Error::new_spanned(
                 &self.ident,
-                "a `node` or `edge` model needs `table = \"…\"`",
+                "a `node`, `edge` or `view` model needs `table = \"…\"`",
             )
             .into()),
         }
@@ -157,22 +172,66 @@ impl ModelReceiver {
             ref schemafull,
             ref as_,
             ref permissions,
+            ref kind,
+            ref comment,
             ref define,
+            view,
             ..
         } = *self;
 
         let crate_name = get_crate_name(false);
 
         if (define.is_some())
-            && (drop.is_some() || as_.is_some() || schemafull.is_some() || permissions.is_some())
+            && (drop.is_some()
+                || as_.is_some()
+                || schemafull.is_some()
+                || permissions.is_some()
+                || kind.is_some()
+                || comment.is_some())
         {
             return Err(syn::Error::new_spanned(
                 &self.ident,
                 "`define` gives the whole definition, so it cannot be combined with `drop`, `as`, \
-                 `schemafull` or `permissions`",
+                 `schemafull`, `permissions`, `kind` or `comment`",
             )
             .into());
         }
+
+        // A view's records come from its query, so it needs one; any other model's records are
+        // written, so a query would make every write fail.
+        match (view, as_.is_some() || define.is_some()) {
+            (true, false) => {
+                return Err(syn::Error::new_spanned(
+                    &self.ident,
+                    "a `view` needs its query: `#[orm(as_ = …)]`",
+                )
+                .into());
+            }
+            (false, _) if as_.is_some() => {
+                return Err(syn::Error::new_spanned(
+                    &self.ident,
+                    "`as_` makes the table a read-only view; declare the model with \
+                     `#[umbriel::model(view, …)]`",
+                )
+                .into());
+            }
+            _ => {}
+        }
+
+        let kind = match kind {
+            None => None,
+            Some(kind) => match kind.value().as_str() {
+                "any" => Some(quote!(.kind_any())),
+                "normal" => Some(quote!(.kind_normal())),
+                _ => {
+                    return Err(syn::Error::new_spanned(
+                        kind,
+                        "`kind` is `\"any\"` or `\"normal\"`; an edge's `TYPE RELATION` is not set here",
+                    )
+                    .into());
+                }
+            },
+        };
 
         let definition = match define {
             Some(define) => define.to_token_stream(),
@@ -189,6 +248,12 @@ impl ModelReceiver {
 
                 if schemafull.is_some() {
                     define_table_methods.push(quote!(.schemafull()))
+                }
+
+                define_table_methods.extend(kind);
+
+                if let Some(comment) = comment {
+                    define_table_methods.push(quote!(.comment(#comment)))
                 }
 
                 if let Some(permissions) = permissions {

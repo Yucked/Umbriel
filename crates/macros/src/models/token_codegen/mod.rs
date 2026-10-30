@@ -45,6 +45,9 @@ pub struct Codegen<'a> {
     /// are not serialized because they are not directly part of the struct.
     /// They are readonly fields that are accessed through the relation field.
     pub serialized_fmt_db_field_names_instance: Vec<SerializableField>,
+    /// The stored names `object!` takes: the stored fields without the computed ones, which are
+    /// never written.
+    pub object_field_names: Vec<SerializableField>,
     /// The name of the all fields that are linked i.e line_one, line_many, or line_self.
     pub linked_fields: Vec<LinkedField>,
     /// The names of link_one fields

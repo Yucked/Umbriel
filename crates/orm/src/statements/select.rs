@@ -661,7 +661,7 @@ pub fn select(selectables: impl Into<Selectables>) -> SelectStatementInit {
 
 /// `SELECT VALUE field`: one value per record instead of an object. The result is untyped until
 /// [`decode`](SelectStatement::decode) names its type; a model's
-/// [`select_value`](crate::SurrealCrud::select_value) types it by the field.
+/// [`select_value`](crate::SurrealRead::select_value) types it by the field.
 pub fn select_value(selectable_value: impl Into<Field>) -> SelectStatementInit {
     let mut select_statement = select(selectable_value);
     select_statement.selection_type = SelectionType::SelectValue;
@@ -831,7 +831,7 @@ impl SelectStatementInit {
 /// with `ONLY`.
 ///
 /// What `O` guarantees depends on how it was chosen. A model's
-/// [`select`](crate::SurrealCrud::select) and [`select_value`](crate::SurrealCrud::select_value)
+/// [`select`](crate::SurrealRead::select) and [`select_value`](crate::SurrealRead::select_value)
 /// type it from the model and its field. [`decode`](Self::decode) names it, which types the
 /// decoding but checks nothing about the selected shape: a projection, `FETCH`, `OMIT`, `GROUP`
 /// or `SPLIT` that does not match fails with [`Error::Conversion`](crate::Error::Conversion)

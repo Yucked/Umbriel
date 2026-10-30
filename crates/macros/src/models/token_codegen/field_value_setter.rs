@@ -157,6 +157,19 @@ impl Codegen<'_> {
             quote!().into()
         };
 
+        // A computed field, and any field of a view, is never written: without these, `.set(…)`,
+        // patches and `object!` refuse it at compile time.
+        let assignments = (!field_receiver.is_computed() && !table_attributes.receiver().view)
+            .then(|| {
+                quote!(
+                    #field_type_setter_patcher_impls
+
+                    #numeric_trait
+
+                    #array_trait
+                )
+            });
+
         let field_setter_impls = quote!(
             // Keeps the schema field's own case, e.g. `__4User7foo_barField`.
             #[doc(hidden)]
@@ -239,11 +252,7 @@ impl Codegen<'_> {
 
             impl #impl_generics #crate_name::__private::ModelField<#model_type, #field_type> for #wrapper #where_clause {}
 
-            #field_type_setter_patcher_impls
-
-            #numeric_trait
-
-            #array_trait
+            #assignments
         );
         Ok(FieldSetterImplTokens(field_setter_impls))
     }

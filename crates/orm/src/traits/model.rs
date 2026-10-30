@@ -95,9 +95,9 @@ pub trait Model: Sized + SurrealValue + 'static {
     fn get_field_meta() -> Vec<FieldMetadata>;
 }
 
-/// Record operations, run through the SDK's typed methods, plus statement builders for queries
-/// over the model's table.
-pub trait SurrealCrud: Model + Send {
+/// Reads of a model's records, run through the SDK's typed methods, plus statement builders for
+/// queries over the model's table. Every model has them, views included.
+pub trait SurrealRead: Model + Send {
     /// Fetches a record by id.
     fn get(
         db: &Surreal<impl Connection>,
@@ -110,6 +110,90 @@ pub trait SurrealCrud: Model + Send {
         }
     }
 
+    /// Fetches the records whose keys fall in `range`, e.g. `User::get_range(&db, a..b)`, in the
+    /// range's own table.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::QueryBuilder`] when the range's bounds name different tables.
+    fn get_range(
+        db: &Surreal<impl Connection>,
+        range: impl Into<RecordRange<Self>>,
+    ) -> impl Future<Output = Result<Vec<Self>>> + Send {
+        let parts = range.into().into_parts();
+        async move {
+            let (table, keys) = parts?;
+            select_range(db, &table, keys).await
+        }
+    }
+
+    /// Fetches the records with the given ids that exist, in one SDK call. Missing ids return
+    /// nothing.
+    fn get_many(
+        db: &Surreal<impl Connection>,
+        ids: &[RecordId<Self>],
+    ) -> impl Future<Output = Result<Vec<Self>>> + Send {
+        let ids = ids
+            .iter()
+            .map(|id| types::Value::RecordId(id.into()))
+            .collect::<Vec<_>>();
+        async move {
+            db.select::<Vec<Self>>(ids)
+                .await
+                .map_err(|error| classify(error, None))
+        }
+    }
+
+    /// `SELECT * FROM table` over the default table, decoded as the model;
+    /// [`TableOf::select`] reads another member.
+    fn select() -> SelectStatement<Self> {
+        TableOf::<Self>::default().select()
+    }
+
+    /// `SELECT VALUE field` over the default table, decoded as the field's own type `V`. The
+    /// field must be one of this model's generated schema fields.
+    fn select_value<F, V>(field: F) -> SelectStatement<V>
+    where
+        F: ModelField<Self, V>,
+        V: SurrealValue,
+    {
+        TableOf::<Self>::default().select_value(field)
+    }
+
+    /// Finds records of the default table by filtering; [`TableOf::find_where`] searches
+    /// another member.
+    fn find_where(filter: impl Conditional + Clone) -> SelectStatement<Self> {
+        TableOf::<Self>::default().find_where(filter)
+    }
+
+    /// Counts filtered records of the default table.
+    fn count_where(filter: impl Conditional + Clone) -> SelectCount {
+        TableOf::<Self>::default().count_where(filter)
+    }
+
+    /// Counts every record of the default table.
+    fn count_all() -> SelectCount {
+        TableOf::<Self>::default().count_all()
+    }
+}
+
+impl<T> SurrealRead for T where T: Model + Send {}
+
+/// A model whose records can be written: nodes and edges, but not views, whose records
+/// SurrealDB computes from their `AS SELECT` query.
+///
+/// Every typed write builder (`update`, `upsert`, `delete`, `insert_any`, …) requires it, so a
+/// write to a view does not compile. `#[umbriel::model]` is its only supported implementor; a
+/// derive expands in the crate that declares the model, so the trait cannot be sealed.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be written to",
+    label = "not writable",
+    note = "views are read-only: SurrealDB computes their records from the `AS SELECT` query"
+)]
+pub trait Writable: Model {}
+
+/// Writes to a model's records, run through the SDK's typed methods. Views have none.
+pub trait SurrealCrud: SurrealRead + Writable {
     /// Creates or replaces the record with this model's id (`UPSERT … CONTENT`), returning the
     /// stored record.
     fn save(self, db: &Surreal<impl Connection>) -> impl Future<Output = Result<Self>> + Send {
@@ -215,79 +299,13 @@ pub trait SurrealCrud: Model + Send {
         async move { TableOf::<Self>::default().insert_many(db, records).await }
     }
 
-    /// Fetches the records whose keys fall in `range`, e.g. `User::get_range(&db, a..b)`, in the
-    /// range's own table.
-    ///
-    /// # Errors
-    ///
-    /// [`Error::QueryBuilder`] when the range's bounds name different tables.
-    fn get_range(
-        db: &Surreal<impl Connection>,
-        range: impl Into<RecordRange<Self>>,
-    ) -> impl Future<Output = Result<Vec<Self>>> + Send {
-        let parts = range.into().into_parts();
-        async move {
-            let (table, keys) = parts?;
-            select_range(db, &table, keys).await
-        }
-    }
-
-    /// Fetches the records with the given ids that exist, in one SDK call. Missing ids return
-    /// nothing.
-    fn get_many(
-        db: &Surreal<impl Connection>,
-        ids: &[RecordId<Self>],
-    ) -> impl Future<Output = Result<Vec<Self>>> + Send {
-        let ids = ids
-            .iter()
-            .map(|id| types::Value::RecordId(id.into()))
-            .collect::<Vec<_>>();
-        async move {
-            db.select::<Vec<Self>>(ids)
-                .await
-                .map_err(|error| classify(error, None))
-        }
-    }
-
-    /// `SELECT * FROM table` over the default table, decoded as the model;
-    /// [`TableOf::select`] reads another member.
-    fn select() -> SelectStatement<Self> {
-        TableOf::<Self>::default().select()
-    }
-
-    /// `SELECT VALUE field` over the default table, decoded as the field's own type `V`. The
-    /// field must be one of this model's generated schema fields.
-    fn select_value<F, V>(field: F) -> SelectStatement<V>
-    where
-        F: ModelField<Self, V>,
-        V: SurrealValue,
-    {
-        TableOf::<Self>::default().select_value(field)
-    }
-
-    /// Finds records of the default table by filtering; [`TableOf::find_where`] searches
-    /// another member.
-    fn find_where(filter: impl Conditional + Clone) -> SelectStatement<Self> {
-        TableOf::<Self>::default().find_where(filter)
-    }
-
-    /// Counts filtered records of the default table.
-    fn count_where(filter: impl Conditional + Clone) -> SelectCount {
-        TableOf::<Self>::default().count_where(filter)
-    }
-
-    /// Counts every record of the default table.
-    fn count_all() -> SelectCount {
-        TableOf::<Self>::default().count_all()
-    }
-
     /// Deletes records of the default table by filtering.
     fn delete_where(filter: impl Conditional + Clone) -> DeleteStatement<Self> {
         TableOf::<Self>::default().delete_where(filter)
     }
 }
 
-impl<T> SurrealCrud for T where T: Model + Send {}
+impl<T> SurrealCrud for T where T: Writable + Send {}
 
 /// Record operations for nodes.
 pub trait SurrealCrudNode: Node + Send {

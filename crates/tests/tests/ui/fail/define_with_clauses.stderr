@@ -1,4 +1,4 @@
-error: `define` gives the whole definition, so it cannot be combined with `assert`, `value`, `permissions` or `item_assert`
+error: `define` gives the whole definition, so it cannot be combined with `assert`, `value`, `default_always`, `value_expr`, `computed`, `readonly`, `flexible`, `comment`, `permissions` or `item_assert`
   --> tests/ui/fail/define_with_clauses.rs:12:9
    |
 12 |     pub age: u8,

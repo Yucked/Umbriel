@@ -10,7 +10,8 @@ use surrealdb::{
 
 use crate::{
     __private::ModelField,
-    All, Conditional, Error, Field, Filter, Model, RecordId, RecordKey, RecordRange, Result, count,
+    All, Conditional, Error, Field, Filter, Model, RecordId, RecordKey, RecordRange, Result,
+    Writable, count,
     execution::classify,
     statements::{
         DeleteStatement, SelectCount, SelectStatement, delete::delete, select, select_value,
@@ -111,7 +112,8 @@ const fn under_prefix(name: &str, prefix: &str) -> bool {
 /// table; [`Model::table_of`] checks a name chosen at run time.
 ///
 /// The table-based record operations live here, so they work on any member; the
-/// [`SurrealCrud`](crate::SurrealCrud) versions use the default table.
+/// [`SurrealRead`](crate::SurrealRead) and [`SurrealCrud`](crate::SurrealCrud) versions use the default
+/// table.
 ///
 /// # Examples
 ///
@@ -174,12 +176,16 @@ impl<T: Model> TableOf<T> {
     /// # Errors
     ///
     /// [`Error::QueryBuilder`] before anything is sent when a record's id names another table,
-    /// and [`Error::RecordExists`] when an id already exists.
+    /// and [`Error::RecordExists`] when an id already exists. Views are read-only, so it is not
+    /// offered for them.
     pub async fn insert_many(
         &self,
         db: &Surreal<impl Connection>,
         records: Vec<T>,
-    ) -> Result<Vec<T>> {
+    ) -> Result<Vec<T>>
+    where
+        T: Writable,
+    {
         if let Some(record) = records
             .iter()
             .find(|record| record.record_id().table != self.table)
@@ -250,8 +256,12 @@ impl<T: Model> TableOf<T> {
         )
     }
 
-    /// Deletes the records of this table matching `filter`.
-    pub fn delete_where(&self, filter: impl Conditional + Clone) -> DeleteStatement<T> {
+    /// Deletes the records of this table matching `filter`. Views are read-only, so it is not
+    /// offered for them.
+    pub fn delete_where(&self, filter: impl Conditional + Clone) -> DeleteStatement<T>
+    where
+        T: Writable,
+    {
         delete::<T>(self.clone()).where_(filter)
     }
 }

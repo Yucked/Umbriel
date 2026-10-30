@@ -65,8 +65,8 @@ pub fn as_fn() -> SelectStatement {
     select(umbriel::All).from(Student::table())
 }
 
-/// Table settings given as paths to functions.
-#[model(node, table = "student_fn_attrs")]
+/// Table settings given as paths to functions. `as_` makes it a view.
+#[model(view, table = "student_fn_attrs")]
 #[orm(drop, schemafull, as_ = as_fn, permissions = student_permissions)]
 #[derive(Debug, Clone)]
 pub struct StudentFnAttrs {
@@ -78,7 +78,6 @@ pub struct StudentFnAttrs {
 #[orm(
     drop,
     schemafull,
-    as_ = select(umbriel::All).from(Student::table()),
     permissions = student_permissions()
 )]
 #[surreal(rename_all = "camelCase")]

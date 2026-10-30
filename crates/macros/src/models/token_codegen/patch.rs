@@ -14,9 +14,12 @@ impl Codegen<'_> {
         let field_receiver = self.field_receiver();
         let casing = model_attributes.casing()?;
 
+        // Relations are read through traversals, and a computed value is discarded when written:
+        // neither has a patch, a merge or an `object!` key.
         if field_receiver
             .to_relation_type(model_attributes)
             .is_relate_graph()
+            || field_receiver.is_computed()
         {
             return Ok(());
         }

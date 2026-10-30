@@ -18,6 +18,7 @@ use surrealdb::types::SurrealValue;
 
 use crate::{
     Conditional, DurationLike, Filter, Model, ModelMerge, PatchOp, Renderer, Setter, ValueLike,
+    Writable,
 };
 
 use super::{
@@ -55,7 +56,7 @@ use super::{
 ///     "UPSERT user:alice SET name = 'Alice';"
 /// );
 /// ```
-pub fn upsert<T: Model>(targettables: impl Into<TargettablesForUpdate>) -> UpsertStatement<T> {
+pub fn upsert<T: Writable>(targettables: impl Into<TargettablesForUpdate>) -> UpsertStatement<T> {
     UpsertStatement {
         body: UpdateBody::new::<T>(targettables.into()),
         mode: ReturnAfter::default_mode(),
@@ -64,7 +65,7 @@ pub fn upsert<T: Model>(targettables: impl Into<TargettablesForUpdate>) -> Upser
 }
 
 /// Creates an UPSERT ONLY statement, returning a single object.
-pub fn upsert_only<T: Model>(
+pub fn upsert_only<T: Writable>(
     targettables: impl Into<TargettablesForUpdate>,
 ) -> UpsertStatement<T, ReturnAfter<T>, One> {
     UpsertStatement {

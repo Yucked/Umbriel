@@ -18,7 +18,7 @@ use surrealdb::types::{self, SurrealValue, Table, ToSql};
 
 use crate::{
     Conditional, DurationLike, Filter, Model, ModelMerge, PatchOp, RecordId, Renderer, Setter,
-    TableOf, TableSpec, ValueLike, render::Checked,
+    TableOf, TableSpec, ValueLike, Writable, render::Checked,
 };
 
 use super::{
@@ -53,7 +53,7 @@ use super::{
 ///     "UPDATE user:alice SET score += 5 RETURN VALUE score;"
 /// );
 /// ```
-pub fn update<T: Model>(targettables: impl Into<TargettablesForUpdate>) -> UpdateStatement<T> {
+pub fn update<T: Writable>(targettables: impl Into<TargettablesForUpdate>) -> UpdateStatement<T> {
     UpdateStatement {
         body: UpdateBody::new::<T>(targettables.into()),
         mode: ReturnAfter::default_mode(),
@@ -62,7 +62,7 @@ pub fn update<T: Model>(targettables: impl Into<TargettablesForUpdate>) -> Updat
 }
 
 /// Creates a new UPDATE ONLY statement, returning a single object.
-pub fn update_only<T: Model>(
+pub fn update_only<T: Writable>(
     targettables: impl Into<TargettablesForUpdate>,
 ) -> UpdateStatement<T, ReturnAfter<T>, One> {
     UpdateStatement {

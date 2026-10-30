@@ -20,6 +20,10 @@ impl Codegen<'_> {
 
         self.serialized_fmt_db_field_names_instance
             .push(quote!(#db_field_name).into());
+        // A computed value is never written, so `object!` does not require or take one.
+        if !field_receiver.is_computed() {
+            self.object_field_names.push(quote!(#db_field_name).into());
+        }
 
         let field = || quote!(#crate_name::Field::new(#db_field_name));
 

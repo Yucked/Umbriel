@@ -44,7 +44,7 @@ rendered, so a member may hold any characters.
   record whose id names another member fails before the statement runs.
 - Table-based helpers (`select`, `select_value`, `find_where`, `count_where`, `count_all`,
   `delete_where`, `insert_many`)
-  are on `TableOf`; the `SurrealCrud` versions use the default table. Id-based helpers use the id's
+  are on `TableOf`; the `SurrealRead` and `SurrealCrud` versions use the default table. Id-based helpers use the id's
   table.
 - Membership is a typing contract, not an authorization boundary. The generated schema defines
   only the default table, and a family's link fields are typed `record`, since a prefix cannot be

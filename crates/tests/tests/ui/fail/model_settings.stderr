@@ -1,4 +1,4 @@
-error: a `node` or `edge` model needs `table = "…"`
+error: a `node`, `edge` or `view` model needs `table = "…"`
  --> tests/ui/fail/model_settings.rs:5:12
   |
 5 | pub struct User {
@@ -10,7 +10,7 @@ error: an embedded `object` model has no table
 10 | #[model(object, table = "address")]
    |                         ^^^^^^^^^
 
-error: a model is exactly one of `node`, `edge` or `object`
+error: a model is exactly one of `node`, `edge`, `view` or `object`
   --> tests/ui/fail/model_settings.rs:16:15
    |
 16 | #[model(node, edge, table = "team")]

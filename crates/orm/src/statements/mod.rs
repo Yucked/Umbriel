@@ -188,7 +188,8 @@ impl<S: Statement + ?Sized> Render for StatementBody<'_, S> {
 }
 
 pub use any::{
-    AnyTarget, CreateAnyStatement, InsertAnyStatement, Models, create_any, create_any_only,
+    AnyTarget, CreateAnyStatement, InsertAnyStatement, Models, WritableModels, create_any,
+    create_any_only,
     insert_any,
 };
 pub use break_::{BreakStatement, break_};

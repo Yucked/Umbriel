@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 
 use surrealdb::types::{self, SurrealValue, Table, ToSql, Value};
 
-use crate::{DurationLike, Model, RecordId, Renderer, Setter, TableOf, TableSpec, ValueLike};
+use crate::{DurationLike, RecordId, Renderer, Setter, TableOf, TableSpec, ValueLike, Writable};
 
 use super::{
     Cardinality, Many, One, ReturnAfter, ReturnDiff, ReturnMode, ReturnNone, ReturnNull, Returning,
@@ -16,6 +16,10 @@ use super::{
 /// A union of models, one per variant, from `#[derive(Models)]`. No two variants' table families
 /// overlap, which the derive checks at compile time, so every record decodes into at most one
 /// variant.
+///
+/// The derive also implements [`WritableModels`], which [`insert_any`] needs, and checks that
+/// every variant can be written. A union holding a view is marked `#[models(read_only)]`: it
+/// decodes reads but cannot be inserted.
 pub trait Models: SurrealValue + 'static {
     /// The table family of each variant, in declaration order.
     const MEMBERS: &'static [TableSpec];
@@ -25,6 +29,18 @@ pub trait Models: SurrealValue + 'static {
         Self::MEMBERS.iter().any(|member| member.accepts(table))
     }
 }
+
+/// A [`Models`] union whose every variant can be written, which [`insert_any`] requires.
+///
+/// `#[derive(Models)]` implements it, with a compile-time check that every variant's model is
+/// [`Writable`](crate::Writable): a union holding a view fails to compile unless it is marked
+/// `#[models(read_only)]`, which leaves this trait out so the union can still decode reads.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` holds a model that cannot be written",
+    label = "a read-only union",
+    note = "`insert_any` writes every variant; a `#[models(read_only)]` union only decodes reads"
+)]
+pub trait WritableModels: Models {}
 
 /// The first pair of overlapping families among `members`, by index. The `Models` derive asserts
 /// in a `const` that there is none.
@@ -55,19 +71,19 @@ enum AnyTargetKind {
     Record(types::RecordId),
 }
 
-impl<T: Model> From<RecordId<T>> for AnyTarget {
+impl<T: Writable> From<RecordId<T>> for AnyTarget {
     fn from(id: RecordId<T>) -> Self {
         Self(AnyTargetKind::Record(id.into()))
     }
 }
 
-impl<T: Model> From<&RecordId<T>> for AnyTarget {
+impl<T: Writable> From<&RecordId<T>> for AnyTarget {
     fn from(id: &RecordId<T>) -> Self {
         Self(AnyTargetKind::Record(id.into()))
     }
 }
 
-impl<T: Model> From<TableOf<T>> for AnyTarget {
+impl<T: Writable> From<TableOf<T>> for AnyTarget {
     fn from(table: TableOf<T>) -> Self {
         Self(AnyTargetKind::Table(table.into()))
     }
@@ -254,7 +270,7 @@ impl<M: Models, R: ReturnMode, C: Cardinality> Returning for CreateAnyStatement<
 ///     "INSERT [{ id: user:alice }, { id: post:hello }];"
 /// );
 /// ```
-pub fn insert_any<M: Models>(records: impl IntoIterator<Item = M>) -> InsertAnyStatement<M> {
+pub fn insert_any<M: WritableModels>(records: impl IntoIterator<Item = M>) -> InsertAnyStatement<M> {
     InsertAnyStatement {
         records: records.into_iter().map(SurrealValue::into_value).collect(),
         ignore: false,

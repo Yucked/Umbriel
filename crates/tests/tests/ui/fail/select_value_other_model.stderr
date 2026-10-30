@@ -13,12 +13,12 @@ help: the trait `ModelField<User, _>` is not implemented for `__4Team4nameField`
  9 | #[model(node, table = "team")]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: for that trait implementation, expected `Team`, found `User`
-note: required by a bound in `umbriel::SurrealCrud::select_value`
+note: required by a bound in `umbriel::SurrealRead::select_value`
   --> $WORKSPACE/crates/orm/src/traits/model.rs
    |
    |     fn select_value<F, V>(field: F) -> SelectStatement<V>
    |        ------------ required by a bound in this associated function
    |     where
    |         F: ModelField<Self, V>,
-   |            ^^^^^^^^^^^^^^^^^^^ required by this bound in `SurrealCrud::select_value`
+   |            ^^^^^^^^^^^^^^^^^^^ required by this bound in `SurrealRead::select_value`
    = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` (in Nightly builds, run with -Z macro-backtrace for more info)

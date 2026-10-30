@@ -70,12 +70,46 @@ pub struct MyFieldReceiver {
     #[darling(default)]
     pub(crate) define: Option<AttributeDefine>,
 
+    /// `value = …`: the field's `DEFAULT`, applied when a record is created without it.
     #[darling(default)]
     pub(crate) value: Option<AttributeValue>,
+
+    /// `default_always = …`: `DEFAULT ALWAYS`, also applied when an update leaves the field
+    /// `NONE`.
+    #[darling(default)]
+    pub(crate) default_always: Option<AttributeValue>,
+
+    /// `value_expr = …`: SurrealQL's `VALUE`, evaluated and stored on every write.
+    #[darling(default)]
+    pub(crate) value_expr: Option<AttributeValue>,
+
+    /// `computed = …`: `COMPUTED`, evaluated on every read and never stored. The field has no
+    /// patch, merge or setter, and `object!` does not take it.
+    #[darling(default)]
+    pub(crate) computed: Option<AttributeValue>,
+
+    /// `readonly`: `READONLY`, so an update that changes the field fails.
+    #[darling(default)]
+    pub(crate) readonly: bool,
+
+    /// `flexible`: `FLEXIBLE`, so objects in the field keep keys without definitions.
+    #[darling(default)]
+    pub(crate) flexible: bool,
+
+    /// `comment = "…"`: the field definition's `COMMENT`.
+    #[darling(default)]
+    pub(crate) comment: Option<String>,
 
     #[darling(default)]
     pub(crate) permissions: Option<Permissions>,
 
     #[darling(default)]
     pub(crate) item_assert: Option<AttributeItemAssert>,
+}
+
+impl MyFieldReceiver {
+    /// Whether the field is `COMPUTED`: read only, so it has no patch, merge or setter.
+    pub fn is_computed(&self) -> bool {
+        self.computed.is_some()
+    }
 }

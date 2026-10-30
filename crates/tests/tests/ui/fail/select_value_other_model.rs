@@ -1,4 +1,4 @@
-use umbriel::{SchemaGetter, SurrealCrud, model, RecordId};
+use umbriel::{SchemaGetter, SurrealRead, model, RecordId};
 
 #[model(node, table = "user")]
 pub struct User {
