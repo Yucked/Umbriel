@@ -224,3 +224,28 @@ impl<const N: usize> From<[Raw; N]> for Permissions {
         Self::RawStatementList(value.to_vec())
     }
 }
+
+/// A single permission without `FOR`: `PERMISSIONS NONE | FULL | WHERE @condition`, as params and
+/// functions take it.
+#[derive(Clone, Debug)]
+pub(crate) enum PermissionValue {
+    None,
+    Full,
+    Where(Filter),
+}
+
+impl Render for PermissionValue {
+    fn render(&self, out: &mut Renderer) {
+        match self {
+            Self::None => {
+                out.push_str(" PERMISSIONS NONE");
+            }
+            Self::Full => {
+                out.push_str(" PERMISSIONS FULL");
+            }
+            Self::Where(condition) => {
+                out.push_str(" PERMISSIONS WHERE ").push(condition);
+            }
+        }
+    }
+}

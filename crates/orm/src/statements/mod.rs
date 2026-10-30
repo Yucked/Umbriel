@@ -33,17 +33,7 @@ pub(crate) mod insert;
 pub(crate) mod let_;
 pub(crate) mod live_select;
 pub(crate) mod relate;
-pub(crate) mod remove_access;
-pub(crate) mod remove_analyzer;
-pub(crate) mod remove_database;
-pub(crate) mod remove_event;
-pub(crate) mod remove_field;
-pub(crate) mod remove_function;
-pub(crate) mod remove_index;
-pub(crate) mod remove_namespace;
-pub(crate) mod remove_param;
-pub(crate) mod remove_table;
-pub(crate) mod remove_user;
+pub(crate) mod remove;
 pub(crate) mod return_;
 pub(crate) mod returning;
 pub(crate) mod select;
@@ -116,6 +106,78 @@ macro_rules! impl_definition {
 }
 pub(crate) use impl_definition;
 
+/// What a `DEFINE` does when the resource already exists.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) enum DefineKind {
+    /// Fails.
+    #[default]
+    Default,
+    /// `OVERWRITE`: replaces the definition.
+    Overwrite,
+    /// `IF NOT EXISTS`: keeps the existing definition.
+    IfNotExists,
+}
+
+/// The options every `DEFINE` statement takes: what happens when the resource exists, and its
+/// comment.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct DefineOptions {
+    pub(crate) kind: DefineKind,
+    pub(crate) comment: Option<String>,
+}
+
+impl DefineOptions {
+    /// Writes ` OVERWRITE` or ` IF NOT EXISTS`, which follow `DEFINE <KIND>`.
+    pub(crate) fn render_kind(&self, out: &mut Renderer) {
+        match self.kind {
+            DefineKind::Default => {}
+            DefineKind::Overwrite => {
+                out.push_str(" OVERWRITE");
+            }
+            DefineKind::IfNotExists => {
+                out.push_str(" IF NOT EXISTS");
+            }
+        }
+    }
+
+    /// Writes ` COMMENT '…'`. Definitions render inline, so the comment is a string literal.
+    pub(crate) fn render_comment(&self, out: &mut Renderer) {
+        if let Some(comment) = &self.comment {
+            out.push_str(" COMMENT ")
+                .push_value(&surrealdb::types::Value::String(comment.clone()));
+        }
+    }
+}
+
+/// Adds `overwrite`, `if_not_exists` and `comment` to a `DEFINE` statement holding a
+/// `DefineOptions` in its `options` field.
+macro_rules! impl_define_options {
+    ($statement:ty) => {
+        impl $statement {
+            /// `OVERWRITE`: replaces the definition if the resource already exists. Replaces an
+            /// earlier [`if_not_exists`](Self::if_not_exists).
+            pub fn overwrite(mut self) -> Self {
+                self.options.kind = $crate::statements::DefineKind::Overwrite;
+                self
+            }
+
+            /// `IF NOT EXISTS`: keeps the existing definition if the resource already exists.
+            /// Replaces an earlier [`overwrite`](Self::overwrite).
+            pub fn if_not_exists(mut self) -> Self {
+                self.options.kind = $crate::statements::DefineKind::IfNotExists;
+                self
+            }
+
+            /// `COMMENT`: a description stored with the definition and shown by `INFO`.
+            pub fn comment(mut self, comment: impl Into<String>) -> Self {
+                self.options.comment = Some(comment.into());
+                self
+            }
+        }
+    };
+}
+pub(crate) use impl_define_options;
+
 /// A statement's body as a node of its own.
 pub(crate) struct StatementBody<'a, S: ?Sized>(pub(crate) &'a S);
 
@@ -147,7 +209,7 @@ pub use define_function::{DefineFunctionStatement, FunctionArgument, define_func
 pub use define_index::{DefineIndexStatement, FullTextAnalyzer, define_index, fulltext_analyzer};
 pub use define_namespace::{DefineNamespaceStatement, define_namespace};
 pub use define_param::{DefineParamStatement, define_param};
-pub use define_table::{DefineTableStatement, define_table};
+pub use define_table::{DefineTableStatement, TableRelation, define_table, table_relation};
 pub use define_user::{DefineUserStatement, UserRole, define_user};
 pub use delete::{DeleteStatement, delete, delete_edges, delete_only};
 pub use for_loop::{ForLoopStatement, for_};
@@ -158,17 +220,13 @@ pub use insert::{InsertStatement, Insertables, input_of, insert, insert_relation
 pub use let_::{LetStatement, let_};
 pub use live_select::{LiveSelectStatement, live};
 pub use relate::{RelateOrUpdateStatement, RelateStatement, relate, relate_only};
-pub use remove_access::{RemoveAccessStatement, remove_access};
-pub use remove_analyzer::{RemoveAnalyzerStatement, remove_analyzer};
-pub use remove_database::{RemoveDatabaseStatement, remove_database};
-pub use remove_event::{RemoveEventStatement, remove_event};
-pub use remove_field::{RemoveFieldStatement, remove_field};
-pub use remove_function::{RemoveFunctionStatement, remove_function};
-pub use remove_index::{RemoveIndexStatement, remove_index};
-pub use remove_namespace::{RemoveNamespaceStatement, remove_namespace};
-pub use remove_param::{RemoveParamStatement, remove_param};
-pub use remove_table::{RemoveTableStatement, remove_table};
-pub use remove_user::{RemoveUserStatement, UserPermissionScope, remove_user};
+pub use remove::{
+    RemoveAccessStatement, RemoveAnalyzerStatement, RemoveDatabaseStatement, RemoveEventStatement,
+    RemoveFieldStatement, RemoveFunctionStatement, RemoveIndexStatement, RemoveNamespaceStatement,
+    RemoveParamStatement, RemoveTableStatement, RemoveUserStatement, UserPermissionScope,
+    remove_access, remove_analyzer, remove_database, remove_event, remove_field, remove_function,
+    remove_index, remove_namespace, remove_param, remove_table, remove_user,
+};
 pub use return_::{ReturnStatement, return_};
 pub use returning::{
     Cardinality, DiffOp, ExplainStatement, Explained, Many, One, PlanFormat, PlanJson, PlanText,

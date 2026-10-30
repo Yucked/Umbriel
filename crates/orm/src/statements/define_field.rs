@@ -1,27 +1,28 @@
-use surrealdb::types::{Kind, Table};
+use surrealdb::types::{Kind, KindLiteral, Table};
 
-use crate::{Conditional, Field, Filter, Renderer, ValueLike};
+use crate::{Conditional, Field, Filter, Name, Renderer, ValueLike};
 
 use super::{
-    Statement,
+    DefineOptions, Statement,
     for_permission::{Permissions, PermissionsClause},
-    impl_definition,
+    impl_define_options, impl_definition,
 };
 
 // DEFINE FIELD statement
 // The DEFINE FIELD statement allows you to instantiate a named field on a table, enabling you to set the field's data type, set a default value, apply assertions to protect data consistency, and set permissions specifying what operations can be performed on the field.
 //
 // Statement syntax
-// DEFINE FIELD @name ON [ TABLE ] @table
-// 	[ TYPE @type ]
-// 	[ DEFAULT @expression ]
+// DEFINE FIELD [ OVERWRITE | IF NOT EXISTS ] @name ON [ TABLE ] @table
+// 	[ TYPE @type [ FLEXIBLE ] ]
+// 	[ READONLY ]
+// 	[ DEFAULT [ ALWAYS ] @expression ]
 // 	[ VALUE @expression ]
 // 	[ ASSERT @expression ]
+// 	[ COMMENT @string ]
 // 	[ PERMISSIONS [ NONE | FULL
 // 		| FOR select @expression
 // 		| FOR create @expression
 // 		| FOR update @expression
-// 		| FOR delete @expression
 // 	] ]
 //
 // DEFINE FIELD @name ON [ TABLE ] @table
@@ -33,13 +34,52 @@ use super::{
 #[derive(Clone, Debug)]
 pub struct DefineFieldStatement {
     field: Field,
-    table: Option<Table>,
+    table: Option<Name<Table>>,
+    options: DefineOptions,
     type_: Option<Kind>,
-    default: Option<ValueLike>,
+    flexible: bool,
+    readonly: bool,
+    default: Option<FieldDefault>,
     value: Option<ValueLike>,
     computed: Option<ValueLike>,
     assert: Option<Filter>,
     permissions: PermissionsClause,
+}
+
+/// A field's `DEFAULT`, applied only when the field is missing or on every write.
+#[derive(Clone, Debug)]
+pub(crate) enum FieldDefault {
+    /// `DEFAULT @expression`.
+    Set(ValueLike),
+    /// `DEFAULT ALWAYS @expression`.
+    Always(ValueLike),
+}
+
+impl FieldDefault {
+    /// Writes ` DEFAULT [ALWAYS] @expression`.
+    pub(crate) fn render(&self, out: &mut Renderer) {
+        match self {
+            Self::Set(value) => {
+                out.push_str(" DEFAULT ").push(value);
+            }
+            Self::Always(value) => {
+                out.push_str(" DEFAULT ALWAYS ").push(value);
+            }
+        }
+    }
+}
+
+/// Whether `kind` admits an object anywhere in its structure, which `FLEXIBLE` requires. The
+/// same rule as SurrealDB 3.3.4's parser (`surrealdb-sql` `kind_contains_object`).
+pub(crate) fn kind_contains_object(kind: &Kind) -> bool {
+    match kind {
+        Kind::Object | Kind::Literal(KindLiteral::Object(_)) => true,
+        Kind::Either(kinds) | Kind::Literal(KindLiteral::Array(kinds)) => {
+            kinds.iter().any(kind_contains_object)
+        }
+        Kind::Array(inner, _) | Kind::Set(inner, _) => kind_contains_object(inner),
+        _ => false,
+    }
 }
 
 /// Define a new field.
@@ -73,7 +113,10 @@ pub fn define_field(fieldable: impl Into<Field>) -> DefineFieldStatement {
     DefineFieldStatement {
         field: fieldable.into(),
         table: None,
+        options: DefineOptions::default(),
         type_: None,
+        flexible: false,
+        readonly: false,
         default: None,
         value: None,
         computed: None,
@@ -83,8 +126,8 @@ pub fn define_field(fieldable: impl Into<Field>) -> DefineFieldStatement {
 }
 
 impl DefineFieldStatement {
-    /// Set the table where the field is defined.
-    pub fn on_table(mut self, table: impl Into<Table>) -> Self {
+    /// Set the table where the field is defined. The name may come from a parameter.
+    pub fn on_table(mut self, table: impl Into<Name<Table>>) -> Self {
         self.table = Some(table.into());
         self
     }
@@ -95,11 +138,54 @@ impl DefineFieldStatement {
         self
     }
 
+    /// `FLEXIBLE`: objects in the field keep keys that have no definition of their own, even on
+    /// a `SCHEMAFULL` table.
+    ///
+    /// It is written straight after `TYPE`, which must admit an object: without a type, or with
+    /// one that has no object in it, the query fails when it is rendered.
+    ///
+    /// ```rust
+    /// use umbriel::{*, statements::define_field, types::Kind};
+    ///
+    /// let statement = define_field(Field::new("settings"))
+    ///     .on_table(Table::from("user"))
+    ///     .type_(Kind::Object)
+    ///     .flexible();
+    /// assert_eq!(
+    ///     statement.to_debug_sql(),
+    ///     "DEFINE FIELD settings ON TABLE user TYPE object FLEXIBLE;"
+    /// );
+    ///
+    /// let invalid = define_field(Field::new("name"))
+    ///     .on_table(Table::from("user"))
+    ///     .type_(Kind::String)
+    ///     .flexible();
+    /// assert!(invalid.to_query().is_err());
+    /// ```
+    pub fn flexible(mut self) -> Self {
+        self.flexible = true;
+        self
+    }
+
+    /// `READONLY`: the field can be set when the record is created, and an update that changes
+    /// it fails. Writing the same value again is allowed.
+    ///
+    /// ```rust
+    /// use umbriel::{*, statements::define_field};
+    ///
+    /// let statement = define_field(Field::new("created")).on_table(Table::from("user")).readonly();
+    /// assert_eq!(statement.to_debug_sql(), "DEFINE FIELD created ON TABLE user READONLY;");
+    /// ```
+    pub fn readonly(mut self) -> Self {
+        self.readonly = true;
+        self
+    }
+
     /// Sets the field's default: `DEFAULT @expression`.
     ///
     /// The default is applied when a record is created without the field. A value written
     /// explicitly is kept, falsy ones (`0`, `false`, `''`) included, and updates never re-apply
-    /// the default.
+    /// the default. Replaces an earlier [`default_always`](Self::default_always).
     ///
     /// ```rust
     /// use umbriel::{*, statements::define_field};
@@ -108,7 +194,29 @@ impl DefineFieldStatement {
     /// assert_eq!(statement.to_debug_sql(), "DEFINE FIELD score ON TABLE user DEFAULT 0;");
     /// ```
     pub fn default(mut self, default: impl Into<ValueLike>) -> Self {
-        self.default = Some(default.into());
+        self.default = Some(FieldDefault::Set(default.into()));
+        self
+    }
+
+    /// Sets the field's default for every write: `DEFAULT ALWAYS @expression`.
+    ///
+    /// Unlike [`default`](Self::default), it is also applied when an update leaves the field
+    /// `NONE`. SurrealDB refuses it on `id`, so it fails when the query is rendered there.
+    /// Replaces an earlier `default`.
+    ///
+    /// ```rust
+    /// use umbriel::{*, statements::define_field};
+    ///
+    /// let statement = define_field(Field::new("score"))
+    ///     .on_table(Table::from("user"))
+    ///     .default_always(0);
+    /// assert_eq!(statement.to_debug_sql(), "DEFINE FIELD score ON TABLE user DEFAULT ALWAYS 0;");
+    ///
+    /// let invalid = define_field(Field::new("id")).on_table(Table::from("user")).default_always(1);
+    /// assert!(invalid.to_query().is_err());
+    /// ```
+    pub fn default_always(mut self, default: impl Into<ValueLike>) -> Self {
+        self.default = Some(FieldDefault::Always(default.into()));
         self
     }
 
@@ -134,11 +242,12 @@ impl DefineFieldStatement {
     }
 
     /// Makes the field computed: `COMPUTED @expression`. It is evaluated whenever the record is
-    /// read and is never stored.
+    /// read and is never stored: SurrealDB discards a value written to it.
     ///
     /// A computed field must be a top-level field other than `id`, and takes only a type and
-    /// permissions besides the expression: combining it with a default, value or assertion fails
-    /// when the query is rendered.
+    /// permissions besides the expression: combining it with a default, value, assertion,
+    /// `READONLY` or `FLEXIBLE` fails when the query is rendered. SurrealDB also refuses a
+    /// computed expression that writes data.
     ///
     /// ```rust
     /// use umbriel::{*, statements::define_field, types::Kind};
@@ -173,7 +282,8 @@ impl DefineFieldStatement {
         self
     }
 
-    /// assert constraint on the field.
+    /// assert constraint on the field. Each call adds a condition, joined to the earlier ones
+    /// with `AND`: SurrealDB keeps only the last `ASSERT` clause, so they are written as one.
     ///
     ///  Examples:
     ///
@@ -197,7 +307,10 @@ impl DefineFieldStatement {
     ///                                 );
     /// ```
     pub fn assert(mut self, assertion: impl Conditional) -> Self {
-        self.assert = Some(Filter::new(assertion));
+        self.assert = Some(match self.assert.take() {
+            Some(earlier) => earlier.and(assertion),
+            None => Filter::new(assertion),
+        });
         self
     }
 
@@ -234,12 +347,17 @@ impl DefineFieldStatement {
         if self.default.is_some() || self.value.is_some() || self.assert.is_some() {
             out.push_error("a computed field cannot also have a DEFAULT, VALUE or ASSERT clause");
         }
+        if self.readonly || self.flexible {
+            out.push_error("a computed field cannot also be READONLY or FLEXIBLE");
+        }
     }
 }
 
 impl Statement for DefineFieldStatement {
     fn render_body(&self, out: &mut Renderer) {
-        out.push_str("DEFINE FIELD ").push(&self.field);
+        out.push_str("DEFINE FIELD");
+        self.options.render_kind(out);
+        out.push_str(" ").push(&self.field);
 
         if let Some(table) = &self.table {
             out.push_str(" ON TABLE ").push(table);
@@ -254,8 +372,24 @@ impl Statement for DefineFieldStatement {
             out.push_str(" TYPE ").push(field_type);
         }
 
+        if self.flexible {
+            if !self.type_.as_ref().is_some_and(kind_contains_object) {
+                out.push_error("FLEXIBLE needs a TYPE that admits an object");
+            }
+            out.push_str(" FLEXIBLE");
+        }
+
+        if self.readonly {
+            out.push_str(" READONLY");
+        }
+
         if let Some(default) = &self.default {
-            out.push_str(" DEFAULT ").push(default);
+            if matches!(default, FieldDefault::Always(_))
+                && self.field.top_level_name() == Some("id")
+            {
+                out.push_error("the `id` field cannot have DEFAULT ALWAYS");
+            }
+            default.render(out);
         }
 
         if let Some(value) = &self.value {
@@ -266,8 +400,10 @@ impl Statement for DefineFieldStatement {
             out.push_str(" ASSERT ").push(assertion);
         }
 
+        self.options.render_comment(out);
         out.push(&self.permissions);
     }
 }
 
+impl_define_options!(DefineFieldStatement);
 impl_definition!(DefineFieldStatement);

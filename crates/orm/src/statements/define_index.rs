@@ -7,9 +7,9 @@
 
 use surrealdb::types::Table;
 
-use crate::{Field, Ident, Render, Renderer, TableIndex, ValueLike};
+use crate::{Field, Ident, Name, Render, Renderer, TableIndex, ValueLike};
 
-use super::{Statement, impl_definition};
+use super::{DefineOptions, Statement, impl_define_options, impl_definition};
 
 /// Define a new database index.
 /// Just like in other databases, SurrealDB uses indexes to help optimize query performance.
@@ -32,10 +32,11 @@ use super::{Statement, impl_definition};
 /// assert_eq!(query.to_debug_sql(),
 /// "DEFINE INDEX alien_index ON TABLE alien FIELDS age, name, email, dob UNIQUE;");
 /// ```
-pub fn define_index(index_name: impl Into<TableIndex>) -> DefineIndexStatement {
+pub fn define_index(index_name: impl Into<Name<TableIndex>>) -> DefineIndexStatement {
     DefineIndexStatement {
         index_name: index_name.into(),
         table: None,
+        options: DefineOptions::default(),
         fields: vec![],
         columns: vec![],
         unique: false,
@@ -101,8 +102,9 @@ impl From<Vec<Field>> for Columns {
 
 /// A statement for defining a database Index.
 pub struct DefineIndexStatement {
-    index_name: TableIndex,
-    table: Option<Table>,
+    index_name: Name<TableIndex>,
+    table: Option<Name<Table>>,
+    options: DefineOptions,
     fields: Vec<Field>,
     columns: Vec<Field>,
     unique: bool,
@@ -110,8 +112,8 @@ pub struct DefineIndexStatement {
 }
 
 impl DefineIndexStatement {
-    /// Set the table where the index is defined.
-    pub fn on_table(mut self, table: impl Into<Table>) -> Self {
+    /// Set the table where the index is defined. The name may come from a parameter.
+    pub fn on_table(mut self, table: impl Into<Name<Table>>) -> Self {
         self.table = Some(table.into());
         self
     }
@@ -145,7 +147,9 @@ impl DefineIndexStatement {
 
 impl Statement for DefineIndexStatement {
     fn render_body(&self, out: &mut Renderer) {
-        out.push_str("DEFINE INDEX ").push(&self.index_name);
+        out.push_str("DEFINE INDEX");
+        self.options.render_kind(out);
+        out.push_str(" ").push(&self.index_name);
 
         if let Some(table) = &self.table {
             out.push_str(" ON TABLE ").push(table);
@@ -164,9 +168,12 @@ impl Statement for DefineIndexStatement {
         } else if let Some(fulltext) = &self.fulltext {
             out.push_str(" ").push(fulltext);
         }
+
+        self.options.render_comment(out);
     }
 }
 
+impl_define_options!(DefineIndexStatement);
 impl_definition!(DefineIndexStatement);
 
 /// The full-text options of an index: `FULLTEXT ANALYZER @analyzer [ BM25(@k1, @b) ] [ HIGHLIGHTS ]`.

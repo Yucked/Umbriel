@@ -9,9 +9,11 @@
 // 		[ DURATION FOR SESSION @duration ]
 //
 // Record access is defined on a database only.
-use crate::{Access, AccessLevel, DurationLike, JwtAlgorithm, Raw, Render, Renderer, StrandLike};
+use crate::{
+    Access, AccessLevel, DurationLike, JwtAlgorithm, Name, Raw, Render, Renderer, StrandLike,
+};
 
-use super::{Statement, Subquery, impl_definition};
+use super::{DefineOptions, Statement, Subquery, impl_define_options, impl_definition};
 
 /// A `SIGNUP` or `SIGNIN` expression of record access: a statement, or SurrealQL text.
 pub enum AccessExpression {
@@ -90,9 +92,10 @@ impl Render for AccessExpression {
 /// let invalid = define_access("account").on_root().record(record_access());
 /// assert!(invalid.to_query().is_err());
 /// ```
-pub fn define_access(name: impl Into<Access>) -> DefineAccessStatement {
+pub fn define_access(name: impl Into<Name<Access>>) -> DefineAccessStatement {
     DefineAccessStatement {
         name: name.into(),
+        options: DefineOptions::default(),
         level: None,
         kind: None,
     }
@@ -100,7 +103,8 @@ pub fn define_access(name: impl Into<Access>) -> DefineAccessStatement {
 
 /// A `DEFINE ACCESS` statement.
 pub struct DefineAccessStatement {
-    name: Access,
+    name: Name<Access>,
+    options: DefineOptions,
     level: Option<AccessLevel>,
     kind: Option<AccessKind>,
 }
@@ -144,7 +148,9 @@ impl DefineAccessStatement {
 
 impl Statement for DefineAccessStatement {
     fn render_body(&self, out: &mut Renderer) {
-        out.push_str("DEFINE ACCESS ").push(&self.name);
+        out.push_str("DEFINE ACCESS");
+        self.options.render_kind(out);
+        out.push_str(" ").push(&self.name);
 
         match self.level {
             Some(level) => {
@@ -174,9 +180,12 @@ impl Statement for DefineAccessStatement {
                 out.push_error("DEFINE ACCESS needs a type: `record` or `jwt`");
             }
         }
+
+        self.options.render_comment(out);
     }
 }
 
+impl_define_options!(DefineAccessStatement);
 impl_definition!(DefineAccessStatement);
 
 /// Starts record access options: sign-up, sign-in, token signing and durations.

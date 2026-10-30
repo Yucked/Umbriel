@@ -2,7 +2,7 @@ use std::{borrow::Cow, fmt};
 
 use surrealdb::types::{Kind, Table};
 
-use crate::{Render, Renderer};
+use crate::{Param, Render, Renderer, TableOf};
 
 /// A SurrealQL identifier, rendered bare when it is a plain identifier and escaped otherwise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -132,6 +132,83 @@ define_names!(
     /// An index name.
     TableIndex,
 );
+
+/// The name a definition, alteration or removal applies to: written out, or held by a parameter
+/// that SurrealDB reads when the statement runs.
+///
+/// SurrealDB 3 reads the names of tables, fields, events, indexes, namespaces, databases,
+/// analyzers, users and accesses as expressions, so `LET $table = 'user'; DEFINE TABLE $table`
+/// defines `user`. Function and param names are literals and take no parameter.
+///
+/// ```rust
+/// use umbriel::{*, statements::define_table};
+///
+/// assert_eq!(define_table("user").to_debug_sql(), "DEFINE TABLE user;");
+/// assert_eq!(define_table(Param::new("table")).to_debug_sql(), "DEFINE TABLE $table;");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Name<T> {
+    /// The name itself.
+    Named(T),
+    /// A parameter holding the name.
+    Param(Param),
+}
+
+impl<T: Render> Render for Name<T> {
+    fn render(&self, out: &mut Renderer) {
+        match self {
+            Self::Named(name) => name.render(out),
+            Self::Param(param) => param.render(out),
+        }
+    }
+}
+
+impl<T> From<Param> for Name<T> {
+    fn from(param: Param) -> Self {
+        Self::Param(param)
+    }
+}
+
+impl<T> From<&Param> for Name<T> {
+    fn from(param: &Param) -> Self {
+        Self::Param(param.clone())
+    }
+}
+
+/// `From` for a [`Name`] of each listed type, from the type itself and from what converts into
+/// it. A blanket `impl<U: Into<T>>` would overlap with `From<Param>`.
+macro_rules! name_from {
+    ($target:ty: $($source:ty),*) => {
+        impl From<$target> for Name<$target> {
+            fn from(name: $target) -> Self {
+                Self::Named(name)
+            }
+        }
+
+        $(
+            impl From<$source> for Name<$target> {
+                fn from(name: $source) -> Self {
+                    Self::Named(name.into())
+                }
+            }
+        )*
+    };
+}
+
+name_from!(Table: &str, String);
+name_from!(Ident: &str, String, &Ident);
+name_from!(Namespace: &str, String, Ident);
+name_from!(Database: &str, String, Ident);
+name_from!(Access: &str, String, Ident);
+name_from!(User: &str, String, Ident);
+name_from!(Event: &str, String, Ident);
+name_from!(TableIndex: &str, String, Ident);
+
+impl<T> From<TableOf<T>> for Name<Table> {
+    fn from(table: TableOf<T>) -> Self {
+        Self::Named(table.into())
+    }
+}
 
 /// A list of tables.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

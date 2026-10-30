@@ -2,9 +2,9 @@ use std::fmt::{self, Display};
 
 use surrealdb::types::Value;
 
-use crate::{Renderer, User};
+use crate::{Name, Renderer, User};
 
-use super::{Statement, impl_definition};
+use super::{DefineOptions, Statement, impl_define_options, impl_definition};
 
 /// A user's plain-text password, hashed by SurrealDB.
 pub struct Password(pub(crate) String);
@@ -60,9 +60,10 @@ impl Display for Password {
 ///     "DEFINE USER alice ON ROOT PASSWORD 'example-password' ROLES OWNER;"
 /// );
 /// ```
-pub fn define_user(name: impl Into<User>) -> DefineUserStatement {
+pub fn define_user(name: impl Into<Name<User>>) -> DefineUserStatement {
     DefineUserStatement {
         name: name.into(),
+        options: DefineOptions::default(),
         user_type: None,
         credential: None,
         role: None,
@@ -142,7 +143,8 @@ pub enum UserCredential {
 
 /// Define a new database user.
 pub struct DefineUserStatement {
-    name: User,
+    name: Name<User>,
+    options: DefineOptions,
     user_type: Option<UserType>,
     credential: Option<UserCredential>,
     role: Option<UserRole>,
@@ -188,7 +190,9 @@ impl DefineUserStatement {
 
 impl Statement for DefineUserStatement {
     fn render_body(&self, out: &mut Renderer) {
-        out.push_str("DEFINE USER ").push(&self.name);
+        out.push_str("DEFINE USER");
+        self.options.render_kind(out);
+        out.push_str(" ").push(&self.name);
 
         if let Some(user_type) = &self.user_type {
             out.push_str(" ON ").push_display(user_type);
@@ -210,7 +214,10 @@ impl Statement for DefineUserStatement {
         if let Some(role) = &self.role {
             out.push_str(" ROLES ").push_display(role);
         }
+
+        self.options.render_comment(out);
     }
 }
 
+impl_define_options!(DefineUserStatement);
 impl_definition!(DefineUserStatement);

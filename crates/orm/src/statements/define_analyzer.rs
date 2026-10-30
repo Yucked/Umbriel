@@ -1,8 +1,8 @@
 use std::fmt::{self, Display};
 
-use crate::{Ident, Renderer};
+use crate::{Ident, Name, Renderer};
 
-use super::{Statement, impl_definition};
+use super::{DefineOptions, Statement, impl_define_options, impl_definition};
 
 /// A full-text analyzer tokenizer.
 #[expect(missing_docs, reason = "each variant is the tokenizer's own name")]
@@ -102,7 +102,8 @@ impl Display for AnalyzerFilter {
 /// `DEFINE ANALYZER` statement
 #[derive(Clone, Debug)]
 pub struct DefineAnalyzerStatement {
-    name: Ident,
+    name: Name<Ident>,
+    options: DefineOptions,
     tokenizers: Vec<Tokenizer>,
     filters: Vec<AnalyzerFilter>,
 }
@@ -122,11 +123,12 @@ pub struct DefineAnalyzerStatement {
 ///     "DEFINE ANALYZER ascii TOKENIZERS Class FILTERS lowercase,ascii,edgengram(2, 15),snowball(english);"
 /// );
 /// ```
-pub fn define_analyzer(name: &str) -> DefineAnalyzerStatement {
+pub fn define_analyzer(name: impl Into<Name<Ident>>) -> DefineAnalyzerStatement {
     DefineAnalyzerStatement {
         name: name.into(),
         tokenizers: vec![],
         filters: vec![],
+        options: DefineOptions::default(),
     }
 }
 
@@ -156,7 +158,9 @@ fn push_list(out: &mut Renderer, items: &[impl Display]) {
 
 impl Statement for DefineAnalyzerStatement {
     fn render_body(&self, out: &mut Renderer) {
-        out.push_str("DEFINE ANALYZER ").push(&self.name);
+        out.push_str("DEFINE ANALYZER");
+        self.options.render_kind(out);
+        out.push_str(" ").push(&self.name);
 
         if !self.tokenizers.is_empty() {
             out.push_str(" TOKENIZERS ");
@@ -167,7 +171,10 @@ impl Statement for DefineAnalyzerStatement {
             out.push_str(" FILTERS ");
             push_list(out, &self.filters);
         }
+
+        self.options.render_comment(out);
     }
 }
 
+impl_define_options!(DefineAnalyzerStatement);
 impl_definition!(DefineAnalyzerStatement);

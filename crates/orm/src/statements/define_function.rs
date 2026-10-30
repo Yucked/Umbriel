@@ -2,7 +2,7 @@ use surrealdb::types::Kind;
 
 use crate::{Block, Param, Renderer};
 
-use super::{Statement, impl_definition};
+use super::{DefineOptions, Statement, impl_define_options, impl_definition};
 
 /// Represents a surrealdb define function statement argument
 #[derive(Debug, Clone)]
@@ -19,6 +19,7 @@ pub struct DefineFunctionStatement {
     name: String,
     args: Vec<FunctionArgument>,
     body: Option<Block>,
+    options: DefineOptions,
 }
 
 impl DefineFunctionStatement {
@@ -49,13 +50,16 @@ pub fn define_function(name: impl Into<String>) -> DefineFunctionStatement {
         name: name.into(),
         args: vec![],
         body: None,
+        options: DefineOptions::default(),
     }
 }
 
 impl Statement for DefineFunctionStatement {
     fn render_body(&self, out: &mut Renderer) {
         // The name is a `::`-separated path, written as given.
-        out.push_str("DEFINE FUNCTION fn::")
+        out.push_str("DEFINE FUNCTION");
+        self.options.render_kind(out);
+        out.push_str(" fn::")
             .push_str(&self.name)
             .push_str("(");
         for (index, FunctionArgument { name, type_ }) in self.args.iter().enumerate() {
@@ -68,7 +72,9 @@ impl Statement for DefineFunctionStatement {
         if let Some(body) = &self.body {
             out.push(body);
         }
+        self.options.render_comment(out);
     }
 }
 
+impl_define_options!(DefineFunctionStatement);
 impl_definition!(DefineFunctionStatement);

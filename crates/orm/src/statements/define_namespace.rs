@@ -1,6 +1,6 @@
-use crate::{Namespace, Renderer};
+use crate::{Name, Namespace, Renderer};
 
-use super::{Statement, impl_definition};
+use super::{DefineOptions, Statement, impl_define_options, impl_definition};
 
 /// Define a new namespace .
 /// SurrealDB has a multi-tenancy model which allows you to scope databases to a namespace.
@@ -22,22 +22,34 @@ use super::{Statement, impl_definition};
 /// let statement = define_namespace(acme);
 ///
 /// assert_eq!(statement.to_debug_sql(), "DEFINE NAMESPACE acme;");
+///
+/// let statement = define_namespace("acme").if_not_exists().comment("Acme Corp");
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "DEFINE NAMESPACE IF NOT EXISTS acme COMMENT 'Acme Corp';"
+/// );
 /// ```
-pub fn define_namespace(namespace: impl Into<Namespace>) -> DefineNamespaceStatement {
+pub fn define_namespace(namespace: impl Into<Name<Namespace>>) -> DefineNamespaceStatement {
     DefineNamespaceStatement {
         namespace: namespace.into(),
+        options: DefineOptions::default(),
     }
 }
 
 /// Define namespace
 pub struct DefineNamespaceStatement {
-    namespace: Namespace,
+    namespace: Name<Namespace>,
+    options: DefineOptions,
 }
 
 impl Statement for DefineNamespaceStatement {
     fn render_body(&self, out: &mut Renderer) {
-        out.push_str("DEFINE NAMESPACE ").push(&self.namespace);
+        out.push_str("DEFINE NAMESPACE");
+        self.options.render_kind(out);
+        out.push_str(" ").push(&self.namespace);
+        self.options.render_comment(out);
     }
 }
 
+impl_define_options!(DefineNamespaceStatement);
 impl_definition!(DefineNamespaceStatement);
