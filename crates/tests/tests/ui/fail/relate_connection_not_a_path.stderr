@@ -1,0 +1,49 @@
+error: `->likes[WHERE score > 1]->post` is not a relation connection: write exactly `->edge->node` or `<-edge<-node`, with table names
+ --> tests/ui/fail/relate_connection_not_a_path.rs:4:1
+  |
+4 | #[model(node, table = "user")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `User` is not an Umbriel model
+  --> tests/ui/fail/relate_connection_not_a_path.rs:6:13
+   |
+ 6 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `User`
+  --> tests/ui/fail/relate_connection_not_a_path.rs:5:1
+   |
+ 5 | pub struct User {
+   | ^^^^^^^^^^^^^^^
+   = note: declare `User` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the following other types implement trait `Model`
+  --> tests/ui/fail/relate_connection_not_a_path.rs:11:1
+   |
+11 | #[model(node, table = "post")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Post`
+...
+16 | #[model(edge, table = "likes")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Likes<In, Out>`
+   = note: required for `umbriel::RecordId<User>` to implement `umbriel::surrealdb_types::SurrealValue`
+   = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<User>`
+ --> tests/ui/fail/relate_connection_not_a_path.rs:6:9
+  |
+4 | #[model(node, table = "user")]
+  | ------------------------------ value moved due to this method call
+5 | pub struct User {
+6 |     pub id: RecordId<Self>,
+  |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+  |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+ --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+  |
+  |     fn into_value(self) -> Value;
+  |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+  |
+6 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+  |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +

@@ -1,0 +1,14 @@
+error[E0308]: `?` operator has incompatible types
+  --> tests/ui/fail/select_only_is_optional.rs:15:24
+   |
+15 |       let _: Vec<User> = select(All)
+   |  ________________________^
+16 | |         .from_only(User::id("alice"))
+17 | |         .decode::<User>()
+18 | |         .execute(db)
+19 | |         .await?;
+   | |_______________^ expected `Vec<User>`, found `Option<User>`
+   |
+   = note: `?` operator cannot convert from `Option<User>` to `Vec<User>`
+   = note: expected struct `Vec<User>`
+                found enum `Option<User>`
