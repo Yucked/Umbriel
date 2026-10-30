@@ -341,7 +341,7 @@ impl<T: Node, R: ReturnMode, C: Cardinality> CreateStatement<T, R, C> {
         self
     }
 
-    /// Sets the timeout duration for the query. It is written as a literal.
+    /// Sets the timeout duration for the query, bound as a query parameter.
     pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
         self.body.timeout = Some(duration.into());
         self
@@ -387,7 +387,7 @@ impl<T: Node, R: ReturnMode, C: Cardinality> Statement for CreateStatement<T, R,
         out.push(&body.data);
         self.mode.render(out);
         if let Some(timeout) = &body.timeout {
-            out.push_str(" TIMEOUT ").push_inlined(timeout);
+            out.push_str(" TIMEOUT ").push(timeout);
         }
     }
 }

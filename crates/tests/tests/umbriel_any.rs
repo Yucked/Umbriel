@@ -156,3 +156,26 @@ fn the_union_is_an_object_value() {
     assert_eq!(<Item as SurrealValue>::kind_of(), types::Kind::Object);
     assert!(!Item::is_value(&Value::None));
 }
+
+/// D6 (#12): a mixed-model statement binds its `TIMEOUT` like every other statement.
+#[test]
+fn timeouts_are_bound() {
+    let five = std::time::Duration::from_secs(5);
+    let created = create_any::<Item>([Book::id("rust").into()])
+        .timeout(five)
+        .to_query()
+        .expect("renders");
+    assert!(created.sql().contains(" TIMEOUT $_p"), "{}", created.sql());
+    let inserted = insert_any::<Item>([Item::Book(Book {
+        id: Book::id("rust"),
+        title: None,
+    })])
+    .timeout(five)
+    .to_query()
+    .expect("renders");
+    assert!(
+        inserted.sql().contains(" TIMEOUT $_p"),
+        "{}",
+        inserted.sql()
+    );
+}

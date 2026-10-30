@@ -293,7 +293,8 @@ impl<T: Model, R: ReturnMode, C: Cardinality> InsertStatement<T, R, C> {
         self
     }
 
-    /// `TIMEOUT`: the statement fails if it runs longer than `duration`, written as a literal.
+    /// `TIMEOUT`: the statement fails if it runs longer than `duration`, which is bound as a
+    /// query parameter.
     /// SurrealDB's `INSERT` documentation omits it, but the 3.3.4 parser accepts it and execution
     /// applies it, as for the other write statements.
     pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
@@ -390,7 +391,7 @@ impl<T: Model, R: ReturnMode, C: Cardinality> Statement for InsertStatement<T, R
 
         self.mode.render(out);
         if let Some(timeout) = &body.timeout {
-            out.push_str(" TIMEOUT ").push_inlined(timeout);
+            out.push_str(" TIMEOUT ").push(timeout);
         }
     }
 }

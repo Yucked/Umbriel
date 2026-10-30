@@ -137,7 +137,7 @@ impl RelateBody {
         out.push(&self.relation).push(&self.data);
         mode.render(out);
         if let Some(timeout) = &self.timeout {
-            out.push_str(" TIMEOUT ").push_inlined(timeout);
+            out.push_str(" TIMEOUT ").push(timeout);
         }
     }
 }
@@ -231,7 +231,7 @@ macro_rules! relate_clauses {
                 self
             }
 
-            /// Sets the timeout duration for the query. It is written as a literal.
+            /// Sets the timeout duration for the query, bound as a query parameter.
             pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
                 self.body.timeout = Some(duration.into());
                 self

@@ -135,7 +135,7 @@ impl<T: Model, R: ReturnMode, C: Cardinality> DeleteStatement<T, R, C> {
         self
     }
 
-    /// Sets the timeout duration for the query. It is written as a literal.
+    /// Sets the timeout duration for the query, bound as a query parameter.
     pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
         self.body.timeout = Some(duration.into());
         self
@@ -178,7 +178,7 @@ impl<T: Model, R: ReturnMode, C: Cardinality> Statement for DeleteStatement<T, R
         self.mode.render(out);
 
         if let Some(timeout) = &self.body.timeout {
-            out.push_str(" TIMEOUT ").push_inlined(timeout);
+            out.push_str(" TIMEOUT ").push(timeout);
         }
     }
 }

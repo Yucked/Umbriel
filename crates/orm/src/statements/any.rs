@@ -158,7 +158,7 @@ impl<M: Models, R: ReturnMode, C: Cardinality> CreateAnyStatement<M, R, C> {
         self
     }
 
-    /// Sets the timeout duration for the query. It is written as a literal.
+    /// Sets the timeout duration for the query, bound as a query parameter.
     pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
         self.timeout = Some(duration.into());
         self
@@ -213,7 +213,7 @@ impl<M: Models, R: ReturnMode, C: Cardinality> Statement for CreateAnyStatement<
         out.push(&self.data);
         self.mode.render(out);
         if let Some(timeout) = &self.timeout {
-            out.push_str(" TIMEOUT ").push_inlined(timeout);
+            out.push_str(" TIMEOUT ").push(timeout);
         }
     }
 }
@@ -283,7 +283,7 @@ impl<M: Models, R: ReturnMode> InsertAnyStatement<M, R> {
         self
     }
 
-    /// Sets the timeout duration for the query. It is written as a literal.
+    /// Sets the timeout duration for the query, bound as a query parameter.
     pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
         self.timeout = Some(duration.into());
         self
@@ -332,7 +332,7 @@ impl<M: Models, R: ReturnMode> Statement for InsertAnyStatement<M, R> {
         out.push_value(&Value::Array(self.records.clone().into()));
         self.mode.render(out);
         if let Some(timeout) = &self.timeout {
-            out.push_str(" TIMEOUT ").push_inlined(timeout);
+            out.push_str(" TIMEOUT ").push(timeout);
         }
     }
 }

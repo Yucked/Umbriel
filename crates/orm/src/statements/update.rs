@@ -228,7 +228,7 @@ impl UpdateBody {
     /// Writes `[TIMEOUT …]`, after the return clause.
     pub(crate) fn render_tail(&self, out: &mut Renderer) {
         if let Some(timeout) = &self.timeout {
-            out.push_str(" TIMEOUT ").push_inlined(timeout);
+            out.push_str(" TIMEOUT ").push(timeout);
         }
     }
 }
@@ -368,7 +368,7 @@ macro_rules! update_clauses {
                 self
             }
 
-            /// Sets the timeout duration for the query. It is written as a literal.
+            /// Sets the timeout duration for the query, bound as a query parameter.
             pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
                 self.body.timeout = Some(duration.into());
                 self
