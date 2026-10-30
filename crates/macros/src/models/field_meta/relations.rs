@@ -9,14 +9,6 @@ pub(crate) enum EdgeDirection {
     In,
 }
 
-impl EdgeDirection {
-    pub(crate) fn as_arrow_symbol(self) -> &'static str {
-        match self {
-            Self::Out => "->",
-            Self::In => "<-",
-        }
-    }
-}
 
 use super::*;
 // Tuple, Array (T, T), [T; N]
@@ -154,81 +146,27 @@ impl TryFrom<&Relate> for RelateAttribute {
     type Error = ExtractorError;
 
     fn try_from(relation: &Relate) -> Result<Self, Self::Error> {
-        let right_arrow_count = relation.connection.matches("->").count();
-        let left_arrow_count = relation.connection.matches("<-").count();
-        let edge_direction = match (left_arrow_count, right_arrow_count) {
-            (2, 0) => EdgeDirection::In,
-            (0, 2) => EdgeDirection::Out,
-            _ => {
-                // return Err(syn::Error::new(
-                //     Span::call_site(),
-                //     "Invalid arrow direction usage. Should be either only -> or <-",
-                // )
-                // .into())
-                return Err(darling::Error::custom(
-                    "Invalid arrow direction usage. Should be either only -> or <-",
-                )
-                .into());
-            }
-        };
+        let (edge_direction, edge, node) =
+            crate::surql::graph_connection(&relation.connection, Span::call_site())?;
 
-        let edge_direction_str = edge_direction.as_arrow_symbol().to_string();
-        let mut substrings = relation
-            .connection
-            .split(edge_direction_str.as_str())
-            .filter(|this| !this.is_empty());
-
-        // Each step names one table: anything else (a filter, a parameter, a nested path) is not a
-        // connection the derive can type.
+        // The tables also name generated methods, so each must be a Rust identifier too.
         let table = |name: &str| {
             syn::parse_str::<syn::Ident>(name).map_err(|_| {
                 syn::Error::new(
                     Span::call_site(),
                     format!(
-                        "`{name}` is not a table name: a connection is `->edge->node` or \
-                         `<-edge<-node` over table names, {}",
-                        get_relation_error(relation)
+                        "`{name}` in the connection `{}` must also be a Rust identifier",
+                        relation.connection
                     ),
                 )
             })
         };
-        let (edge_action, node_object) =
-            match (substrings.next(), substrings.next(), substrings.next()) {
-                (Some(action), Some(node_obj), None) => (
-                    EdgeTableName(table(action)?),
-                    NodeTableName(table(node_obj)?),
-                ),
-                _ => {
-                    return Err(syn::Error::new(
-                        Span::call_site(),
-                        format!("too many edges or nodes, {}", get_relation_error(relation)),
-                    )
-                    .into());
-                }
-            };
 
         Ok(Self {
-            foreign_node_table: node_object,
-            edge_table: edge_action,
+            foreign_node_table: NodeTableName(table(node)?),
+            edge_table: EdgeTableName(table(edge)?),
             edge_direction,
         })
     }
 }
 
-fn get_relation_error<'a>(_relation: &Relate) -> ::std::fmt::Arguments<'a> {
-    // let span = syn::spanned::Spanned::span(relation.0.clone()).clone();
-    // let span = syn::spanned::Spanned::span(relation.0.as_str()).clone();
-
-    // let start = span.clone().start().clone();
-    // let end = span.clone().end().clone();
-    // let start_line = start.line;
-    // let start_column = start.column;
-    // let end_column = end.column;
-    let c = format_args!(
-        " Check that your arrows are properly faced. e.g ->has->Heart or <-owned_by<-Human",
-        // start_line,
-        // start_column,
-        // end_column
-    );
-    c
-}
