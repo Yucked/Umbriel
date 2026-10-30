@@ -18,9 +18,19 @@ async fn use_default_without_a_default_keeps_the_selection() {
         .run(db.clone())
         .await
         .expect("USE DEFAULT runs on the embedded engine");
-    let selected: BTreeMap<String, Value> = results.take(0).expect("an object");
-    assert_eq!(selected.get("namespace"), Some(&Value::String("test".to_owned())));
-    assert_eq!(selected.get("database"), Some(&Value::String("test".to_owned())));
+    // `take` decodes into `Option`, `Vec` or `Value`, so a single object is taken as an `Option`.
+    let selected: BTreeMap<String, Value> = results
+        .take::<Option<_>>(0)
+        .expect("decodes")
+        .expect("an object");
+    assert_eq!(
+        selected.get("namespace"),
+        Some(&Value::String("test".to_owned()))
+    );
+    assert_eq!(
+        selected.get("database"),
+        Some(&Value::String("test".to_owned()))
+    );
     let session: Vec<String> = results.take(1).expect("the session");
     assert_eq!(session, ["test", "test"]);
 }

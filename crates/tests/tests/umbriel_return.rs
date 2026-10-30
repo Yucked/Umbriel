@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use surrealdb::types::Value;
 use umbriel::{
-    All, Field, Model, Param, Raw, Runnable, ValueLike, chain,
+    All, Field, Model, Operatable, Param, Raw, Runnable, ValueLike, chain,
     statements::{let_, return_, select},
 };
 use umbriel_tests::*;
@@ -38,17 +38,19 @@ async fn return_fetch_replaces_links() {
     .await
     .expect("seeded");
     let acme = || Field::from_expr(ValueLike::from(Organization::id("acme"))).all();
+    let fetched_users: Value = read(&db, "RETURN [{ id: user:alice, name: 'Alice' }];").await;
 
     let mut results = return_(acme())
         .fetch(Field::new("users"))
         .run(db.clone())
         .await
         .expect("ran");
-    let direct: BTreeMap<String, Vec<BTreeMap<String, Value>>> = results.take(0).expect("object");
-    assert_eq!(
-        direct["users"][0].get("name"),
-        Some(&Value::String("Alice".to_owned()))
-    );
+    // `take` decodes into `Option`, `Vec` or `Value`, so a single object is taken as an `Option`.
+    let direct: BTreeMap<String, Value> = results
+        .take::<Option<_>>(0)
+        .expect("decodes")
+        .expect("object");
+    assert_eq!(direct.get("users"), Some(&fetched_users));
 
     let org = let_("org").equal_to(select(All).from_only(Organization::id("acme")));
     let mut results = chain(org.clone())
@@ -56,10 +58,9 @@ async fn return_fetch_replaces_links() {
         .run(db.clone())
         .await
         .expect("ran");
-    let through_let: BTreeMap<String, Vec<BTreeMap<String, Value>>> =
-        results.take(1).expect("object");
-    assert_eq!(
-        through_let["users"][0].get("name"),
-        Some(&Value::String("Alice".to_owned()))
-    );
+    let through_let: BTreeMap<String, Value> = results
+        .take::<Option<_>>(1)
+        .expect("decodes")
+        .expect("object");
+    assert_eq!(through_let.get("users"), Some(&fetched_users));
 }
