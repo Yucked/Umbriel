@@ -1,7 +1,7 @@
 //! `DEFINE TABLE` (`orm/src/statements/define_table.rs`): table kinds, `TYPE RELATION`
 //! endpoints, the stored default kind, and view models (`#[umbriel::model(view)]`).
 
-use surrealdb::{Surreal, engine::local::Db, types::Value};
+use surrealdb::{Surreal, engine::local::Db};
 use umbriel::{
     All, Field, Model, Operatable, RecordId, Runnable, SurrealRead, Table, model,
     statements::{SelectStatement, define_table, select, table_relation},
@@ -12,26 +12,9 @@ async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
     statement.run(db.clone()).await.expect("ran");
 }
 
-/// Runs `sql` and reports whether every statement succeeded.
-async fn succeeds(db: &Surreal<Db>, sql: &str) -> bool {
-    db.query(sql.to_owned())
-        .await
-        .and_then(surrealdb::IndexedResults::check)
-        .is_ok()
-}
-
 /// The `DEFINE TABLE` statement `INFO FOR DB` lists for `table`.
 async fn stored(db: &Surreal<Db>, table: &str) -> String {
-    let Value::Object(info) = read::<Value>(db, "INFO FOR DB;").await else {
-        panic!("INFO returns an object");
-    };
-    let Some(Value::Object(tables)) = info.get("tables") else {
-        panic!("tables are listed");
-    };
-    match tables.get(table) {
-        Some(Value::String(sql)) => sql.clone(),
-        other => panic!("`{table}` is not defined: {other:?}"),
-    }
+    stored_definition(db, "INFO FOR DB;", "tables", table).await
 }
 
 mod rendering {

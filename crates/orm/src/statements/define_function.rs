@@ -54,21 +54,26 @@ pub fn define_function(name: impl Into<String>) -> DefineFunctionStatement {
     }
 }
 
+/// Writes a function's arguments, `($name: type, …)`, as `DEFINE` and `ALTER FUNCTION` take them.
+pub(crate) fn push_arguments(out: &mut Renderer, args: &[FunctionArgument]) {
+    out.push_str("(");
+    for (index, FunctionArgument { name, type_ }) in args.iter().enumerate() {
+        if index > 0 {
+            out.push_str(", ");
+        }
+        out.push(name).push_str(": ").push(type_);
+    }
+    out.push_str(")");
+}
+
 impl Statement for DefineFunctionStatement {
     fn render_body(&self, out: &mut Renderer) {
         // The name is a `::`-separated path, written as given.
         out.push_str("DEFINE FUNCTION");
         self.options.render_kind(out);
-        out.push_str(" fn::")
-            .push_str(&self.name)
-            .push_str("(");
-        for (index, FunctionArgument { name, type_ }) in self.args.iter().enumerate() {
-            if index > 0 {
-                out.push_str(", ");
-            }
-            out.push(name).push_str(": ").push(type_);
-        }
-        out.push_str(") ");
+        out.push_str(" fn::").push_str(&self.name);
+        push_arguments(out, &self.args);
+        out.push_str(" ");
         if let Some(body) = &self.body {
             out.push(body);
         }

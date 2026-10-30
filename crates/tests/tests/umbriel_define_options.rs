@@ -1,11 +1,7 @@
 //! The options every `DEFINE` takes (`orm/src/statements/mod.rs`): `OVERWRITE`, `IF NOT EXISTS`,
 //! `COMMENT`, and names read from parameters, on every definition builder.
 
-use surrealdb::{
-    Surreal,
-    engine::local::Db,
-    types::{Kind, Value},
-};
+use surrealdb::{Surreal, engine::local::Db, types::Kind};
 use umbriel::{
     Field, JwtAlgorithm, Param, Runnable, Table, chain,
     statements::{
@@ -18,20 +14,6 @@ use umbriel_tests::*;
 
 async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
     statement.run(db.clone()).await.expect("ran");
-}
-
-/// The `DEFINE` statement `INFO FOR <level>` lists for `name` under `kind`.
-async fn stored(db: &Surreal<Db>, info: &str, kind: &str, name: &str) -> String {
-    let Value::Object(info) = read::<Value>(db, info).await else {
-        panic!("`{info}` returns an object");
-    };
-    let Some(Value::Object(definitions)) = info.get(kind) else {
-        panic!("`{kind}` lists definitions");
-    };
-    match definitions.get(name) {
-        Some(Value::String(sql)) => sql.clone(),
-        other => panic!("`{name}` is not defined: {other:?}"),
-    }
 }
 
 mod rendering {
@@ -269,7 +251,7 @@ mod execution {
         let db = db().await;
         run(&db, define_table("user").comment("first")).await;
         run(&db, define_table("user").if_not_exists().comment("second")).await;
-        let table = stored(&db, "INFO FOR DB;", "tables", "user").await;
+        let table = stored_definition(&db, "INFO FOR DB;", "tables", "user").await;
         assert!(table.contains("COMMENT 'first'"), "{table}");
 
         run(
@@ -287,7 +269,7 @@ mod execution {
                 .if_not_exists(),
         )
         .await;
-        let field = stored(&db, "INFO FOR TABLE user;", "fields", "email").await;
+        let field = stored_definition(&db, "INFO FOR TABLE user;", "fields", "email").await;
         assert!(field.contains("TYPE string"), "{field}");
 
         run(&db, define_param(&Param::new("greeting")).value("Hello")).await;
@@ -327,7 +309,7 @@ mod execution {
                 .overwrite(),
         )
         .await;
-        let field = stored(&db, "INFO FOR TABLE user;", "fields", "email").await;
+        let field = stored_definition(&db, "INFO FOR TABLE user;", "fields", "email").await;
         assert!(field.contains("TYPE int"), "{field}");
     }
 
@@ -335,7 +317,7 @@ mod execution {
     async fn the_comment_is_stored() {
         let db = db().await;
         run(&db, define_table("user").comment("Acme Corp users")).await;
-        let table = stored(&db, "INFO FOR DB;", "tables", "user").await;
+        let table = stored_definition(&db, "INFO FOR DB;", "tables", "user").await;
         assert!(table.contains("COMMENT 'Acme Corp users'"), "{table}");
     }
 
@@ -348,7 +330,7 @@ mod execution {
             chain(table).chain(define_table(Param::new("table")).comment("from a parameter")),
         )
         .await;
-        let user = stored(&db, "INFO FOR DB;", "tables", "user").await;
+        let user = stored_definition(&db, "INFO FOR DB;", "tables", "user").await;
         assert!(user.contains("COMMENT 'from a parameter'"), "{user}");
     }
 }

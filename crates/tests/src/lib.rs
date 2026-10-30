@@ -86,3 +86,32 @@ pub async fn read<T: SurrealValue>(db: &Surreal<impl surrealdb::Connection>, sql
         .expect("a result");
     T::from_value(value).expect("value decodes")
 }
+
+/// The `DEFINE` statement that `info` (e.g. `INFO FOR DB;`) lists for `name` under `kind`
+/// (e.g. `tables`). Panics when the shape differs or the definition is missing.
+pub async fn stored_definition(
+    db: &Surreal<impl surrealdb::Connection>,
+    info: &str,
+    kind: &str,
+    name: &str,
+) -> String {
+    let Value::Object(info) = read::<Value>(db, info).await else {
+        panic!("`{info}` returns an object");
+    };
+    let Some(Value::Object(definitions)) = info.get(kind) else {
+        panic!("`{kind}` lists definitions");
+    };
+    match definitions.get(name) {
+        Some(Value::String(sql)) => sql.clone(),
+        other => panic!("`{name}` is not defined: {other:?}"),
+    }
+}
+
+/// Runs `sql` and reports whether every statement in it succeeded. Used where a test checks only
+/// that SurrealDB accepts or refuses something.
+pub async fn succeeds(db: &Surreal<impl surrealdb::Connection>, sql: &str) -> bool {
+    db.query(sql.to_owned())
+        .await
+        .and_then(surrealdb::IndexedResults::check)
+        .is_ok()
+}

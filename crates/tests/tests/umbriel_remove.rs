@@ -87,7 +87,7 @@ fn names_come_from_parameters() {
 }
 
 /// Runs `statement` and reports whether it succeeded.
-async fn succeeds(db: &Surreal<Db>, statement: impl Runnable + Sync) -> bool {
+async fn runs(db: &Surreal<Db>, statement: impl Runnable + Sync) -> bool {
     statement.run(db.clone()).await.is_ok()
 }
 
@@ -99,29 +99,29 @@ async fn if_exists_removes_nothing_without_failing() {
         .and_then(surrealdb::IndexedResults::check)
         .expect("table defined");
 
-    assert!(succeeds(&db, remove_namespace("acme").if_exists()).await);
-    assert!(succeeds(&db, remove_database("acme").if_exists()).await);
-    assert!(succeeds(&db, remove_table("missing").if_exists()).await);
+    assert!(runs(&db, remove_namespace("acme").if_exists()).await);
+    assert!(runs(&db, remove_database("acme").if_exists()).await);
+    assert!(runs(&db, remove_table("missing").if_exists()).await);
     assert!(
-        succeeds(
+        runs(
             &db,
             remove_field(Field::new("email")).on_table("user").if_exists()
         )
         .await
     );
-    assert!(succeeds(&db, remove_index("user_email").on_table("user").if_exists()).await);
-    assert!(succeeds(&db, remove_event("audit").on_table("user").if_exists()).await);
-    assert!(succeeds(&db, remove_analyzer("simple").if_exists()).await);
-    assert!(succeeds(&db, remove_param("greeting").if_exists()).await);
-    assert!(succeeds(&db, remove_function("fn::greet").if_exists()).await);
-    assert!(succeeds(&db, remove_user("alice").on_database().if_exists()).await);
-    assert!(succeeds(&db, remove_access("api").on_database().if_exists()).await);
+    assert!(runs(&db, remove_index("user_email").on_table("user").if_exists()).await);
+    assert!(runs(&db, remove_event("audit").on_table("user").if_exists()).await);
+    assert!(runs(&db, remove_analyzer("simple").if_exists()).await);
+    assert!(runs(&db, remove_param("greeting").if_exists()).await);
+    assert!(runs(&db, remove_function("fn::greet").if_exists()).await);
+    assert!(runs(&db, remove_user("alice").on_database().if_exists()).await);
+    assert!(runs(&db, remove_access("api").on_database().if_exists()).await);
 }
 
 #[tokio::test]
 async fn without_if_exists_a_missing_resource_fails() {
     let db = db().await;
-    assert!(!succeeds(&db, remove_table("missing")).await);
-    assert!(!succeeds(&db, remove_param("greeting")).await);
-    assert!(!succeeds(&db, remove_analyzer("simple")).await);
+    assert!(!runs(&db, remove_table("missing")).await);
+    assert!(!runs(&db, remove_param("greeting")).await);
+    assert!(!runs(&db, remove_analyzer("simple")).await);
 }

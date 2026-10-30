@@ -19,14 +19,6 @@ async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
     statement.run(db.clone()).await.expect("ran");
 }
 
-/// Runs `sql` and reports whether every statement succeeded.
-async fn succeeds(db: &Surreal<Db>, sql: &str) -> bool {
-    db.query(sql.to_owned())
-        .await
-        .and_then(surrealdb::IndexedResults::check)
-        .is_ok()
-}
-
 fn amount() -> Field {
     Field::new("amount")
 }

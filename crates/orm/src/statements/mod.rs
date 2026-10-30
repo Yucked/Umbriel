@@ -7,6 +7,7 @@ pub(crate) trait Statement {
     fn render_body(&self, out: &mut Renderer);
 }
 
+pub(crate) mod alter;
 pub(crate) mod any;
 pub(crate) mod break_;
 pub(crate) mod continue_;
@@ -187,6 +188,11 @@ impl<S: Statement + ?Sized> Render for StatementBody<'_, S> {
     }
 }
 
+pub use alter::{
+    AlterAnalyzerStatement, AlterEventStatement, AlterFieldStatement, AlterFunctionStatement,
+    AlterParamStatement, AlterTableStatement, alter_analyzer, alter_event, alter_field,
+    alter_function, alter_param, alter_table,
+};
 pub use any::{
     AnyTarget, CreateAnyStatement, InsertAnyStatement, Models, WritableModels, create_any,
     create_any_only,
