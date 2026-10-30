@@ -42,7 +42,8 @@ rendered, so a member may hold any characters.
   an edge record step would fail at run time.
 - Statements accept a `TableOf` as their target, and `insert(…).into_table(…)` inserts into it; a
   record whose id names another member fails before the statement runs.
-- Table-based helpers (`find_where`, `count_where`, `count_all`, `delete_where`, `insert_many`)
+- Table-based helpers (`select`, `select_value`, `find_where`, `count_where`, `count_all`,
+  `delete_where`, `insert_many`)
   are on `TableOf`; the `SurrealCrud` versions use the default table. Id-based helpers use the id's
   table.
 - Membership is a typing contract, not an authorization boundary. The generated schema defines

@@ -54,9 +54,8 @@ where
 
 impl<Q> Runnable for Q where Q: Queryable {}
 
-/// Checks that every field is one of `T`'s record links, comparing rendered paths: a caller's
-/// `Field::new("author")` and the generated schema field for `author` are built from different
-/// parts.
+/// Checks that every field is one of `T`'s record links, comparing rendered paths, so a caller's
+/// `Field::new("author")`, a `Field::raw("author")` and the generated schema field all match.
 fn validate_fields_to_fetch<T: Model>(linked_fields_to_fetch: &[Field]) -> Result<()> {
     let linked_fields = T::get_linked_fields()
         .iter()
