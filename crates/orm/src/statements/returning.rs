@@ -631,7 +631,16 @@ impl<S: Statement> Render for Body<S> {
     }
 }
 
-/// A statement with `EXPLAIN` or `EXPLAIN FULL`: it returns the query plan and changes nothing.
+/// A statement with `EXPLAIN` or `EXPLAIN FULL`: it returns the query plan instead of its result.
+///
+/// SurrealDB 3.3.4 plans the two kinds of statement differently, so the plan's shape differs:
+/// - **`SELECT`** runs on the newer executor: one object, a tree of `operator`, `attributes` and
+///   `children` (`IndexScan`, `TableScan`, …), with `metrics` under `EXPLAIN FULL`.
+/// - **`UPDATE`, `UPSERT` and `DELETE`** run on the older one: a list of steps, each
+///   `{ operation, detail }` (`Iterate Index`, `Iterate Table`, …).
+///
+/// `EXPLAIN` alone runs nothing. `EXPLAIN FULL` runs the statement to measure it, so on a write
+/// statement it **performs the write** (`dbs/iterator.rs` iterates the documents as usual).
 #[derive(Debug, Clone)]
 pub struct Explained {
     statement: Fragment,
@@ -646,15 +655,15 @@ impl Explained {
         }
     }
 
-    /// Runs the statement and returns its plan, one value per plan step.
-    ///
-    /// The plan's shape is SurrealDB's own and is not typed by Umbriel yet.
+    /// Runs the statement and returns its plan, in the shape described on [`Explained`]. The
+    /// plan is SurrealDB's own and documented as informational, so it is not typed further.
     ///
     /// # Errors
     ///
     /// Fails as [`Returning::execute`] does.
-    pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<Vec<Value>> {
-        take_many(execute(db, self.to_query()?).await?)
+    pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<Value> {
+        let mut results = execute(db, self.to_query()?).await?;
+        results.take::<Value>(0).map_err(Error::Conversion)
     }
 }
 
@@ -709,8 +718,9 @@ impl PlanFormat for PlanJson {
 
 /// `EXPLAIN [ANALYZE] [FORMAT JSON] SELECT …`: the plan of a `SELECT` instead of its records.
 ///
-/// SurrealDB documents the prefix for statements that do not modify data, so it takes a
-/// `SELECT` only; a write statement's `explain()` is the suffix form. The plan is informational and its format may change between SurrealDB releases, so it
+/// SurrealDB documents the prefix for statements that do not modify data, and 3.3.4 refuses it
+/// over a write statement (its planner does not plan writes), so it takes a `SELECT` only; a
+/// write statement's `explain()` is the suffix form. The plan is informational and its format may change between SurrealDB releases, so it
 /// is not typed beyond text or JSON.
 ///
 /// # Example

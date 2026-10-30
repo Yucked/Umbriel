@@ -380,7 +380,8 @@ macro_rules! update_clauses {
                 Explained::new(self, false)
             }
 
-            /// `EXPLAIN FULL`: the plan with the number of records each step processes.
+            /// `EXPLAIN FULL`: the plan with the number of records each step processes. SurrealDB
+            /// runs the statement to count them, so the records **are written**.
             pub fn explain_full(self) -> Explained {
                 Explained::new(self, true)
             }

@@ -431,8 +431,58 @@ mod index_hints {
         db
     }
 
-    fn uses_the_index(plan: &[Value]) -> bool {
-        format!("{plan:?}").contains("organization_age")
+    /// The operator names of a SELECT plan: the newer executor's tree of `operator` and
+    /// `children` (`exec/operators/explain.rs`), such as `IndexScan` and `TableScan`.
+    fn operators(plan: &Value) -> Vec<String> {
+        let mut names = vec![];
+        let mut pending = vec![plan];
+        while let Some(Value::Object(node)) = pending.pop() {
+            if let Some(Value::String(name)) = node.get("operator") {
+                names.push(name.clone());
+            }
+            if let Some(Value::Array(children)) = node.get("children") {
+                pending.extend(children.iter());
+            }
+        }
+        names
+    }
+
+    /// The step names of a write statement's plan: the older executor's list of
+    /// `{ operation, detail }` (`dbs/plan.rs`), such as `Iterate Index` and `Iterate Table`.
+    fn operations(plan: &Value) -> Vec<String> {
+        let Value::Array(steps) = plan else {
+            panic!("a write plan is a list of steps: {plan:?}");
+        };
+        steps
+            .iter()
+            .filter_map(|step| match step {
+                Value::Object(step) => match step.get("operation") {
+                    Some(Value::String(name)) => Some(name.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Asserts that a write statement reads through the index under `WITH INDEX` and through the
+    /// table under `WITH NOINDEX`, and that explaining it wrote nothing.
+    async fn assert_write_follows_its_hint(
+        db: &Surreal<Db>,
+        indexed: umbriel::statements::Explained,
+        scanned: umbriel::statements::Explained,
+    ) {
+        assert_parses(&indexed.to_debug_sql());
+        assert_parses(&scanned.to_debug_sql());
+        let indexed = operations(&indexed.execute(db).await.expect("plan"));
+        assert!(indexed.iter().any(|step| step == "Iterate Index"), "{indexed:?}");
+        assert!(!indexed.iter().any(|step| step == "Iterate Table"), "{indexed:?}");
+        let scanned = operations(&scanned.execute(db).await.expect("plan"));
+        assert!(scanned.iter().any(|step| step == "Iterate Table"), "{scanned:?}");
+        assert!(!scanned.iter().any(|step| step.starts_with("Iterate Index")), "{scanned:?}");
+        let names: Vec<String> =
+            read(db, "SELECT VALUE name FROM organization ORDER BY name;").await;
+        assert_eq!(names, ["Acme Corp", "Globex", "Initech"]);
     }
 
     #[tokio::test]
@@ -440,82 +490,78 @@ mod index_hints {
         let db = indexed().await;
         let age = Field::new("age");
         let base = || select(All).from(Organization::table()).where_(age.equal(30));
-        let indexed = base()
-            .with_index(Field::new("organization_age"))
-            .explain()
-            .execute(&db)
-            .await
-            .expect("plan");
-        assert!(uses_the_index(&indexed), "{indexed:?}");
-        let scanned = base()
-            .with_no_index()
-            .explain()
-            .execute(&db)
-            .await
-            .expect("plan");
-        assert!(!uses_the_index(&scanned), "{scanned:?}");
+        let indexed = operators(
+            &base()
+                .with_index(Field::new("organization_age"))
+                .explain()
+                .execute(&db)
+                .await
+                .expect("plan"),
+        );
+        assert!(indexed.iter().any(|op| op == "IndexScan"), "{indexed:?}");
+        assert!(!indexed.iter().any(|op| op == "TableScan"), "{indexed:?}");
+        let scanned = operators(
+            &base()
+                .with_no_index()
+                .explain()
+                .execute(&db)
+                .await
+                .expect("plan"),
+        );
+        assert!(scanned.iter().any(|op| op == "TableScan"), "{scanned:?}");
+        assert!(!scanned.iter().any(|op| op == "IndexScan"), "{scanned:?}");
     }
 
-    /// The #11 transfer's acceptance test: `WITH` on a write statement is kept only if it changes
-    /// that statement's plan.
+    // The #11 transfer's acceptance tests, one per statement: each statement keeps its hint
+    // only if its own test passes.
+
     #[tokio::test]
-    async fn write_statements_follow_their_hint() {
+    async fn update_follows_its_hint() {
         let db = indexed().await;
         let org = Organization::schema();
-        let plans = [
-            (
-                "UPDATE",
-                update::<Organization>(Organization::table())
-                    .with_index(Field::new("organization_age"))
-                    .set(org.name.equal_to("Renamed"))
-                    .where_(Field::new("age").equal(30))
-                    .explain(),
-                update::<Organization>(Organization::table())
-                    .with_no_index()
-                    .set(org.name.equal_to("Renamed"))
-                    .where_(Field::new("age").equal(30))
-                    .explain(),
-            ),
-            (
-                "UPSERT",
-                umbriel::statements::upsert::<Organization>(Organization::table())
-                    .with_index(Field::new("organization_age"))
-                    .set(org.name.equal_to("Renamed"))
-                    .where_(Field::new("age").equal(30))
-                    .explain(),
-                umbriel::statements::upsert::<Organization>(Organization::table())
-                    .with_no_index()
-                    .set(org.name.equal_to("Renamed"))
-                    .where_(Field::new("age").equal(30))
-                    .explain(),
-            ),
-            (
-                "DELETE",
-                umbriel::statements::delete::<Organization>(Organization::table())
-                    .with_index(Field::new("organization_age"))
-                    .where_(Field::new("age").equal(30))
-                    .explain(),
-                umbriel::statements::delete::<Organization>(Organization::table())
-                    .with_no_index()
-                    .where_(Field::new("age").equal(30))
-                    .explain(),
-            ),
-        ];
-        for (statement, indexed, scanned) in plans {
-            assert_sql_parses(&indexed);
-            let indexed = indexed.execute(&db).await.expect("plan");
-            let scanned = scanned.execute(&db).await.expect("plan");
-            assert!(uses_the_index(&indexed), "{statement}: {indexed:?}");
-            assert!(!uses_the_index(&scanned), "{statement}: {scanned:?}");
-        }
-        // Explaining wrote nothing.
-        let names: Vec<String> =
-            read(&db, "SELECT VALUE name FROM organization ORDER BY name;").await;
-        assert_eq!(names, ["Acme Corp", "Globex", "Initech"]);
+        let base = || {
+            update::<Organization>(Organization::table())
+                .set(org.name.equal_to("Renamed"))
+                .where_(Field::new("age").equal(30))
+        };
+        assert_write_follows_its_hint(
+            &db,
+            base().with_index(Field::new("organization_age")).explain(),
+            base().with_no_index().explain(),
+        )
+        .await;
     }
 
-    fn assert_sql_parses(statement: &impl Render) {
-        assert_parses(&statement.to_debug_sql());
+    #[tokio::test]
+    async fn upsert_follows_its_hint() {
+        let db = indexed().await;
+        let org = Organization::schema();
+        let base = || {
+            umbriel::statements::upsert::<Organization>(Organization::table())
+                .set(org.name.equal_to("Renamed"))
+                .where_(Field::new("age").equal(30))
+        };
+        assert_write_follows_its_hint(
+            &db,
+            base().with_index(Field::new("organization_age")).explain(),
+            base().with_no_index().explain(),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn delete_follows_its_hint() {
+        let db = indexed().await;
+        let base = || {
+            umbriel::statements::delete::<Organization>(Organization::table())
+                .where_(Field::new("age").equal(30))
+        };
+        assert_write_follows_its_hint(
+            &db,
+            base().with_index(Field::new("organization_age")).explain(),
+            base().with_no_index().explain(),
+        )
+        .await;
     }
 }
 
@@ -528,34 +574,62 @@ mod explain_prefix {
         let base = || select(All).from(Organization::table());
 
         let text: String = explain(base()).execute(&db).await.expect("plan");
-        assert!(!text.is_empty());
+        assert!(text.contains("TableScan"), "{text}");
 
         let json: Value = explain(base()).json().execute(&db).await.expect("plan");
-        assert!(matches!(json, Value::Object(_)), "{json:?}");
+        assert!(
+            matches!(&json, Value::Object(plan) if plan.get("operator").is_some()),
+            "{json:?}"
+        );
 
+        // `exec/operators/explain.rs` ends an analyzed text plan with its row count.
         let analyzed: String = explain(base()).analyze().execute(&db).await.expect("plan");
-        assert!(analyzed.contains("rows"), "{analyzed}");
+        assert!(analyzed.contains("Total rows: 3"), "{analyzed}");
+    }
+}
+
+/// The verification task for Q10, one form per test so each state change is attributed: 3.3.4
+/// runs a write under `EXPLAIN FULL` (`dbs/iterator.rs`), skips it under `EXPLAIN`, and refuses
+/// the prefix over a write (`exec/planner.rs`).
+mod explaining_writes {
+    use super::*;
+
+    async fn acme_age(db: &Surreal<Db>) -> u8 {
+        read(db, "RETURN organization:acme.age;").await
     }
 
-    /// The verification task for Q10: whether `EXPLAIN FULL` or `EXPLAIN ANALYZE` executes a
-    /// write. The docs describe `EXPLAIN` for statements that do not modify data.
     #[tokio::test]
-    async fn explaining_a_write_does_not_write() {
+    async fn explain_does_not_write() {
         let db = organizations().await;
-        let org = Organization::schema();
         update::<Organization>(Organization::id("acme"))
-            .set(org.age.equal_to(99u8))
+            .set(Organization::schema().age.equal_to(99u8))
+            .explain()
+            .execute(&db)
+            .await
+            .expect("plan");
+        assert_eq!(acme_age(&db).await, 30);
+    }
+
+    #[tokio::test]
+    async fn explain_full_performs_the_write() {
+        let db = organizations().await;
+        update::<Organization>(Organization::id("acme"))
+            .set(Organization::schema().age.equal_to(99u8))
             .explain_full()
             .execute(&db)
             .await
             .expect("plan");
-        run(
-            &db,
-            Raw::new("EXPLAIN ANALYZE UPDATE organization:acme SET age = 98;"),
-        )
-        .await;
-        let age: u8 = read(&db, "RETURN organization:acme.age;").await;
-        assert_eq!(age, 30);
+        assert_eq!(acme_age(&db).await, 99);
+    }
+
+    #[tokio::test]
+    async fn the_prefix_over_a_write_is_refused() {
+        let db = organizations().await;
+        let refused = Raw::new("EXPLAIN ANALYZE UPDATE organization:acme SET age = 98;")
+            .run(db.clone())
+            .await;
+        assert!(refused.is_err(), "EXPLAIN ANALYZE UPDATE ran");
+        assert_eq!(acme_age(&db).await, 30);
     }
 }
 
@@ -658,7 +732,9 @@ mod storage {
     }
 
     /// `TEMPFILES` with the SDK's temporary directory: the same rows, and a plan that shows the
-    /// clause took effect.
+    /// planner took the clause. The plan shows the clause, not whether files were used: the
+    /// planner refuses TopK pushdown for `TEMPFILES` whatever the configuration
+    /// (`exec/planner/select/pipeline.rs`).
     #[tokio::test]
     async fn tempfiles_sorts_through_the_temporary_directory() {
         let directory = tempfile::tempdir().expect("a temporary directory");
@@ -691,7 +767,7 @@ mod storage {
             .execute(&db)
             .await
             .expect("plan");
-        assert!(plan.contains("tempfiles"), "{plan}");
+        assert!(plan.contains("topk_pushdown: no (tempfiles)"), "{plan}");
     }
 }
 

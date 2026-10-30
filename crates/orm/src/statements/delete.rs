@@ -146,7 +146,8 @@ impl<T: Model, R: ReturnMode, C: Cardinality> DeleteStatement<T, R, C> {
         Explained::new(self, false)
     }
 
-    /// `EXPLAIN FULL`: the plan with the number of records each step processes.
+    /// `EXPLAIN FULL`: the plan with the number of records each step processes. SurrealDB runs
+    /// the statement to count them, so the records **are deleted**.
     pub fn explain_full(self) -> Explained {
         Explained::new(self, true)
     }
