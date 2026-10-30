@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use surrealdb::{Surreal, engine::local::Db, types::Value};
 use umbriel::{
-    All, Destructure, Field, Raw, Runnable, Table,
+    All, Destructure, Field, Raw, Render, Runnable, Table,
     statements::{Returning, select, select_value},
 };
 use umbriel_tests::*;
@@ -124,8 +124,9 @@ mod evaluation {
         assert_eq!(rows[0].get("opts"), Some(&theme_only));
     }
 
-    /// T21 verification: `.*` on a plain object gives its values, as it does for an array's
-    /// items. (The expected shape is a reading of the 3.x idiom docs, pinned by this test.)
+    /// T21 verification: `.*` on a plain object gives the object itself, unchanged; only record
+    /// ids are fetched (3.3.4 `exec/parts/array_ops.rs` `evaluate_all`, and the legacy
+    /// `value/get.rs`).
     #[tokio::test]
     async fn all_fields_of_an_object() {
         let db = seeded().await;
@@ -134,7 +135,7 @@ mod evaluation {
             .execute(&db)
             .await
             .expect("read");
-        let expected: Value = read(&db, "RETURN ['Lisbon', '1000'];").await;
+        let expected: Value = read(&db, "RETURN { city: 'Lisbon', zip: '1000' };").await;
         assert_eq!(values, [expected]);
     }
 }

@@ -36,6 +36,8 @@ async fn a_typed_let_accepts_its_type() {
     assert_eq!(count, Some(5));
 }
 
+/// 3.3.4 coerces a typed `LET` value to its kind and fails with `SetCoerce` when it cannot
+/// (`dbs/executor.rs`).
 #[tokio::test]
 async fn a_typed_let_rejects_another_type() {
     let db = db().await;
