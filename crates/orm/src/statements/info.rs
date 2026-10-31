@@ -142,7 +142,7 @@ impl<O> InfoStatement<O> {
     }
 }
 
-impl<O: InfoOutput> InfoStatement<O> {
+impl<O: InfoOutput + 'static> InfoStatement<O> {
     /// Runs the statement and decodes its result.
     ///
     /// # Errors
