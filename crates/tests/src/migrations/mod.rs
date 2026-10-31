@@ -670,3 +670,38 @@ define index memo_title on memo fields title unique;
 define event memo_created on memo
     when $event = "CREATE"
     then (update $after set views = 0);"#;
+
+/// Every definition clause #13 added: table kinds and comments, `READONLY`, `DEFAULT ALWAYS`,
+/// `FLEXIBLE`, `COMPUTED`, a float default on a decimal field, an `ASYNC` event, an enforced
+/// relation, a view and param permissions. Each table is defined after the tables it reads, and
+/// the view, `sale_large`, sorts after its source `sale`, so replaying the definitions in
+/// `Schema::iter` order (kind, then table name) is also dependency-safe.
+pub const NEW_CLAUSES_TABLES: &[&str] = &[
+    "DEFINE TABLE customer SCHEMALESS;",
+    "DEFINE TABLE sale SCHEMAFULL TYPE NORMAL COMMENT 'Acme Corp sales';",
+    "DEFINE FIELD amount ON TABLE sale TYPE int READONLY COMMENT 'in cents';",
+    "DEFINE FIELD refunds ON TABLE sale TYPE int DEFAULT ALWAYS 0;",
+    "DEFINE FIELD meta ON TABLE sale TYPE object FLEXIBLE;",
+    "DEFINE FIELD doubled ON TABLE sale COMPUTED amount * 2;",
+    "DEFINE FIELD price ON TABLE sale TYPE decimal DEFAULT 1.5f;",
+    "DEFINE EVENT audit ON TABLE sale THEN (CREATE log) ASYNC RETRY 2 MAXDEPTH 1;",
+    "DEFINE TABLE likes TYPE RELATION IN customer OUT sale ENFORCED;",
+    "DEFINE TABLE sale_large AS SELECT * FROM sale WHERE amount >= 10;",
+];
+
+/// The param of [`NewClauses`], with a permission.
+pub const NEW_CLAUSES_PARAM: &str = "DEFINE PARAM $greeting VALUE 'Hello' PERMISSIONS NONE;";
+
+/// The schema of [`NEW_CLAUSES_TABLES`] and [`NEW_CLAUSES_PARAM`].
+#[derive(Debug, Clone)]
+pub struct NewClauses;
+
+impl DbResources for NewClauses {
+    fn tables(&self) -> Vec<Raw> {
+        NEW_CLAUSES_TABLES.iter().copied().map(Raw::new).collect()
+    }
+
+    fn params(&self) -> Vec<Raw> {
+        vec![Raw::new(NEW_CLAUSES_PARAM)]
+    }
+}

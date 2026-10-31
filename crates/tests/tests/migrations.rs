@@ -506,22 +506,19 @@ mod schema {
     #[tokio::test]
     async fn the_new_definition_clauses_round_trip() {
         let db = database().await;
-        Raw::new(
-            "DEFINE TABLE sale SCHEMAFULL TYPE NORMAL COMMENT 'Acme Corp sales';
-             DEFINE FIELD amount ON sale TYPE int READONLY COMMENT 'in cents';
-             DEFINE FIELD refunds ON sale TYPE int DEFAULT ALWAYS 0;
-             DEFINE FIELD meta ON sale TYPE object FLEXIBLE;
-             DEFINE FIELD doubled ON sale COMPUTED amount * 2;
-             DEFINE FIELD price ON sale TYPE decimal DEFAULT 1.5f;
-             DEFINE EVENT audit ON sale THEN (CREATE log) ASYNC RETRY 2 MAXDEPTH 1;
-             DEFINE TABLE likes TYPE RELATION IN customer OUT sale ENFORCED;
-             DEFINE TABLE customer SCHEMALESS;
-             DEFINE PARAM $greeting VALUE 'Hello' PERMISSIONS NONE;",
-        )
-        .run(db.clone())
-        .await
-        .expect("defined");
+        for sql in NEW_CLAUSES_TABLES.iter().chain([&NEW_CLAUSES_PARAM]) {
+            Raw::new(*sql)
+                .run(db.clone())
+                .await
+                .unwrap_or_else(|error| panic!("`{sql}` defines: {error}"));
+        }
         let schema = inspect(&db).await;
+        assert!(
+            schema
+                .get(&key(Table, None, "sale_large"))
+                .is_some_and(|view| view.sql().contains(" AS SELECT ")),
+            "the view is inspected"
+        );
 
         let fresh = database().await;
         for (key, definition) in schema.iter() {
@@ -538,6 +535,32 @@ mod schema {
 mod diff {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    /// #13's completion check, through migration generation: a migration file holding every new
+    /// clause and a codebase defining the same give an empty `SchemaDiff`, so no migration is
+    /// written.
+    #[tokio::test]
+    async fn the_new_definition_clauses_give_no_change() {
+        let (_temp, dir) = migration_dir();
+        let up = NEW_CLAUSES_TABLES
+            .iter()
+            .chain([&NEW_CLAUSES_PARAM])
+            .copied()
+            .collect::<Vec<_>>()
+            .join("\n");
+        write_migration(
+            &dir,
+            MigrationFlag::TwoWay,
+            &up,
+            "REMOVE TABLE sale_large; REMOVE TABLE likes; REMOVE TABLE sale; \
+             REMOVE TABLE customer; REMOVE PARAM $greeting;",
+        );
+
+        generate(&dir, MigrationFlag::TwoWay, NewClauses, disallow_empty())
+            .await
+            .expect("generates");
+        assert_eq!(migration_files(&dir).len(), 2, "no migration is written");
+    }
 
     #[tokio::test]
     async fn functions_analyzers_and_indexes_are_created_and_removed_in_dependency_order() {
