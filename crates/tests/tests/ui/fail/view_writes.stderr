@@ -1,0 +1,505 @@
+error[E0599]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:31:18
+   |
+17 | pub struct SaleCopy {
+   | ------------------- method `save` not found for this struct because it doesn't satisfy `SaleCopy: SurrealCrud` or `SaleCopy: Writable`
+...
+31 |     let _ = copy.save(db);
+   |                  ^^^^ not writable
+   |
+   = note: the following trait bounds were not satisfied:
+           `SaleCopy: Writable`
+           which is required by `SaleCopy: SurrealCrud`
+           `&SaleCopy: Writable`
+           which is required by `&SaleCopy: SurrealCrud`
+           `&mut SaleCopy: Writable`
+           which is required by `&mut SaleCopy: SurrealCrud`
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: the trait `Writable` must be implemented
+  --> $WORKSPACE/crates/orm/src/traits/model.rs
+   |
+   | pub trait Writable: Model {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `save`, perhaps you need to implement it:
+           candidate #1: `SurrealCrud`
+
+error[E0599]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:32:23
+   |
+17 | pub struct SaleCopy {
+   | ------------------- associated function or constant `delete_by_id` not found for this struct because it doesn't satisfy `SaleCopy: SurrealCrud` or `SaleCopy: Writable`
+...
+32 |     let _ = SaleCopy::delete_by_id(db, &id);
+   |                       ^^^^^^^^^^^^ not writable
+   |
+   = note: the following trait bounds were not satisfied:
+           `SaleCopy: Writable`
+           which is required by `SaleCopy: SurrealCrud`
+           `&SaleCopy: Writable`
+           which is required by `&SaleCopy: SurrealCrud`
+           `&mut SaleCopy: Writable`
+           which is required by `&mut SaleCopy: SurrealCrud`
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: the trait `Writable` must be implemented
+  --> $WORKSPACE/crates/orm/src/traits/model.rs
+   |
+   | pub trait Writable: Model {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `delete_by_id`, perhaps you need to implement it:
+           candidate #1: `SurrealCrud`
+
+error[E0599]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:33:23
+   |
+17 | pub struct SaleCopy {
+   | ------------------- associated function or constant `patch` not found for this struct because it doesn't satisfy `SaleCopy: SurrealCrud` or `SaleCopy: Writable`
+...
+33 |     let _ = SaleCopy::patch(db, &id, ());
+   |                       ^^^^^ not writable
+   |
+   = note: the following trait bounds were not satisfied:
+           `SaleCopy: Writable`
+           which is required by `SaleCopy: SurrealCrud`
+           `&SaleCopy: Writable`
+           which is required by `&SaleCopy: SurrealCrud`
+           `&mut SaleCopy: Writable`
+           which is required by `&mut SaleCopy: SurrealCrud`
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: the trait `Writable` must be implemented
+  --> $WORKSPACE/crates/orm/src/traits/model.rs
+   |
+   | pub trait Writable: Model {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following traits define an item `patch`, perhaps you need to implement one of them:
+           candidate #1: `SurrealCrud`
+           candidate #2: `surrealdb_core::rpc::protocol::RpcProtocol`
+
+error[E0599]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:34:23
+   |
+17 | pub struct SaleCopy {
+   | ------------------- associated function or constant `merge` not found for this struct because it doesn't satisfy `SaleCopy: SurrealCrud` or `SaleCopy: Writable`
+...
+34 |     let _ = SaleCopy::merge(db, &id, ());
+   |                       ^^^^^ not writable
+   |
+   = note: the following trait bounds were not satisfied:
+           `SaleCopy: Writable`
+           which is required by `SaleCopy: SurrealCrud`
+           `&SaleCopy: Writable`
+           which is required by `&SaleCopy: SurrealCrud`
+           `&mut SaleCopy: Writable`
+           which is required by `&mut SaleCopy: SurrealCrud`
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: the trait `Writable` must be implemented
+  --> $WORKSPACE/crates/orm/src/traits/model.rs
+   |
+   | pub trait Writable: Model {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following traits define an item `merge`, perhaps you need to implement one of them:
+           candidate #1: `SurrealCrud`
+           candidate #2: `itertools::Itertools`
+           candidate #3: `itertools::Itertools`
+           candidate #4: `itertools::Itertools`
+           candidate #5: `itertools::merge_join::OrderingOrBool`
+           candidate #6: `itertools::merge_join::OrderingOrBool`
+           candidate #7: `itertools::merge_join::OrderingOrBool`
+           candidate #8: `rstar::envelope::Envelope`
+           candidate #9: `surrealdb_core::exec::function::aggregate::Accumulator`
+           candidate #10: `surrealdb_core::rpc::protocol::RpcProtocol`
+
+error[E0599]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:35:23
+   |
+17 | pub struct SaleCopy {
+   | ------------------- associated function or constant `insert_many` not found for this struct because it doesn't satisfy `SaleCopy: SurrealCrud` or `SaleCopy: Writable`
+...
+35 |     let _ = SaleCopy::insert_many(db, vec![]);
+   |                       ^^^^^^^^^^^ not writable
+   |
+   = note: the following trait bounds were not satisfied:
+           `SaleCopy: Writable`
+           which is required by `SaleCopy: SurrealCrud`
+           `&SaleCopy: Writable`
+           which is required by `&SaleCopy: SurrealCrud`
+           `&mut SaleCopy: Writable`
+           which is required by `&mut SaleCopy: SurrealCrud`
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: the trait `Writable` must be implemented
+  --> $WORKSPACE/crates/orm/src/traits/model.rs
+   |
+   | pub trait Writable: Model {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `insert_many`, perhaps you need to implement it:
+           candidate #1: `SurrealCrud`
+
+error[E0599]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:36:23
+   |
+17 | pub struct SaleCopy {
+   | ------------------- associated function or constant `delete_where` not found for this struct because it doesn't satisfy `SaleCopy: SurrealCrud` or `SaleCopy: Writable`
+...
+36 |     let _ = SaleCopy::delete_where(Field::new("amount").is(1));
+   |                       ^^^^^^^^^^^^ not writable
+   |
+   = note: the following trait bounds were not satisfied:
+           `SaleCopy: Writable`
+           which is required by `SaleCopy: SurrealCrud`
+           `&SaleCopy: Writable`
+           which is required by `&SaleCopy: SurrealCrud`
+           `&mut SaleCopy: Writable`
+           which is required by `&mut SaleCopy: SurrealCrud`
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: the trait `Writable` must be implemented
+  --> $WORKSPACE/crates/orm/src/traits/model.rs
+   |
+   | pub trait Writable: Model {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `delete_where`, perhaps you need to implement it:
+           candidate #1: `SurrealCrud`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:39:22
+   |
+39 |     let _ = update::<SaleCopy>(id.clone());
+   |                      ^^^^^^^^ not writable
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: required by a bound in `update`
+  --> $WORKSPACE/crates/orm/src/statements/update.rs
+   |
+   | pub fn update<T: Writable>(targettables: impl Into<TargettablesForUpdate>) -> UpdateStatement<T> {
+   |                  ^^^^^^^^ required by this bound in `update`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:40:27
+   |
+40 |     let _ = update_only::<SaleCopy>(id.clone());
+   |                           ^^^^^^^^ not writable
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: required by a bound in `update_only`
+  --> $WORKSPACE/crates/orm/src/statements/update.rs
+   |
+   | pub fn update_only<T: Writable>(
+   |                       ^^^^^^^^ required by this bound in `update_only`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:41:22
+   |
+41 |     let _ = upsert::<SaleCopy>(id.clone());
+   |                      ^^^^^^^^ not writable
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: required by a bound in `upsert`
+  --> $WORKSPACE/crates/orm/src/statements/upsert.rs
+   |
+   | pub fn upsert<T: Writable>(targettables: impl Into<TargettablesForUpdate>) -> UpsertStatement<T> {
+   |                  ^^^^^^^^ required by this bound in `upsert`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:42:27
+   |
+42 |     let _ = upsert_only::<SaleCopy>(id.clone());
+   |                           ^^^^^^^^ not writable
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: required by a bound in `upsert_only`
+  --> $WORKSPACE/crates/orm/src/statements/upsert.rs
+   |
+   | pub fn upsert_only<T: Writable>(
+   |                       ^^^^^^^^ required by this bound in `upsert_only`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:43:22
+   |
+43 |     let _ = delete::<SaleCopy>(id.clone());
+   |                      ^^^^^^^^ not writable
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: required by a bound in `umbriel::statements::delete`
+  --> $WORKSPACE/crates/orm/src/statements/delete.rs
+   |
+   | pub fn delete<T: Writable>(targettables: impl Into<TargettablesForUpdate>) -> DeleteStatement<T> {
+   |                  ^^^^^^^^ required by this bound in `delete`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:44:27
+   |
+44 |     let _ = delete_only::<SaleCopy>(id.clone());
+   |                           ^^^^^^^^ not writable
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: required by a bound in `delete_only`
+  --> $WORKSPACE/crates/orm/src/statements/delete.rs
+   |
+   | pub fn delete_only<T: Writable>(
+   |                       ^^^^^^^^ required by this bound in `delete_only`
+
+error[E0277]: `SaleCopy` is not a node
+  --> tests/ui/fail/view_writes.rs:45:22
+   |
+45 |     let _ = create::<SaleCopy>(Table::new("sale_copy"));
+   |                      ^^^^^^^^ not a node
+   |
+help: the trait `umbriel::Node` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: declare `SaleCopy` with `#[umbriel::model(node)]`
+note: required by a bound in `umbriel::statements::create`
+  --> $WORKSPACE/crates/orm/src/statements/create.rs
+   |
+   | pub fn create<T: Node>(targets: impl Into<CreateTargets<T>>) -> CreateStatement<T> {
+   |                  ^^^^ required by this bound in `create`
+
+error[E0277]: `SaleCopy` is not a node
+  --> tests/ui/fail/view_writes.rs:46:22
+   |
+46 |     let _ = insert::<SaleCopy>(vec![]);
+   |                      ^^^^^^^^ not a node
+   |
+help: the trait `umbriel::Node` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: declare `SaleCopy` with `#[umbriel::model(node)]`
+note: required by a bound in `insert`
+  --> $WORKSPACE/crates/orm/src/statements/insert.rs
+   |
+   | pub fn insert<T: Node>(insertables: impl Into<Insertables<T>>) -> InsertStatement<T> {
+   |                  ^^^^ required by this bound in `insert`
+
+error[E0277]: `SaleCopy` is not an edge
+  --> tests/ui/fail/view_writes.rs:47:22
+   |
+47 |     let _ = relate::<SaleCopy>(Field::new("a->b->c"));
+   |                      ^^^^^^^^ not an edge
+   |
+help: the trait `Edge` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: declare `SaleCopy` with `#[umbriel::model(edge)]`
+note: required by a bound in `relate`
+  --> $WORKSPACE/crates/orm/src/statements/relate.rs
+   |
+   | pub fn relate<T: Edge>(connection: impl Into<Field>) -> RelateStatement<T> {
+   |                  ^^^^ required by this bound in `relate`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:50:44
+   |
+50 |     let _ = TableOf::<SaleCopy>::default().insert_many(db, vec![]);
+   |                                            ^^^^^^^^^^^ not writable
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: required by a bound in `TableOf::<T>::insert_many`
+  --> $WORKSPACE/crates/orm/src/query/table_of.rs
+   |
+   |     pub async fn insert_many(
+   |                  ----------- required by a bound in this associated function
+...
+   |         T: Writable,
+   |            ^^^^^^^^ required by this bound in `TableOf::<T>::insert_many`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:51:44
+   |
+51 |     let _ = TableOf::<SaleCopy>::default().delete_where(Field::new("amount").is(1));
+   |                                            ^^^^^^^^^^^^ not writable
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+note: required by a bound in `TableOf::<T>::delete_where`
+  --> $WORKSPACE/crates/orm/src/query/table_of.rs
+   |
+   |     pub fn delete_where(&self, filter: impl Conditional + Clone) -> DeleteStatement<T>
+   |            ------------ required by a bound in this associated function
+   |     where
+   |         T: Writable,
+   |            ^^^^^^^^ required by this bound in `TableOf::<T>::delete_where`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:54:40
+   |
+54 |     let _ = create_any_only::<Reports>(TableOf::<SaleCopy>::default());
+   |             -------------------------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not writable
+   |             |
+   |             required by a bound introduced by this call
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: required for `AnyTarget` to implement `From<TableOf<SaleCopy>>`
+   = note: required for `TableOf<SaleCopy>` to implement `Into<AnyTarget>`
+note: required by a bound in `create_any_only`
+  --> $WORKSPACE/crates/orm/src/statements/any.rs
+   |
+   | pub fn create_any_only<M: Models>(
+   |        --------------- required by a bound in this function
+   |     target: impl Into<AnyTarget>,
+   |                  ^^^^^^^^^^^^^^^ required by this bound in `create_any_only`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:55:40
+   |
+55 |     let _ = create_any_only::<Reports>(id.clone());
+   |             -------------------------- ^^^^^^^^^^ not writable
+   |             |
+   |             required by a bound introduced by this call
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: required for `AnyTarget` to implement `From<umbriel::RecordId<SaleCopy>>`
+   = note: required for `umbriel::RecordId<SaleCopy>` to implement `Into<AnyTarget>`
+note: required by a bound in `create_any_only`
+  --> $WORKSPACE/crates/orm/src/statements/any.rs
+   |
+   | pub fn create_any_only<M: Models>(
+   |        --------------- required by a bound in this function
+   |     target: impl Into<AnyTarget>,
+   |                  ^^^^^^^^^^^^^^^ required by this bound in `create_any_only`
+
+error[E0277]: `SaleCopy` cannot be written to
+  --> tests/ui/fail/view_writes.rs:56:40
+   |
+56 |     let _ = create_any_only::<Reports>(&id);
+   |             -------------------------- ^^^ not writable
+   |             |
+   |             required by a bound introduced by this call
+   |
+help: the trait `Writable` is not implemented for `SaleCopy`
+  --> tests/ui/fail/view_writes.rs:17:1
+   |
+17 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: required for `AnyTarget` to implement `From<&umbriel::RecordId<SaleCopy>>`
+   = note: required for `&umbriel::RecordId<SaleCopy>` to implement `Into<AnyTarget>`
+note: required by a bound in `create_any_only`
+  --> $WORKSPACE/crates/orm/src/statements/any.rs
+   |
+   | pub fn create_any_only<M: Models>(
+   |        --------------- required by a bound in this function
+   |     target: impl Into<AnyTarget>,
+   |                  ^^^^^^^^^^^^^^^ required by this bound in `create_any_only`
+
+error[E0277]: `Reports` holds a model that cannot be written
+  --> tests/ui/fail/view_writes.rs:57:13
+   |
+57 |     let _ = umbriel::statements::insert_any(Vec::<Reports>::new());
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ a read-only union
+   |
+help: the trait `WritableModels` is not implemented for `Reports`
+  --> tests/ui/fail/view_writes.rs:24:1
+   |
+24 | pub enum Reports {
+   | ^^^^^^^^^^^^^^^^
+   = note: `insert_any` writes every variant; a `#[models(read_only)]` union only decodes reads
+note: required by a bound in `insert_any`
+  --> $WORKSPACE/crates/orm/src/statements/any.rs
+   |
+   | pub fn insert_any<M: WritableModels>(
+   |                      ^^^^^^^^^^^^^^ required by this bound in `insert_any`
+
+error[E0599]: no method named `equal_to` found for struct `__8SaleCopy6amountField` in the current scope
+  --> tests/ui/fail/view_writes.rs:60:39
+   |
+15 | #[model(view, table = "sale_copy")]
+   | ----------------------------------- method `equal_to` not found for this struct
+...
+60 |     let _ = SaleCopy::schema().amount.equal_to(1);
+   |                                       ^^^^^^^^
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `equal_to`, perhaps you need to implement it:
+           candidate #1: `SetterAssignable`
+help: there is a method `equal` with a similar name
+   |
+60 -     let _ = SaleCopy::schema().amount.equal_to(1);
+60 +     let _ = SaleCopy::schema().amount.equal(1);
+   |
+
+error[E0599]: no method named `equal_to` found for struct `__8SaleCopy2idField` in the current scope
+  --> tests/ui/fail/view_writes.rs:61:13
+   |
+15 | #[model(view, table = "sale_copy")]
+   | ----------------------------------- method `equal_to` not found for this struct
+...
+61 |     let _ = object!(SaleCopy { id: id.clone(), amount: 1 });
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `equal_to`, perhaps you need to implement it:
+           candidate #1: `SetterAssignable`
+   = note: this error originates in the macro `object` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: no method named `equal_to` found for struct `__8SaleCopy6amountField` in the current scope
+  --> tests/ui/fail/view_writes.rs:61:13
+   |
+15 | #[model(view, table = "sale_copy")]
+   | ----------------------------------- method `equal_to` not found for this struct
+...
+61 |     let _ = object!(SaleCopy { id: id.clone(), amount: 1 });
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `equal_to`, perhaps you need to implement it:
+           candidate #1: `SetterAssignable`
+   = note: this error originates in the macro `object` (in Nightly builds, run with -Z macro-backtrace for more info)

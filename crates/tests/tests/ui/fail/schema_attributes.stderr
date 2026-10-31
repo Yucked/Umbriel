@@ -1,0 +1,513 @@
+error: `as_` makes the table a read-only view; declare the model with `#[umbriel::model(view, …)]`
+  --> tests/ui/fail/schema_attributes.rs:10:12
+   |
+10 | pub struct Sale {
+   |            ^^^^
+
+error: a `view` needs its query: `#[orm(as_ = …)]`
+  --> tests/ui/fail/schema_attributes.rs:16:12
+   |
+16 | pub struct SaleCopy {
+   |            ^^^^^^^^
+
+error: `kind` is `"any"` or `"normal"`; an edge's `TYPE RELATION` is not set here
+  --> tests/ui/fail/schema_attributes.rs:22:14
+   |
+22 | #[orm(kind = "relation")]
+   |              ^^^^^^^^^^
+
+error: `define` gives the whole definition, so it cannot be combined with `assert`, `value`, `default_always`, `value_expr`, `computed`, `readonly`, `flexible`, `comment`, `permissions` or `item_assert`
+  --> tests/ui/fail/schema_attributes.rs:32:9
+   |
+32 |     pub amount: i64,
+   |         ^^^^^^
+
+error: `define` gives the whole definition, so it cannot be combined with `assert`, `value`, `default_always`, `value_expr`, `computed`, `readonly`, `flexible`, `comment`, `permissions` or `item_assert`
+  --> tests/ui/fail/schema_attributes.rs:39:9
+   |
+39 |     pub amount: i64,
+   |         ^^^^^^
+
+error: `define` gives the whole definition, so it cannot be combined with `assert`, `value`, `default_always`, `value_expr`, `computed`, `readonly`, `flexible`, `comment`, `permissions` or `item_assert`
+  --> tests/ui/fail/schema_attributes.rs:46:9
+   |
+46 |     pub amount: i64,
+   |         ^^^^^^
+
+error: `define` gives the whole definition, so it cannot be combined with `assert`, `value`, `default_always`, `value_expr`, `computed`, `readonly`, `flexible`, `comment`, `permissions` or `item_assert`
+  --> tests/ui/fail/schema_attributes.rs:53:9
+   |
+53 |     pub amount: i64,
+   |         ^^^^^^
+
+error: `define` gives the whole definition, so it cannot be combined with `assert`, `value`, `default_always`, `value_expr`, `computed`, `readonly`, `flexible`, `comment`, `permissions` or `item_assert`
+  --> tests/ui/fail/schema_attributes.rs:60:9
+   |
+60 |     pub amount: i64,
+   |         ^^^^^^
+
+error: `define` gives the whole definition, so it cannot be combined with `assert`, `value`, `default_always`, `value_expr`, `computed`, `readonly`, `flexible`, `comment`, `permissions` or `item_assert`
+  --> tests/ui/fail/schema_attributes.rs:67:9
+   |
+67 |     pub amount: i64,
+   |         ^^^^^^
+
+error: a `computed` field is evaluated on read, so it cannot also have `assert`, `value`, `default_always`, `value_expr`, `readonly` or `item_assert`
+  --> tests/ui/fail/schema_attributes.rs:75:9
+   |
+75 |     pub doubled: i64,
+   |         ^^^^^^^
+
+error: a field has one default: `value` or `default_always`, not both
+  --> tests/ui/fail/schema_attributes.rs:83:9
+   |
+83 |     pub amount: i64,
+   |         ^^^^^^
+
+warning: unused imports: `All`, `Field`, `Table`, and `select`
+ --> tests/ui/fail/schema_attributes.rs:1:15
+  |
+1 | use umbriel::{All, Field, RecordId, Table, model, statements::{DefineFieldStatement, select}};
+  |               ^^^  ^^^^^            ^^^^^                                            ^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0277]: `Sale` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:11:13
+   |
+11 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `Sale`
+  --> tests/ui/fail/schema_attributes.rs:10:1
+   |
+10 | pub struct Sale {
+   | ^^^^^^^^^^^^^^^
+   = note: declare `Sale` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `Sale: Model`
+   = note: required for `umbriel::RecordId<Sale>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `SaleCopy` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:17:13
+   |
+17 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `SaleCopy`
+  --> tests/ui/fail/schema_attributes.rs:16:1
+   |
+16 | pub struct SaleCopy {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: declare `SaleCopy` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `SaleCopy: Model`
+   = note: required for `umbriel::RecordId<SaleCopy>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `Customer` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:24:13
+   |
+24 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `Customer`
+  --> tests/ui/fail/schema_attributes.rs:23:1
+   |
+23 | pub struct Customer {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: declare `Customer` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `Customer: Model`
+   = note: required for `umbriel::RecordId<Customer>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `DefineWithDefaultAlways` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:30:13
+   |
+30 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `DefineWithDefaultAlways`
+  --> tests/ui/fail/schema_attributes.rs:29:1
+   |
+29 | pub struct DefineWithDefaultAlways {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: declare `DefineWithDefaultAlways` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `DefineWithDefaultAlways: Model`
+   = note: required for `umbriel::RecordId<DefineWithDefaultAlways>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `DefineWithValueExpr` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:37:13
+   |
+37 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `DefineWithValueExpr`
+  --> tests/ui/fail/schema_attributes.rs:36:1
+   |
+36 | pub struct DefineWithValueExpr {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: declare `DefineWithValueExpr` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `DefineWithValueExpr: Model`
+   = note: required for `umbriel::RecordId<DefineWithValueExpr>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `DefineWithComputed` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:44:13
+   |
+44 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `DefineWithComputed`
+  --> tests/ui/fail/schema_attributes.rs:43:1
+   |
+43 | pub struct DefineWithComputed {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: declare `DefineWithComputed` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `DefineWithComputed: Model`
+   = note: required for `umbriel::RecordId<DefineWithComputed>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `DefineWithReadonly` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:51:13
+   |
+51 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `DefineWithReadonly`
+  --> tests/ui/fail/schema_attributes.rs:50:1
+   |
+50 | pub struct DefineWithReadonly {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: declare `DefineWithReadonly` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `DefineWithReadonly: Model`
+   = note: required for `umbriel::RecordId<DefineWithReadonly>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `DefineWithFlexible` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:58:13
+   |
+58 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `DefineWithFlexible`
+  --> tests/ui/fail/schema_attributes.rs:57:1
+   |
+57 | pub struct DefineWithFlexible {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: declare `DefineWithFlexible` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `DefineWithFlexible: Model`
+   = note: required for `umbriel::RecordId<DefineWithFlexible>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `DefineWithComment` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:65:13
+   |
+65 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `DefineWithComment`
+  --> tests/ui/fail/schema_attributes.rs:64:1
+   |
+64 | pub struct DefineWithComment {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: declare `DefineWithComment` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `DefineWithComment: Model`
+   = note: required for `umbriel::RecordId<DefineWithComment>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `ComputedWithReadonly` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:73:13
+   |
+73 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `ComputedWithReadonly`
+  --> tests/ui/fail/schema_attributes.rs:72:1
+   |
+72 | pub struct ComputedWithReadonly {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: declare `ComputedWithReadonly` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `ComputedWithReadonly: Model`
+   = note: required for `umbriel::RecordId<ComputedWithReadonly>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0277]: `TwoDefaults` is not an Umbriel model
+  --> tests/ui/fail/schema_attributes.rs:81:13
+   |
+81 |     pub id: RecordId<Self>,
+   |             ^^^^^^^^^^^^^^ not a model
+   |
+help: the trait `Model` is not implemented for `TwoDefaults`
+  --> tests/ui/fail/schema_attributes.rs:80:1
+   |
+80 | pub struct TwoDefaults {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   = note: declare `TwoDefaults` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+  --> $WORKSPACE/crates/orm/src/query/record_id.rs
+   |
+   | impl<T: Model> SurrealValue for RecordId<T> {
+   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `TwoDefaults: Model`
+   = note: required for `umbriel::RecordId<TwoDefaults>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<Sale>`
+  --> tests/ui/fail/schema_attributes.rs:11:9
+   |
+ 8 | #[model(node, table = "sale")]
+   | ------------------------------ value moved due to this method call
+...
+11 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+11 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<SaleCopy>`
+  --> tests/ui/fail/schema_attributes.rs:17:9
+   |
+15 | #[model(view, table = "sale_copy")]
+   | ----------------------------------- value moved due to this method call
+16 | pub struct SaleCopy {
+17 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+17 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<Customer>`
+  --> tests/ui/fail/schema_attributes.rs:24:9
+   |
+21 | #[model(node, table = "customer")]
+   | ---------------------------------- value moved due to this method call
+...
+24 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+24 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<DefineWithDefaultAlways>`
+  --> tests/ui/fail/schema_attributes.rs:30:9
+   |
+28 | #[model(node, table = "define_with_default_always")]
+   | ---------------------------------------------------- value moved due to this method call
+29 | pub struct DefineWithDefaultAlways {
+30 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+30 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<DefineWithValueExpr>`
+  --> tests/ui/fail/schema_attributes.rs:37:9
+   |
+35 | #[model(node, table = "define_with_value_expr")]
+   | ------------------------------------------------ value moved due to this method call
+36 | pub struct DefineWithValueExpr {
+37 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+37 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<DefineWithComputed>`
+  --> tests/ui/fail/schema_attributes.rs:44:9
+   |
+42 | #[model(node, table = "define_with_computed")]
+   | ---------------------------------------------- value moved due to this method call
+43 | pub struct DefineWithComputed {
+44 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+44 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<DefineWithReadonly>`
+  --> tests/ui/fail/schema_attributes.rs:51:9
+   |
+49 | #[model(node, table = "define_with_readonly")]
+   | ---------------------------------------------- value moved due to this method call
+50 | pub struct DefineWithReadonly {
+51 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+51 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<DefineWithFlexible>`
+  --> tests/ui/fail/schema_attributes.rs:58:9
+   |
+56 | #[model(node, table = "define_with_flexible")]
+   | ---------------------------------------------- value moved due to this method call
+57 | pub struct DefineWithFlexible {
+58 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+58 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<DefineWithComment>`
+  --> tests/ui/fail/schema_attributes.rs:65:9
+   |
+63 | #[model(node, table = "define_with_comment")]
+   | --------------------------------------------- value moved due to this method call
+64 | pub struct DefineWithComment {
+65 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+65 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<ComputedWithReadonly>`
+  --> tests/ui/fail/schema_attributes.rs:73:9
+   |
+71 | #[model(node, table = "computed_with_readonly")]
+   | ------------------------------------------------ value moved due to this method call
+72 | pub struct ComputedWithReadonly {
+73 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+73 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<TwoDefaults>`
+  --> tests/ui/fail/schema_attributes.rs:81:9
+   |
+79 | #[model(node, table = "two_defaults")]
+   | -------------------------------------- value moved due to this method call
+80 | pub struct TwoDefaults {
+81 |     pub id: RecordId<Self>,
+   |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+   |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+   |
+   |     fn into_value(self) -> Value;
+   |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+   |
+81 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+   |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
