@@ -153,7 +153,7 @@ Database-only settings stay in `#[orm(…)]`:
 | `value = …` | The field's default: `DEFAULT …` in the generated `DEFINE FIELD`, applied when a record is created without the field. Values written explicitly, falsy ones (`0`, `false`, `''`) included, are kept, and updates never re-apply it. |
 | `default_always = …` | `DEFAULT ALWAYS …`: also applied when an update leaves the field `NONE`. Excludes `value`. |
 | `value_expr = …` | SurrealQL's `VALUE …`, evaluated and stored on every write. |
-| `computed = …` | `COMPUTED …`: evaluated on every read and never stored; SurrealDB discards a written value. The field has no patch, merge or setter, and `object!` does not take it. Excludes every write-side clause. |
+| `computed = …` | `COMPUTED …`: evaluated on every read and never stored; SurrealDB discards a written value. The field has no patch, merge or setter, and `object!` does not take it. Excludes `value`, `default_always`, `value_expr`, `assert`, `item_assert` and `readonly`; `flexible` is allowed with an object type. |
 | `readonly`, `flexible`, `comment = "…"` | `READONLY`, `FLEXIBLE` (the type must admit an object) and `COMMENT`. |
 | `assert`, `permissions`, `item_assert` | Clauses of the generated `DEFINE FIELD`. |
 | `define = …` | An expression giving the whole `DEFINE FIELD`; excludes the clauses above. |

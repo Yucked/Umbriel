@@ -353,6 +353,12 @@ impl Field {
         self
     }
 
+    /// Whether the path is a single expression, such as a parameter holding a field name, whose
+    /// field is known only when SurrealDB evaluates it.
+    pub(crate) fn is_expression(&self) -> bool {
+        matches!(self.parts.as_slice(), [IdiomPart::Expr(_)])
+    }
+
     /// The field's name when the path is a single top-level field.
     pub(crate) fn top_level_name(&self) -> Option<&str> {
         match self.parts.as_slice() {

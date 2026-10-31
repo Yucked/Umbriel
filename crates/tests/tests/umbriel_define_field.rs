@@ -23,6 +23,11 @@ fn amount() -> Field {
     Field::new("amount")
 }
 
+/// `{ RETURN { total: amount } }`: a computed object whose key has no definition of its own.
+fn summary() -> umbriel::statements::utils::Block {
+    umbriel::chain(umbriel::Raw::new("RETURN { total: amount };")).as_block()
+}
+
 mod rendering {
     use super::*;
 
@@ -105,7 +110,7 @@ mod rendering {
                 .on_table("sale")
                 .computed(amount())
                 .readonly(),
-            "READONLY or FLEXIBLE",
+            "cannot also be READONLY",
         );
         assert_render_error(
             &define_field(Field::new("doubled"))
@@ -113,6 +118,38 @@ mod rendering {
                 .computed(amount())
                 .default_always(0),
             "DEFAULT, VALUE or ASSERT",
+        );
+    }
+
+    #[test]
+    fn a_computed_field_may_be_flexible() {
+        assert_sql(
+            &define_field(Field::new("summary"))
+                .on_table("sale")
+                .computed(summary())
+                .type_(Kind::Object)
+                .flexible(),
+            "DEFINE FIELD summary ON TABLE sale COMPUTED {\nRETURN { total: amount };\n} \
+             TYPE object FLEXIBLE;",
+        );
+    }
+
+    #[test]
+    fn a_computed_field_named_by_a_parameter_is_checked_by_surrealdb() {
+        let name = umbriel::Param::new("name");
+        assert_sql(
+            &define_field(Field::from(&name))
+                .on_table("sale")
+                .computed(amount().multiply(2)),
+            "DEFINE FIELD $name ON TABLE sale COMPUTED amount * 2;",
+        );
+        // The checks that need no name still apply.
+        assert_render_error(
+            &define_field(Field::from(&name))
+                .on_table("sale")
+                .computed(amount())
+                .readonly(),
+            "cannot also be READONLY",
         );
     }
 
@@ -239,6 +276,58 @@ mod behaviour {
         assert!(succeeds(&db, "CREATE sale:1 SET pair = [1, 2];").await);
         assert!(!succeeds(&db, "CREATE sale:2 SET pair = [1];").await);
         assert!(!succeeds(&db, "CREATE sale:3 SET pair = [1, 2, 3];").await);
+    }
+
+    #[tokio::test]
+    async fn a_flexible_computed_object_keeps_its_keys_on_a_schemafull_table() {
+        let db = db().await;
+        run(&db, define_table("sale").schemafull()).await;
+        run(
+            &db,
+            define_field(amount()).on_table("sale").type_(Kind::Int),
+        )
+        .await;
+        run(
+            &db,
+            define_field(Field::new("summary"))
+                .on_table("sale")
+                .computed(summary())
+                .type_(Kind::Object)
+                .flexible(),
+        )
+        .await;
+        assert!(succeeds(&db, "CREATE sale:1 SET amount = 3;").await);
+        let total: i64 = read(&db, "RETURN sale:1.summary.total;").await;
+        assert_eq!(total, 3);
+    }
+
+    #[tokio::test]
+    async fn a_computed_field_takes_its_name_from_a_parameter() {
+        let db = db().await;
+        let name = umbriel::Param::new("name");
+        run(
+            &db,
+            umbriel::chain(umbriel::statements::let_("name").equal_to("doubled")).chain(
+                define_field(Field::from(&name))
+                    .on_table("sale")
+                    .computed(amount().multiply(2)),
+            ),
+        )
+        .await;
+        assert!(succeeds(&db, "CREATE sale:1 SET amount = 4;").await);
+        let doubled: i64 = read(&db, "RETURN sale:1.doubled;").await;
+        assert_eq!(doubled, 8);
+
+        // The name is checked when SurrealDB resolves it: `id` is still refused.
+        let refused = umbriel::chain(umbriel::statements::let_("name").equal_to("id"))
+            .chain(
+                define_field(Field::from(&name))
+                    .on_table("sale")
+                    .computed(amount()),
+            )
+            .run(db.clone())
+            .await;
+        assert!(refused.is_err());
     }
 
     #[tokio::test]

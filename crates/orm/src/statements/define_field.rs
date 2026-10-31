@@ -244,10 +244,11 @@ impl DefineFieldStatement {
     /// Makes the field computed: `COMPUTED @expression`. It is evaluated whenever the record is
     /// read and is never stored: SurrealDB discards a value written to it.
     ///
-    /// A computed field must be a top-level field other than `id`, and takes only a type and
-    /// permissions besides the expression: combining it with a default, value, assertion,
-    /// `READONLY` or `FLEXIBLE` fails when the query is rendered. SurrealDB also refuses a
-    /// computed expression that writes data.
+    /// A computed field must be a top-level field other than `id`. Besides the expression it takes
+    /// a type, `FLEXIBLE` with an object type, a comment and permissions: combining it with a
+    /// default, value, assertion or `READONLY` fails when the query is rendered. SurrealDB also
+    /// refuses a computed expression that writes data. A name from a parameter is checked by
+    /// SurrealDB when the statement runs.
     ///
     /// ```rust
     /// use umbriel::{*, statements::define_field, types::Kind};
@@ -276,6 +277,7 @@ impl DefineFieldStatement {
     /// assert!(computed(Field::new("address").with_field("city")).to_query().is_err());
     /// assert!(computed(Field::raw("address.city")).to_query().is_err());
     /// assert!(computed(Field::new("id")).to_query().is_err());
+    /// assert!(computed(Field::from(Param::new("name"))).to_query().is_ok());
     /// ```
     pub fn computed(mut self, expression: impl Into<ValueLike>) -> Self {
         self.computed = Some(expression.into());
@@ -334,21 +336,30 @@ impl DefineFieldStatement {
     }
 
     /// The restrictions SurrealDB places on computed fields.
+    ///
+    /// They follow SurrealDB 3.3.4's validator (`define_field_statement_validate_computed_options`):
+    /// `DEFAULT`, `VALUE`, `ASSERT` and `READONLY` are refused; `FLEXIBLE` is allowed. A name
+    /// read from a parameter is resolved only by SurrealDB, so the `id` and top-level checks are
+    /// left to it.
     fn check_computed(&self, out: &mut Renderer) {
-        match self.field.top_level_name() {
-            Some("id") => {
-                out.push_error("the `id` field cannot be computed");
-            }
-            Some(_) => {}
-            None => {
-                out.push_error("a computed field must be a top-level field, not a nested path");
+        if !self.field.is_expression() {
+            match self.field.top_level_name() {
+                Some("id") => {
+                    out.push_error("the `id` field cannot be computed");
+                }
+                Some(_) => {}
+                None => {
+                    out.push_error(
+                        "a computed field must be a top-level field, not a nested path",
+                    );
+                }
             }
         }
         if self.default.is_some() || self.value.is_some() || self.assert.is_some() {
             out.push_error("a computed field cannot also have a DEFAULT, VALUE or ASSERT clause");
         }
-        if self.readonly || self.flexible {
-            out.push_error("a computed field cannot also be READONLY or FLEXIBLE");
+        if self.readonly {
+            out.push_error("a computed field cannot also be READONLY");
         }
     }
 }

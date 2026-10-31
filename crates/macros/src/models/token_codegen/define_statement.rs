@@ -210,19 +210,20 @@ impl Codegen<'_> {
             .into());
         }
 
+        // As SurrealDB 3.3.4 validates `COMPUTED`: no default, value, assertion or `READONLY`,
+        // and no nested definitions (`item_assert` defines `field.*`). `FLEXIBLE` is allowed.
         if computed.is_some()
             && (assert_.is_some()
                 || value.is_some()
                 || default_always.is_some()
                 || value_expr.is_some()
                 || *readonly
-                || *flexible
                 || item_assert.is_some())
         {
             return Err(syn::Error::new_spanned(
                 &ident,
                 "a `computed` field is evaluated on read, so it cannot also have `assert`, \
-                 `value`, `default_always`, `value_expr`, `readonly`, `flexible` or `item_assert`",
+                 `value`, `default_always`, `value_expr`, `readonly` or `item_assert`",
             )
             .into());
         }
