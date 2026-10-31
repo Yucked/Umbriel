@@ -457,7 +457,7 @@ mod scenarios {
     pub async fn versioned_info(db: &Surreal<Any>) {
         define_models(db).await;
         let before: types::Datetime = read(db, "RETURN time::now();").await;
-        Raw::new("DEFINE FIELD nickname ON server_person TYPE option<string>;")
+        Raw::new("DEFINE FIELD middle_name ON server_person TYPE option<string>;")
             .run(db.clone())
             .await
             .expect("defined");
@@ -467,7 +467,7 @@ mod scenarios {
             .execute(db)
             .await
             .expect("info");
-        assert!(now.fields.contains_key("nickname"));
+        assert!(now.fields.contains_key("middle_name"));
 
         let then = info_for()
             .table("server_person")
@@ -475,7 +475,7 @@ mod scenarios {
             .execute(db)
             .await
             .expect("versioned info");
-        assert!(!then.fields.contains_key("nickname"), "{:?}", then.fields);
+        assert!(!then.fields.contains_key("middle_name"), "{:?}", then.fields);
         assert!(then.fields.contains_key("name"), "{:?}", then.fields);
     }
 }
