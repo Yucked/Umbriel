@@ -122,7 +122,13 @@ mod behaviour {
                 .then(log_entry("changed")),
         )
         .await;
-        assert!(succeeds(&db, "CREATE sale:1; UPDATE sale:1 SET amount = 2; DELETE sale:1;").await);
+        assert!(
+            succeeds(
+                &db,
+                "CREATE sale:1; UPDATE sale:1 SET amount = 2; DELETE sale:1;"
+            )
+            .await
+        );
         assert_eq!(log_count(&db).await, 3);
     }
 

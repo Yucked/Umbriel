@@ -29,7 +29,10 @@ mod rendering {
         assert_sql(&info_for().root(), "INFO FOR ROOT;");
         assert_sql(&info_for().root().structure(), "INFO FOR ROOT STRUCTURE;");
         assert_sql(&info_for().namespace(), "INFO FOR NS;");
-        assert_sql(&info_for().namespace().structure(), "INFO FOR NS STRUCTURE;");
+        assert_sql(
+            &info_for().namespace().structure(),
+            "INFO FOR NS STRUCTURE;",
+        );
         assert_sql(&info_for().database(), "INFO FOR DB;");
         assert_sql(&info_for().database().structure(), "INFO FOR DB STRUCTURE;");
         assert_sql(&info_for().table("user"), "INFO FOR TABLE user;");
@@ -131,7 +134,11 @@ mod results {
         assert!(plain.analyzers.contains_key("simple"));
         assert!(plain.users.contains_key("alice"));
         // Function keys have no `fn::`.
-        assert!(plain.functions.contains_key("greet"), "{:?}", plain.functions);
+        assert!(
+            plain.functions.contains_key("greet"),
+            "{:?}",
+            plain.functions
+        );
         assert!(plain.other.is_empty(), "{:?}", plain.other);
 
         let structured: DatabaseInfo<Structures> = info_for()
@@ -153,8 +160,11 @@ mod results {
         let db = db().await;
         schema(&db).await;
 
-        let plain: TableInfo<Statements> =
-            info_for().table("user").execute(&db).await.expect("decoded");
+        let plain: TableInfo<Statements> = info_for()
+            .table("user")
+            .execute(&db)
+            .await
+            .expect("decoded");
         assert!(plain.fields.contains_key("email"));
         assert!(plain.indexes.contains_key("user_email"));
         assert!(plain.events.contains_key("audit"));
@@ -176,9 +186,18 @@ mod results {
     async fn root_and_namespace_info_decode() {
         let db = db().await;
         let root = info_for().root().execute(&db).await.expect("decoded");
-        assert!(root.namespaces.contains_key("test"), "{:?}", root.namespaces);
+        assert!(
+            root.namespaces.contains_key("test"),
+            "{:?}",
+            root.namespaces
+        );
         assert!(!root.system.is_empty());
-        let root = info_for().root().structure().execute(&db).await.expect("decoded");
+        let root = info_for()
+            .root()
+            .structure()
+            .execute(&db)
+            .await
+            .expect("decoded");
         assert!(!root.namespaces.is_empty());
 
         let namespace = info_for().namespace().execute(&db).await.expect("decoded");
@@ -210,7 +229,10 @@ mod results {
             .execute(&db)
             .await
             .expect("decoded");
-        assert_eq!(structure.get("name"), Some(&Value::String("alice".to_owned())));
+        assert_eq!(
+            structure.get("name"),
+            Some(&Value::String("alice".to_owned()))
+        );
     }
 
     #[tokio::test]
@@ -235,7 +257,10 @@ mod results {
         };
         let mut keys: Vec<&str> = building.keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, vec!["compacting", "initial", "pending", "status", "updated"]);
+        assert_eq!(
+            keys,
+            vec!["compacting", "initial", "pending", "status", "updated"]
+        );
     }
 
     #[test]

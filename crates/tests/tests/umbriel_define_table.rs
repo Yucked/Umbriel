@@ -22,7 +22,10 @@ mod rendering {
 
     #[test]
     fn every_kind_renders() {
-        assert_sql(&define_table("user").kind_any(), "DEFINE TABLE user TYPE ANY;");
+        assert_sql(
+            &define_table("user").kind_any(),
+            "DEFINE TABLE user TYPE ANY;",
+        );
         assert_sql(
             &define_table("user").kind_normal().schemafull(),
             "DEFINE TABLE user SCHEMAFULL TYPE NORMAL;",
@@ -32,8 +35,12 @@ mod rendering {
             "DEFINE TABLE likes TYPE RELATION;",
         );
         assert_sql(
-            &define_table("likes")
-                .kind_relation(table_relation().in_(["user", "team"]).out(["post"]).enforced()),
+            &define_table("likes").kind_relation(
+                table_relation()
+                    .in_(["user", "team"])
+                    .out(["post"])
+                    .enforced(),
+            ),
             "DEFINE TABLE likes TYPE RELATION IN user | team OUT post ENFORCED;",
         );
     }
@@ -49,7 +56,9 @@ mod rendering {
     #[test]
     fn the_comment_precedes_permissions() {
         assert_sql(
-            &define_table("user").comment("Acme Corp users").permissions_none(),
+            &define_table("user")
+                .comment("Acme Corp users")
+                .permissions_none(),
             "DEFINE TABLE user COMMENT 'Acme Corp users' PERMISSIONS NONE;",
         );
     }
@@ -101,7 +110,9 @@ pub struct Sale {
 }
 
 pub fn totals() -> SelectStatement {
-    select(All).from(Table::new("sale")).where_(Field::new("amount").gte(10))
+    select(All)
+        .from(Table::new("sale"))
+        .where_(Field::new("amount").gte(10))
 }
 
 /// Sales of at least 10, kept by SurrealDB from `sale`.

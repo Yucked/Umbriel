@@ -9,7 +9,11 @@ use crate::helpers::get_crate_name;
 /// Whether the union is marked `#[models(read_only)]`, the only `models` setting.
 fn is_read_only(input: &DeriveInput) -> syn::Result<bool> {
     let mut read_only = false;
-    for attr in input.attrs.iter().filter(|attr| attr.path().is_ident("models")) {
+    for attr in input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("models"))
+    {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("read_only") {
                 read_only = true;
@@ -86,9 +90,9 @@ pub(crate) fn derive_models(input: &DeriveInput) -> syn::Result<TokenStream> {
     });
     let overlap_message = format!("two variants of `{ident}` have overlapping table families");
     let writable = (!read_only).then(|| {
-        let checks = variants.iter().map(|(_, model)| {
-            quote_spanned!(model.span()=> __writable::<#model>();)
-        });
+        let checks = variants
+            .iter()
+            .map(|(_, model)| quote_spanned!(model.span()=> __writable::<#model>();));
         quote!(
             impl #crate_name::WritableModels for #ident {}
 

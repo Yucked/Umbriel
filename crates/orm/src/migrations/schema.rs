@@ -256,8 +256,7 @@ impl Schema {
             .collect::<Vec<_>>();
         let mut info = QueryChain::from(statements).run(db.clone()).await?;
         for (index, table) in tables.iter().enumerate() {
-            let structures =
-                TableInfo::<Structures>::from_info(take_value(&mut info, 2 * index)?)?;
+            let structures = TableInfo::<Structures>::from_info(take_value(&mut info, 2 * index)?)?;
             let statements =
                 TableInfo::<Statements>::from_info(take_value(&mut info, 2 * index + 1)?)?;
             // `lives` are running queries, not schema; `tables` are the views fed by this table,

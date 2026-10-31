@@ -290,7 +290,9 @@ mod behaviour {
         .await;
         run(
             &db,
-            alter_field(Field::new("score")).on_table("user").default(NONE),
+            alter_field(Field::new("score"))
+                .on_table("user")
+                .default(NONE),
         )
         .await;
         assert!(succeeds(&db, "CREATE user:alice;").await);
@@ -394,8 +396,9 @@ mod behaviour {
             alter_analyzer("simple").filters([AnalyzerFilter::Uppercase]),
         )
         .await;
-        let analyzer =
-            stored_definition(&db, "INFO FOR DB;", "analyzers", "simple").await.to_lowercase();
+        let analyzer = stored_definition(&db, "INFO FOR DB;", "analyzers", "simple")
+            .await
+            .to_lowercase();
         assert!(analyzer.contains("uppercase"), "{analyzer}");
         assert!(!analyzer.contains("lowercase"), "{analyzer}");
     }
@@ -403,7 +406,14 @@ mod behaviour {
     #[tokio::test]
     async fn if_exists_alters_nothing_without_failing() {
         let db = db().await;
-        assert!(alter_table("missing").if_exists().comment("x").run(db.clone()).await.is_ok());
+        assert!(
+            alter_table("missing")
+                .if_exists()
+                .comment("x")
+                .run(db.clone())
+                .await
+                .is_ok()
+        );
         assert!(
             alter_field(Field::new("email"))
                 .on_table("missing")
@@ -421,6 +431,12 @@ mod behaviour {
                 .await
                 .is_ok()
         );
-        assert!(alter_table("missing").comment("x").run(db.clone()).await.is_err());
+        assert!(
+            alter_table("missing")
+                .comment("x")
+                .run(db.clone())
+                .await
+                .is_err()
+        );
     }
 }

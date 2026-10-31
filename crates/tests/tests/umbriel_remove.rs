@@ -21,9 +21,14 @@ fn every_removal_takes_if_exists() {
         &remove_database("acme").if_exists(),
         "REMOVE DATABASE IF EXISTS acme;",
     );
-    assert_sql(&remove_table("user").if_exists(), "REMOVE TABLE IF EXISTS user;");
     assert_sql(
-        &remove_field(Field::new("email")).on_table("user").if_exists(),
+        &remove_table("user").if_exists(),
+        "REMOVE TABLE IF EXISTS user;",
+    );
+    assert_sql(
+        &remove_field(Field::new("email"))
+            .on_table("user")
+            .if_exists(),
         "REMOVE FIELD IF EXISTS email ON TABLE user;",
     );
     assert_sql(
@@ -105,7 +110,9 @@ async fn if_exists_removes_nothing_without_failing() {
     assert!(
         runs(
             &db,
-            remove_field(Field::new("email")).on_table("user").if_exists()
+            remove_field(Field::new("email"))
+                .on_table("user")
+                .if_exists()
         )
         .await
     );

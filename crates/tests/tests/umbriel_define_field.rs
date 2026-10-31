@@ -79,11 +79,17 @@ mod rendering {
     #[test]
     fn a_later_default_replaces_an_earlier_one() {
         assert_sql(
-            &define_field(amount()).on_table("sale").default(1).default_always(2),
+            &define_field(amount())
+                .on_table("sale")
+                .default(1)
+                .default_always(2),
             "DEFINE FIELD amount ON TABLE sale DEFAULT ALWAYS 2;",
         );
         assert_sql(
-            &define_field(amount()).on_table("sale").default_always(2).default(1),
+            &define_field(amount())
+                .on_table("sale")
+                .default_always(2)
+                .default(1),
             "DEFINE FIELD amount ON TABLE sale DEFAULT 1;",
         );
     }
@@ -91,7 +97,9 @@ mod rendering {
     #[test]
     fn clauses_surrealdb_refuses_fail_to_render() {
         assert_render_error(
-            &define_field(Field::new("id")).on_table("sale").default_always(1),
+            &define_field(Field::new("id"))
+                .on_table("sale")
+                .default_always(1),
             "DEFAULT ALWAYS",
         );
         assert_render_error(
@@ -233,11 +241,23 @@ mod behaviour {
                 .type_(Kind::Object),
         )
         .await;
-        assert!(succeeds(&db, "CREATE sale:1 SET meta = { source: 'web' }, plain = {};").await);
+        assert!(
+            succeeds(
+                &db,
+                "CREATE sale:1 SET meta = { source: 'web' }, plain = {};"
+            )
+            .await
+        );
         let meta: Object = read(&db, "RETURN sale:1.meta;").await;
         assert_eq!(meta.get("source"), Some(&Value::String("web".to_owned())));
         // Without `FLEXIBLE`, 3.3.4 refuses the undefined key instead of dropping it.
-        assert!(!succeeds(&db, "CREATE sale:2 SET meta = {}, plain = { source: 'web' };").await);
+        assert!(
+            !succeeds(
+                &db,
+                "CREATE sale:2 SET meta = {}, plain = { source: 'web' };"
+            )
+            .await
+        );
     }
 
     #[tokio::test]

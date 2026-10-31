@@ -6,8 +6,8 @@ use umbriel::{
     Field, JwtAlgorithm, Param, Runnable, Table, chain,
     statements::{
         FunctionArgument, define_access, define_analyzer, define_database, define_event,
-        define_field, define_function, define_index, define_namespace, define_param,
-        define_table, define_user, jwt_access, let_, return_, select,
+        define_field, define_function, define_index, define_namespace, define_param, define_table,
+        define_user, jwt_access, let_, return_, select,
     },
 };
 use umbriel_tests::*;
@@ -29,9 +29,14 @@ mod rendering {
             &define_database("acme").overwrite(),
             "DEFINE DATABASE OVERWRITE acme;",
         );
-        assert_sql(&define_table("user").overwrite(), "DEFINE TABLE OVERWRITE user;");
         assert_sql(
-            &define_field(Field::new("email")).on_table("user").overwrite(),
+            &define_table("user").overwrite(),
+            "DEFINE TABLE OVERWRITE user;",
+        );
+        assert_sql(
+            &define_field(Field::new("email"))
+                .on_table("user")
+                .overwrite(),
             "DEFINE FIELD OVERWRITE email ON TABLE user;",
         );
         assert_sql(
@@ -49,7 +54,9 @@ mod rendering {
             "DEFINE EVENT OVERWRITE audit ON TABLE user THEN (SELECT * FROM log);",
         );
         assert_sql(
-            &define_param(&Param::new("greeting")).value("Hello").overwrite(),
+            &define_param(&Param::new("greeting"))
+                .value("Hello")
+                .overwrite(),
             "DEFINE PARAM OVERWRITE $greeting VALUE 'Hello';",
         );
         assert_sql(
@@ -72,7 +79,11 @@ mod rendering {
         assert_sql(
             &define_access("api")
                 .on_database()
-                .jwt(jwt_access().algorithm(JwtAlgorithm::RS256).key("example-key"))
+                .jwt(
+                    jwt_access()
+                        .algorithm(JwtAlgorithm::RS256)
+                        .key("example-key"),
+                )
                 .overwrite(),
             "DEFINE ACCESS OVERWRITE api ON DATABASE TYPE JWT ALGORITHM RS256 KEY 'example-key';",
         );
@@ -93,7 +104,9 @@ mod rendering {
             "DEFINE TABLE IF NOT EXISTS user;",
         );
         assert_sql(
-            &define_field(Field::new("email")).on_table("user").if_not_exists(),
+            &define_field(Field::new("email"))
+                .on_table("user")
+                .if_not_exists(),
             "DEFINE FIELD IF NOT EXISTS email ON TABLE user;",
         );
         assert_sql(
@@ -221,9 +234,11 @@ mod rendering {
             "DEFINE USER $name ON DATABASE PASSWORD 'example-password';",
         );
         assert_sql(
-            &define_access(&name)
-                .on_database()
-                .jwt(jwt_access().algorithm(JwtAlgorithm::RS256).key("example-key")),
+            &define_access(&name).on_database().jwt(
+                jwt_access()
+                    .algorithm(JwtAlgorithm::RS256)
+                    .key("example-key"),
+            ),
             "DEFINE ACCESS $name ON DATABASE TYPE JWT ALGORITHM RS256 KEY 'example-key';",
         );
     }

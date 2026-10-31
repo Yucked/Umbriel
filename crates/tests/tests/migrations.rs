@@ -457,11 +457,12 @@ mod schema {
             "DEFINE FIELD foo.bar ON t TYPE string"
         );
 
-        let mismatch =
-            |statements: &BTreeMap<String, String>, field: &str| match field_definition(statements, "t", field) {
-                Err(MigrationError::FieldDefinitionMismatch { matches, .. }) => matches,
-                other => panic!("expected FieldDefinitionMismatch, got {other:?}"),
-            };
+        let mismatch = |statements: &BTreeMap<String, String>, field: &str| match field_definition(
+            statements, "t", field,
+        ) {
+            Err(MigrationError::FieldDefinitionMismatch { matches, .. }) => matches,
+            other => panic!("expected FieldDefinitionMismatch, got {other:?}"),
+        };
         // `fo` prefixes three statements' names but is none of them.
         assert_eq!(mismatch(&fields, "fo"), 0);
         assert_eq!(mismatch(&statements(&[]), "foo"), 0);
@@ -963,7 +964,10 @@ mod diff {
         }
 
         apply_up(&dir, &db).await;
-        assert_eq!(inspect(&db).await, schema_of(&ResourcesV2Changed, flag).await);
+        assert_eq!(
+            inspect(&db).await,
+            schema_of(&ResourcesV2Changed, flag).await
+        );
         roll_back(&dir, &db).await;
         assert_eq!(inspect(&db).await, schema_of(&ResourcesV2, flag).await);
     }
