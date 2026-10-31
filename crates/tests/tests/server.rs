@@ -454,20 +454,28 @@ mod scenarios {
 
     /// `INFO … VERSION` lists a table's definitions as they were at a time: a field defined
     /// later is missing. The memory engine refuses `VERSION`, so this needs a versioned store.
+    ///
+    /// The added field's name is new on every run: a versioned store keeps the history of a field
+    /// that was defined before and then removed with its table, and `INFO … VERSION` lists such a
+    /// field again, so a fixed name would be found by later runs and by the other transport.
     pub async fn versioned_info(db: &Surreal<Any>) {
         define_models(db).await;
+        let suffix: String = read(db, "RETURN string::replace(<string> rand::uuid(), '-', '_');").await;
+        let added = format!("added_{suffix}");
         let before: types::Datetime = read(db, "RETURN time::now();").await;
-        Raw::new("DEFINE FIELD middle_name ON server_person TYPE option<string>;")
-            .run(db.clone())
-            .await
-            .expect("defined");
+        Raw::new(format!(
+            "DEFINE FIELD {added} ON server_person TYPE option<string>;"
+        ))
+        .run(db.clone())
+        .await
+        .expect("defined");
 
         let now = info_for()
             .table("server_person")
             .execute(db)
             .await
             .expect("info");
-        assert!(now.fields.contains_key("middle_name"));
+        assert!(now.fields.contains_key(&added));
 
         let then = info_for()
             .table("server_person")
@@ -475,7 +483,7 @@ mod scenarios {
             .execute(db)
             .await
             .expect("versioned info");
-        assert!(!then.fields.contains_key("middle_name"), "{:?}", then.fields);
+        assert!(!then.fields.contains_key(&added), "{:?}", then.fields);
         assert!(then.fields.contains_key("name"), "{:?}", then.fields);
     }
 }
