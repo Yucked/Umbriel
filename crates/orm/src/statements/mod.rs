@@ -30,6 +30,7 @@ pub(crate) mod for_permission;
 pub(crate) mod ifelse;
 pub(crate) mod index_hint;
 pub(crate) mod info;
+pub(crate) mod info_result;
 pub(crate) mod insert;
 pub(crate) mod let_;
 pub(crate) mod live_select;
@@ -222,7 +223,11 @@ pub use delete::{DeleteStatement, delete, delete_edges, delete_only};
 pub use for_loop::{ForLoopStatement, for_};
 pub use for_permission::{ForPermission, Permissions, for_permission};
 pub use ifelse::{IfElseStatement, if_};
-pub use info::{InfoStatement, info_for};
+pub use info::{InfoStatement, InfoStatementInit, info_for};
+pub use info_result::{
+    DatabaseInfo, IndexBuildStatus, IndexStatus, InfoForm, InfoOutput, NamespaceInfo, RootInfo,
+    Statements, Structures, TableInfo,
+};
 pub use insert::{InsertStatement, Insertables, input_of, insert, insert_relation};
 pub use let_::{LetStatement, let_};
 pub use live_select::{LiveSelectStatement, live};

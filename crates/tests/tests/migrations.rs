@@ -276,7 +276,9 @@ fn names(schema: &Schema, kind: ResourceKind) -> Vec<&str> {
 mod schema {
     use super::*;
     use pretty_assertions::assert_eq;
-    use umbriel::{migrations::ResourceKind::*, test_support::field_definition, types::Object};
+    use std::collections::BTreeMap;
+
+    use umbriel::{migrations::ResourceKind::*, test_support::field_definition};
 
     /// Every kind migrations manage, secrets included.
     #[derive(Debug, Clone)]
@@ -431,8 +433,8 @@ mod schema {
         }
     }
 
-    fn statements(sql: &[&str]) -> Object {
-        let mut statements = Object::new();
+    fn statements(sql: &[&str]) -> BTreeMap<String, String> {
+        let mut statements = BTreeMap::new();
         for (index, sql) in sql.iter().enumerate() {
             statements.insert(format!("field{index}"), (*sql).to_owned());
         }
@@ -456,7 +458,7 @@ mod schema {
         );
 
         let mismatch =
-            |statements: &Object, field: &str| match field_definition(statements, "t", field) {
+            |statements: &BTreeMap<String, String>, field: &str| match field_definition(statements, "t", field) {
                 Err(MigrationError::FieldDefinitionMismatch { matches, .. }) => matches,
                 other => panic!("expected FieldDefinitionMismatch, got {other:?}"),
             };
@@ -496,6 +498,39 @@ mod schema {
             info_for().namespace().run(db.clone()).await.is_err(),
             "the database user cannot inspect the namespace"
         );
+    }
+
+    /// #13's completion check: every clause #13 adds survives inspection. A schema using them is
+    /// redefined in a fresh database from the server's own `DEFINE` statements, and inspects the
+    /// same, so migrations generated from it have no spurious changes.
+    #[tokio::test]
+    async fn the_new_definition_clauses_round_trip() {
+        let db = database().await;
+        Raw::new(
+            "DEFINE TABLE sale SCHEMAFULL TYPE NORMAL COMMENT 'Acme Corp sales';
+             DEFINE FIELD amount ON sale TYPE int READONLY COMMENT 'in cents';
+             DEFINE FIELD refunds ON sale TYPE int DEFAULT ALWAYS 0;
+             DEFINE FIELD meta ON sale TYPE object FLEXIBLE;
+             DEFINE FIELD doubled ON sale COMPUTED amount * 2;
+             DEFINE FIELD price ON sale TYPE decimal DEFAULT 1.5f;
+             DEFINE EVENT audit ON sale THEN (CREATE log) ASYNC RETRY 2 MAXDEPTH 1;
+             DEFINE TABLE likes TYPE RELATION IN customer OUT sale ENFORCED;
+             DEFINE TABLE customer SCHEMALESS;
+             DEFINE PARAM $greeting VALUE 'Hello' PERMISSIONS NONE;",
+        )
+        .run(db.clone())
+        .await
+        .expect("defined");
+        let schema = inspect(&db).await;
+
+        let fresh = database().await;
+        for (key, definition) in schema.iter() {
+            Raw::new(format!("{};", definition.sql()))
+                .run(fresh.clone())
+                .await
+                .unwrap_or_else(|error| panic!("{key} redefines: {error}"));
+        }
+        assert_eq!(inspect(&fresh).await, schema);
     }
 }
 

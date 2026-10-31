@@ -15,7 +15,9 @@ use surrealdb::{
 use crate::{
     Chainable, QueryChain, Runnable,
     migrations::{MigrationError, MigrationResult},
-    statements::info_for,
+    statements::{
+        DatabaseInfo, InfoOutput, NamespaceInfo, Statements, Structures, TableInfo, info_for,
+    },
 };
 
 /// What SurrealDB writes in place of a secret in `INFO` output: a user's password hash (`hash`)
@@ -49,16 +51,6 @@ pub enum ResourceKind {
 }
 
 impl ResourceKind {
-    const DATABASE: [Self; 6] = [
-        Self::Function,
-        Self::Analyzer,
-        Self::Param,
-        Self::Access,
-        Self::User,
-        Self::Table,
-    ];
-    const TABLE: [Self; 3] = [Self::Field, Self::Index, Self::Event];
-
     /// The keyword that follows `DEFINE` and `REMOVE`.
     pub fn keyword(self) -> &'static str {
         match self {
@@ -202,15 +194,45 @@ impl Schema {
         ])
         .run(db.clone())
         .await?;
+        let structures = DatabaseInfo::<Structures>::from_info(take_value(&mut info, 0)?)?;
+        let statements = DatabaseInfo::<Statements>::from_info(take_value(&mut info, 1)?)?;
 
         let mut schema = Self::default();
+        let DatabaseInfo {
+            accesses,
+            apis,
+            analyzers,
+            buckets,
+            configs,
+            functions,
+            models,
+            modules,
+            params,
+            sequences,
+            tables,
+            users,
+            other,
+        } = structures;
         schema.collect(
             "database",
             None,
-            &ResourceKind::DATABASE,
-            &[],
-            take_object(&mut info, 0)?,
-            take_object(&mut info, 1)?,
+            [
+                (ResourceKind::Function, functions, statements.functions),
+                (ResourceKind::Analyzer, analyzers, statements.analyzers),
+                (ResourceKind::Param, params, statements.params),
+                (ResourceKind::Access, accesses, statements.accesses),
+                (ResourceKind::User, users, statements.users),
+                (ResourceKind::Table, tables, statements.tables),
+            ],
+            [
+                ("apis", apis),
+                ("buckets", buckets),
+                ("configs", configs),
+                ("models", models),
+                ("modules", modules),
+                ("sequences", sequences),
+            ],
+            other,
         )?;
 
         let tables = schema
@@ -234,15 +256,22 @@ impl Schema {
             .collect::<Vec<_>>();
         let mut info = QueryChain::from(statements).run(db.clone()).await?;
         for (index, table) in tables.iter().enumerate() {
+            let structures =
+                TableInfo::<Structures>::from_info(take_value(&mut info, 2 * index)?)?;
+            let statements =
+                TableInfo::<Statements>::from_info(take_value(&mut info, 2 * index + 1)?)?;
+            // `lives` are running queries, not schema; `tables` are the views fed by this table,
+            // which `INFO FOR DB` already lists as tables of their own.
             schema.collect(
                 &format!("table `{table}`"),
                 Some(table.as_str()),
-                &ResourceKind::TABLE,
-                // `lives` are running queries, not schema; `tables` are the views fed by this
-                // table, which `INFO FOR DB` already lists as tables of their own.
-                &["lives", "tables"],
-                take_object(&mut info, 2 * index)?,
-                take_object(&mut info, 2 * index + 1)?,
+                [
+                    (ResourceKind::Field, structures.fields, statements.fields),
+                    (ResourceKind::Index, structures.indexes, statements.indexes),
+                    (ResourceKind::Event, structures.events, statements.events),
+                ],
+                [],
+                structures.other,
             )?;
         }
         Ok(schema)
@@ -255,70 +284,59 @@ impl Schema {
         db: &Surreal<impl Connection>,
     ) -> MigrationResult<()> {
         let mut info = info_for().namespace().structure().run(db.clone()).await?;
+        let info = NamespaceInfo::<Structures>::from_info(take_value(&mut info, 0)?)?;
         // `databases` are the namespace's databases themselves, not definitions inside one.
         Self::default().collect(
             "namespace",
             None,
-            &[],
-            &["databases"],
-            take_object(&mut info, 0)?,
-            Object::new(),
+            [],
+            [("accesses", info.accesses), ("users", info.users)],
+            info.other,
         )
     }
 
-    /// Adds the definitions one `INFO` level lists. `kinds` are collected, `skipped` keys hold no
-    /// schema of their own, and any other key that is not empty is rejected.
-    fn collect(
+    /// Adds the definitions one `INFO` level lists. Each `managed` kind comes with its entries
+    /// from `INFO … STRUCTURE` and its `DEFINE` statements from the plain `INFO`. An `unmanaged`
+    /// kind, or a key of `other`, that is not empty is rejected.
+    fn collect<const M: usize, const U: usize>(
         &mut self,
         level: &str,
         table: Option<&str>,
-        kinds: &[ResourceKind],
-        skipped: &[&str],
-        structure: Object,
-        mut statements: Object,
+        managed: [(ResourceKind, Vec<Object>, BTreeMap<String, String>); M],
+        unmanaged: [(&str, Vec<Object>); U],
+        other: BTreeMap<String, Value>,
     ) -> MigrationResult<()> {
-        for (key, entries) in structure {
-            let Value::Array(entries) = entries else {
+        for (key, entries) in unmanaged {
+            if !entries.is_empty() {
+                return Err(unsupported(level, key, entries.iter().map(name_of)));
+            }
+        }
+        for (key, value) in other {
+            let Value::Array(entries) = value else {
                 return Err(unexpected_shape(level, &key));
             };
-            let Some(kind) = kinds.iter().copied().find(|kind| kind.info_key() == key) else {
-                if skipped.contains(&key.as_str()) || entries.is_empty() {
-                    continue;
-                }
-                let names = entries
-                    .iter()
-                    .map(|entry| match entry {
-                        Value::Object(entry) => name_of(entry).unwrap_or("?").to_owned(),
-                        _ => "?".to_owned(),
-                    })
-                    .collect();
-                return Err(MigrationError::UnsupportedSchemaResource {
-                    level: level.to_owned(),
-                    kind: key,
-                    names,
+            if !entries.is_empty() {
+                let names = entries.iter().map(|entry| match entry {
+                    Value::Object(entry) => name_of(entry),
+                    _ => None,
                 });
-            };
+                return Err(unsupported(level, &key, names));
+            }
+        }
 
-            let statements = match statements.remove(key.as_str()) {
-                Some(Value::Object(statements)) => statements,
-                None if entries.is_empty() => Object::new(),
-                _ => return Err(unexpected_shape(level, &key)),
-            };
-            for entry in entries {
-                let Value::Object(mut entry) = entry else {
-                    return Err(unexpected_shape(level, &key));
-                };
+        for (kind, entries, statements) in managed {
+            for mut entry in entries {
                 let name = name_of(&entry)
-                    .ok_or_else(|| unexpected_shape(level, &key))?
+                    .ok_or_else(|| unexpected_shape(level, kind.info_key()))?
                     .to_owned();
                 let sql = match kind {
                     ResourceKind::Field => {
                         field_definition(&statements, table.unwrap_or_default(), &name)?
                     }
-                    _ => match statements.get(&name) {
-                        Some(Value::String(sql)) => sql.clone(),
-                        _ => return Err(unexpected_shape(level, &key)),
-                    },
+                    _ => statements
+                        .get(&name)
+                        .cloned()
+                        .ok_or_else(|| unexpected_shape(level, kind.info_key()))?,
                 };
                 if kind == ResourceKind::Table {
                     // The table's internal id depends on the order tables were created in.
@@ -375,14 +393,15 @@ impl Schema {
 /// exactly `DEFINE FIELD <name> ON `, and exactly one statement may. The delimiter keeps `foo` from
 /// matching `foo.bar` or `foo[*]`.
 #[doc(hidden)]
-pub fn field_definition(statements: &Object, table: &str, name: &str) -> MigrationResult<String> {
-    let mut found = statements.values().filter_map(|statement| match statement {
-        Value::String(sql) => sql
-            .strip_prefix("DEFINE FIELD ")
+pub fn field_definition(
+    statements: &BTreeMap<String, String>,
+    table: &str,
+    name: &str,
+) -> MigrationResult<String> {
+    let mut found = statements.values().filter(|sql| {
+        sql.strip_prefix("DEFINE FIELD ")
             .and_then(|rest| rest.strip_prefix(name))
             .is_some_and(|rest| rest.starts_with(" ON "))
-            .then_some(sql),
-        _ => None,
     });
     match (found.next(), found.count()) {
         (Some(sql), 0) => Ok(sql.clone()),
@@ -401,13 +420,21 @@ fn name_of(entry: &Object) -> Option<&str> {
     }
 }
 
-fn take_object(results: &mut IndexedResults, index: usize) -> MigrationResult<Object> {
-    match results.take::<Value>(index)? {
-        Value::Object(object) => Ok(object),
-        _ => Err(MigrationError::UnexpectedInfoShape(format!(
-            "statement {index} did not return an object"
-        ))),
+/// Rejects a kind migrations do not manage, naming its definitions.
+fn unsupported<'a>(
+    level: &str,
+    kind: &str,
+    names: impl Iterator<Item = Option<&'a str>>,
+) -> MigrationError {
+    MigrationError::UnsupportedSchemaResource {
+        level: level.to_owned(),
+        kind: kind.to_owned(),
+        names: names.map(|name| name.unwrap_or("?").to_owned()).collect(),
     }
+}
+
+fn take_value(results: &mut IndexedResults, index: usize) -> MigrationResult<Value> {
+    Ok(results.take::<Value>(index)?)
 }
 
 fn unexpected_shape(level: &str, key: &str) -> MigrationError {

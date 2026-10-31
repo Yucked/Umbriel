@@ -3,6 +3,7 @@ Declares a model: a struct stored in SurrealDB, with a typed schema for building
 ```text
 #[umbriel::model(node, table = "user")]     a record in its own table
 #[umbriel::model(edge, table = "follows")]  a record relating two nodes
+#[umbriel::model(view, table = "top_user")] a read-only table computed by its `as_` query
 #[umbriel::model(object)]                   a value embedded in another model
 ```
 
@@ -136,7 +137,9 @@ Database-only settings stay in `#[orm(…)]`:
 | --- | --- |
 | `relax_table` | Allows a table name other than the struct name in snake case. |
 | `schemafull`, `drop` | Flags of the generated `DEFINE TABLE`. |
-| `as_ = …` | A select statement making the table a view. |
+| `kind = "any"`, `kind = "normal"` | The table's `TYPE`. An edge's `TYPE RELATION` is not set here. |
+| `comment = "…"` | The table's `COMMENT`. |
+| `as_ = …` | The select statement of a `view`, which requires it; other models refuse it. A view implements `SurrealRead` but not `SurrealCrud`, `Node` or `Writable`, and has no patch, merge or setters, so every typed write to it fails to compile. A `Models` union holding a view is marked `#[models(read_only)]`. |
 | `permissions = …` | `full`, `none`, or an expression giving the permissions. |
 | `define = …` | An expression giving the whole `DEFINE TABLE`; excludes the settings above. |
 
@@ -148,6 +151,10 @@ Database-only settings stay in `#[orm(…)]`:
 | `merge = "…"` | A hand-written [`MergeFields`] type, so a field whose value is not a `#[model(object)]` merges field by field in `<Model>Merge`. |
 | `relate(model = …, connection = "->edge->node")` | A read-only relation reached through an edge; never stored. |
 | `value = …` | The field's default: `DEFAULT …` in the generated `DEFINE FIELD`, applied when a record is created without the field. Values written explicitly, falsy ones (`0`, `false`, `''`) included, are kept, and updates never re-apply it. |
+| `default_always = …` | `DEFAULT ALWAYS …`: also applied when an update leaves the field `NONE`. Excludes `value`. |
+| `value_expr = …` | SurrealQL's `VALUE …`, evaluated and stored on every write. |
+| `computed = …` | `COMPUTED …`: evaluated on every read and never stored; SurrealDB discards a written value. The field has no patch, merge or setter, and `object!` does not take it. Excludes every write-side clause. |
+| `readonly`, `flexible`, `comment = "…"` | `READONLY`, `FLEXIBLE` (the type must admit an object) and `COMMENT`. |
 | `assert`, `permissions`, `item_assert` | Clauses of the generated `DEFINE FIELD`. |
 | `define = …` | An expression giving the whole `DEFINE FIELD`; excludes the clauses above. |
 | `old_name = "…"` | The field's previous name, for migrations that rename it. |
