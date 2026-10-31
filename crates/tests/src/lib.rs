@@ -115,3 +115,16 @@ pub async fn succeeds(db: &Surreal<impl surrealdb::Connection>, sql: &str) -> bo
         .and_then(surrealdb::IndexedResults::check)
         .is_ok()
 }
+
+/// The error SurrealDB gives for `sql`, as text. Panics when every statement succeeds, so a test
+/// can assert why a statement is refused rather than only that it is.
+pub async fn failure(db: &Surreal<impl surrealdb::Connection>, sql: &str) -> String {
+    match db
+        .query(sql.to_owned())
+        .await
+        .and_then(surrealdb::IndexedResults::check)
+    {
+        Ok(_) => panic!("`{sql}` succeeded, expected an error"),
+        Err(error) => error.to_string(),
+    }
+}

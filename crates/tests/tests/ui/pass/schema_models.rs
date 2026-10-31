@@ -1,5 +1,6 @@
 use umbriel::{
-    All, Field, Models, Operatable, RecordId, SchemaGetter, SurrealRead, Table, TableOf, model,
+    All, Field, LinkOne, Models, Node, Operatable, RecordId, SchemaGetter, SurrealRead, Table,
+    TableOf, model,
     statements::{SelectStatement, insert_any, select},
 };
 
@@ -47,11 +48,20 @@ pub enum Reports {
     Copy(SaleCopy),
 }
 
-// A union of writable models is inserted as before.
+#[model(edge, table = "bought")]
+pub struct Bought<In: Node, Out: Node> {
+    pub id: RecordId<Self>,
+    #[orm(link_one = "In")]
+    pub r#in: LinkOne<In>,
+    #[orm(link_one = "Out")]
+    pub out: LinkOne<Out>,
+}
+
+// A union of writable models, a node and an edge, is inserted as before.
 #[derive(Models)]
 pub enum Records {
-    Sale(Sale),
     Customer(Customer),
+    Bought(Bought<Customer, Sale>),
 }
 
 fn insert(records: Vec<Records>) {

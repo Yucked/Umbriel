@@ -29,7 +29,7 @@ use surrealdb::{
 use umbriel::{
     All, E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate, Runnable, SchemaGetter,
     SurrealCrud, SurrealCrudNode, SurrealRead, model,
-    statements::{Returning, relate, return_, select},
+    statements::{Returning, info_for, relate, return_, select},
 };
 use umbriel_tests::{read, statement_error};
 
@@ -451,6 +451,33 @@ mod scenarios {
             .expect("read");
         assert!(none.is_empty());
     }
+
+    /// `INFO … VERSION` lists a table's definitions as they were at a time: a field defined
+    /// later is missing. The memory engine refuses `VERSION`, so this needs a versioned store.
+    pub async fn versioned_info(db: &Surreal<Any>) {
+        define_models(db).await;
+        let before: types::Datetime = read(db, "RETURN time::now();").await;
+        Raw::new("DEFINE FIELD nickname ON server_person TYPE option<string>;")
+            .run(db.clone())
+            .await
+            .expect("defined");
+
+        let now = info_for()
+            .table("server_person")
+            .execute(db)
+            .await
+            .expect("info");
+        assert!(now.fields.contains_key("nickname"));
+
+        let then = info_for()
+            .table("server_person")
+            .version(before)
+            .execute(db)
+            .await
+            .expect("versioned info");
+        assert!(!then.fields.contains_key("nickname"), "{:?}", then.fields);
+        assert!(then.fields.contains_key("name"), "{:?}", then.fields);
+    }
 }
 
 /// One ignored test per scenario and transport, holding the server and starting and ending with
@@ -509,4 +536,5 @@ over_each_transport!(
     versioned_http,
     versioned_ws;
     versioned_reads,
+    versioned_info,
 );

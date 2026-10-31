@@ -415,12 +415,15 @@ mod computed_baseline {
     #[tokio::test]
     async fn a_computed_expression_that_writes_is_refused_when_defined() {
         let db = db().await;
+        let error = failure(
+            &db,
+            "DEFINE FIELD logged ON sale COMPUTED (CREATE log CONTENT { at: time::now() });",
+        )
+        .await;
+        // `ExecError::ComputedWrite`, from the definition-time check.
         assert!(
-            !succeeds(
-                &db,
-                "DEFINE FIELD logged ON sale COMPUTED (CREATE log CONTENT { at: time::now() });"
-            )
-            .await
+            error.contains("`COMPUTED` bodies must be read-only"),
+            "{error}"
         );
     }
 
@@ -436,7 +439,77 @@ mod computed_baseline {
             )
             .await
         );
-        assert!(!succeeds(&db, "SELECT logged FROM sale:1;").await);
+        let error = failure(&db, "SELECT logged FROM sale:1;").await;
+        // `ExecError::ComputedFieldSideEffect`, from the read-time frame that refuses writes.
+        assert!(
+            error.contains("A COMPUTED clause cannot contain a statement that modifies data"),
+            "{error}"
+        );
+    }
+}
+
+/// Whose rights a computed field reads with: the inventory's open question (reader capped by the
+/// definer, or the definer's rights). It needs a record user, so it runs on an in-memory engine
+/// with authentication on.
+mod computed_privileges {
+    use std::collections::BTreeMap;
+
+    use surrealdb::{
+        engine::local::Mem,
+        opt::{
+            Config,
+            auth::{Record, Root},
+        },
+    };
+
+    use super::*;
+
+    fn root() -> Root {
+        Root {
+            username: "root".to_owned(),
+            password: "example-password".to_owned(),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_computed_field_reads_with_the_readers_rights() {
+        let db = Surreal::new::<Mem>(Config::new().user(root()))
+            .await
+            .expect("in-memory engine");
+        db.signin(root()).await.expect("signed in as root");
+        db.use_ns("test").use_db("test").await.expect("selected");
+        assert!(
+            succeeds(
+                &db,
+                "DEFINE TABLE secret SCHEMALESS PERMISSIONS NONE;
+                 CREATE secret:1; CREATE secret:2;
+                 DEFINE TABLE sale SCHEMALESS PERMISSIONS FULL;
+                 DEFINE FIELD hidden ON sale COMPUTED count(SELECT * FROM secret);
+                 CREATE sale:1;
+                 DEFINE TABLE user SCHEMALESS PERMISSIONS FULL;
+                 DEFINE ACCESS account ON DATABASE TYPE RECORD
+                     SIGNUP (CREATE user SET name = $name)
+                     SIGNIN (SELECT * FROM user WHERE name = $name)
+                     DURATION FOR SESSION 1h;"
+            )
+            .await
+        );
+        // The definer, root, sees both secrets through the field.
+        let as_root: usize = read(&db, "RETURN sale:1.hidden;").await;
+        assert_eq!(as_root, 2);
+
+        db.signup(Record {
+            namespace: "test".to_owned(),
+            database: "test".to_owned(),
+            access: "account".to_owned(),
+            params: BTreeMap::from([("name".to_owned(), "alice".to_owned())]),
+        })
+        .await
+        .expect("signed up as a record user");
+        // A record user, who cannot select `secret`, gets the count its own rights allow: the
+        // field runs with the reader's rights, never more than the definer's.
+        let as_record_user: usize = read(&db, "RETURN sale:1.hidden;").await;
+        assert_eq!(as_record_user, 0);
     }
 }
 
