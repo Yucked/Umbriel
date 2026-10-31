@@ -1,7 +1,11 @@
 //! `DEFINE EVENT` (`orm/src/statements/define_event.rs`): an optional `WHEN`, several `THEN`s,
 //! and `ASYNC` with `RETRY` and `MAXDEPTH`.
 
-use surrealdb::{Surreal, engine::local::Db};
+use surrealdb::{
+    Surreal,
+    engine::local::Db,
+    types::{SurrealValue, Value},
+};
 use umbriel::{
     All, Operatable, Param, Raw, Runnable, Table, chain,
     statements::{define_event, select, utils::Block},
@@ -15,6 +19,20 @@ async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
 /// `{ CREATE log SET note = '<note>' }`: what the events under test run.
 fn log_entry(note: &str) -> Block {
     chain(Raw::new(format!("CREATE log SET note = '{note}';"))).as_block()
+}
+
+/// `{ CREATE log:<key> SET seen = count(SELECT * FROM log) }`: an entry recording how many entries
+/// existed before it.
+fn ordered_entry(key: &str) -> Block {
+    chain(Raw::new(format!(
+        "CREATE log:{key} SET seen = count(SELECT * FROM log);"
+    )))
+    .as_block()
+}
+
+/// The number of `log` entries, read in a query of its own.
+async fn log_count(db: &Surreal<Db>) -> usize {
+    read(db, "RETURN count(SELECT * FROM log);").await
 }
 
 mod rendering {
@@ -75,8 +93,23 @@ mod rendering {
 mod behaviour {
     use super::*;
 
-    async fn log_count(db: &Surreal<Db>) -> usize {
-        read(db, "RETURN count(SELECT * FROM log);").await
+    /// The `log` count once it reaches `expected`, checked every 100ms for at most 5s. The wait
+    /// is SurrealQL's `SLEEP`, inside the database, since async events run on its own task.
+    async fn log_count_reaching(db: &Surreal<Db>, expected: usize) -> usize {
+        let mut count = log_count(db).await;
+        for _ in 0..50 {
+            if count >= expected {
+                break;
+            }
+            let mut results = db
+                .query("SLEEP 100ms; RETURN count(SELECT * FROM log);")
+                .await
+                .and_then(surrealdb::IndexedResults::check)
+                .expect("counted");
+            let value: Value = results.take(1).expect("a count");
+            count = usize::from_value(value).expect("a number");
+        }
+        count
     }
 
     #[tokio::test]
@@ -100,19 +133,19 @@ mod behaviour {
             &db,
             define_event("audit")
                 .on_table("sale")
-                .then(log_entry("first"))
-                .then(log_entry("second")),
+                .then(ordered_entry("first"))
+                .then(ordered_entry("second")),
         )
         .await;
         assert!(succeeds(&db, "CREATE sale:1;").await);
-        let notes: Vec<String> = read(&db, "RETURN (SELECT VALUE note FROM log);").await;
-        let mut sorted = notes.clone();
-        sorted.sort();
-        assert_eq!(sorted, vec!["first".to_owned(), "second".to_owned()]);
+        // Each entry records how many entries existed before it, so the counts give the order.
+        let first: usize = read(&db, "RETURN (SELECT VALUE seen FROM ONLY log:first);").await;
+        let second: usize = read(&db, "RETURN (SELECT VALUE seen FROM ONLY log:second);").await;
+        assert_eq!((first, second), (0, 1));
     }
 
     #[tokio::test]
-    async fn an_async_event_does_not_run_inside_the_triggering_transaction() {
+    async fn an_async_event_runs_after_the_triggering_transaction_commits() {
         let db = db().await;
         run(
             &db,
@@ -142,9 +175,13 @@ mod behaviour {
             .await
             .and_then(surrealdb::IndexedResults::check)
             .expect("committed");
-        // The synchronous event has logged; the async one has not run yet.
-        let logged: usize = results.take(3).expect("a count");
-        assert_eq!(logged, 1);
+        // Inside the transaction the synchronous event has logged and the async one has not.
+        let logged: Value = results.take(3).expect("a count");
+        assert_eq!(usize::from_value(logged).expect("a number"), 1);
+        // After the commit, the async event is delivered.
+        assert_eq!(log_count_reaching(&db, 2).await, 2);
+        let notes: Vec<String> = read(&db, "RETURN (SELECT VALUE note FROM log);").await;
+        assert!(notes.contains(&"async".to_owned()), "{notes:?}");
     }
 
     #[tokio::test]
