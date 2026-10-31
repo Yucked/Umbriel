@@ -432,8 +432,7 @@ impl Statement for AlterFieldStatement {
         self.assert.render(out, "ASSERT", |assertion, out| {
             out.push_str(" ASSERT ").push(assertion);
         });
-        self.default
-            .render(out, "DEFAULT", |default, out| default.render(out));
+        self.default.render(out, "DEFAULT", FieldDefault::render);
         render_comment(&self.comment, out);
         out.push(&self.permissions);
     }

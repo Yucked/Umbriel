@@ -349,9 +349,7 @@ impl DefineFieldStatement {
                 }
                 Some(_) => {}
                 None => {
-                    out.push_error(
-                        "a computed field must be a top-level field, not a nested path",
-                    );
+                    out.push_error("a computed field must be a top-level field, not a nested path");
                 }
             }
         }
