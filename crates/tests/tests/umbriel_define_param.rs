@@ -3,7 +3,7 @@
 //! Only rendering is tested: checking that `PERMISSIONS NONE` hides the param needs a record
 //! user, and the record-access setup belongs to #15.
 
-use umbriel::{Param, Render, statements::define_param};
+use umbriel::{Operatable, Param, Render, statements::define_param};
 use umbriel_tests::*;
 
 #[test]

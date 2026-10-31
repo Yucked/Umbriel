@@ -4,7 +4,7 @@
 use surrealdb::{Surreal, engine::local::Db};
 use umbriel::{
     All, Field, Model, Operatable, RecordId, Runnable, SurrealRead, Table, model,
-    statements::{SelectStatement, define_table, select, table_relation},
+    statements::{Returning, SelectStatement, define_table, select, table_relation},
 };
 use umbriel_tests::*;
 

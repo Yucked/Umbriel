@@ -9,13 +9,12 @@ use std::{
 use chrono::{DateTime, Utc};
 use surrealdb::{Surreal, engine::local::Db};
 use umbriel::{
-    All,
     CrudType::*,
     E, Edge, Field, FlatPatch, LinkMany, LinkOne, LinkSelf, Model, ModelPatch, NONE, Node,
     Nullable, Operatable, Patch, Patchable, Raw, RecordId, RecordRange, Reference, Relate, Render,
     Runnable, SchemaGetter, SetterArray, SetterAssignable, SetterNumeric, SurrealCrud,
     SurrealCrudNode, SurrealRead, cond, model,
-    statements::{Returning, define_field, define_table, for_permission, relate, select},
+    statements::{Returning, define_field, define_table, for_permission, relate},
     types::{self, Kind, RecordIdKey, SurrealValue, Value},
     value,
 };

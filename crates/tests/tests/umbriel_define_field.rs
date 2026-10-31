@@ -10,7 +10,7 @@ use surrealdb::{
 use umbriel::{
     Field, Merge, Model, Operatable, Patch, RecordId, Runnable, SchemaGetter, SurrealCrud,
     SurrealCrudNode, SurrealRead, model,
-    statements::{define_field, define_table},
+    statements::{Returning, define_field, define_table},
     value,
 };
 use umbriel_tests::*;
