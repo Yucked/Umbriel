@@ -520,9 +520,16 @@ mod schema {
             "the view is inspected"
         );
 
+        // Redefined with `OVERWRITE`, as the migrator writes updates: a `TYPE RELATION` table
+        // defines its own `in` and `out` fields, so a plain `DEFINE FIELD in` would fail.
         let fresh = database().await;
         for (key, definition) in schema.iter() {
-            Raw::new(format!("{};", definition.sql()))
+            let keyword = key.kind.keyword();
+            let rest = definition
+                .sql()
+                .strip_prefix(&format!("DEFINE {keyword} "))
+                .unwrap_or_else(|| panic!("{key} is a DEFINE {keyword}"));
+            Raw::new(format!("DEFINE {keyword} OVERWRITE {rest};"))
                 .run(fresh.clone())
                 .await
                 .unwrap_or_else(|error| panic!("{key} redefines: {error}"));

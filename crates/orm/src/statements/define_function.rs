@@ -39,9 +39,9 @@ impl DefineFunctionStatement {
 
     /// Sets the body of the function.
     ///
-    /// The body runs inside the calling statement's transaction: `BEGIN`, `COMMIT` and `CANCEL`
-    /// are statements of a whole query only, so SurrealDB 3.3.4 refuses a body holding them when
-    /// the function is defined.
+    /// The body runs inside the calling statement's transaction. `BEGIN`, `COMMIT` and `CANCEL`
+    /// are transaction statements only at the top level of a query: SurrealDB 3.3.4 accepts them
+    /// in a body but reads them as plain values, so they neither start nor end a transaction.
     pub fn body(mut self, body: impl Into<Block>) -> Self {
         self.body = Some(body.into());
         self

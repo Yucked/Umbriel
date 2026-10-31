@@ -119,6 +119,8 @@ mod views {
     use umbriel::SurrealCrud;
 
     async fn sales(db: &Surreal<Db>) {
+        // A view's source table must exist before the view is defined (3.3.4).
+        run(db, Sale::define_table()).await;
         run(db, LargeSale::define_table()).await;
         for (key, region, amount) in [("a", "north", 5), ("b", "north", 20), ("c", "south", 30)] {
             Sale {

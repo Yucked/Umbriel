@@ -233,17 +233,11 @@ mod behaviour {
                 .type_(Kind::Object),
         )
         .await;
-        assert!(
-            succeeds(
-                &db,
-                "CREATE sale:1 SET meta = { source: 'web' }, plain = { source: 'web' };"
-            )
-            .await
-        );
+        assert!(succeeds(&db, "CREATE sale:1 SET meta = { source: 'web' }, plain = {};").await);
         let meta: Object = read(&db, "RETURN sale:1.meta;").await;
         assert_eq!(meta.get("source"), Some(&Value::String("web".to_owned())));
-        let plain: Object = read(&db, "RETURN sale:1.plain;").await;
-        assert_eq!(plain.get("source"), None);
+        // Without `FLEXIBLE`, 3.3.4 refuses the undefined key instead of dropping it.
+        assert!(!succeeds(&db, "CREATE sale:2 SET meta = {}, plain = { source: 'web' };").await);
     }
 
     #[tokio::test]

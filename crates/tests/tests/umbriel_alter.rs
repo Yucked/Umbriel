@@ -93,11 +93,9 @@ mod rendering {
         assert_sql(
             &alter_event("audit")
                 .on_table("user")
-                .drop_when()
-                .drop_then()
                 .drop_async()
                 .drop_comment(),
-            "ALTER EVENT audit ON TABLE user DROP WHEN DROP THEN DROP ASYNC DROP COMMENT;",
+            "ALTER EVENT audit ON TABLE user DROP ASYNC DROP COMMENT;",
         );
     }
 
@@ -315,7 +313,7 @@ mod behaviour {
             &db,
             alter_event("audit")
                 .on_table("user")
-                .drop_when()
+                .when(Param::new("event").is("UPDATE"))
                 .async_()
                 .comment("audit trail"),
         )
@@ -323,7 +321,26 @@ mod behaviour {
         let event = stored_definition(&db, "INFO FOR TABLE user;", "events", "audit").await;
         assert!(event.contains("ASYNC"), "{event}");
         assert!(event.contains("COMMENT 'audit trail'"), "{event}");
-        assert!(!event.contains("CREATE"), "{event}");
+        assert!(event.contains("'UPDATE'"), "{event}");
+        assert!(!event.contains("'CREATE'"), "{event}");
+    }
+
+    /// Why `alter_event` offers no `drop_when` or `drop_then`: 3.3.4 accepts both and changes
+    /// nothing.
+    #[tokio::test]
+    async fn surrealdb_ignores_drop_when_and_drop_then() {
+        let db = db().await;
+        assert!(
+            succeeds(
+                &db,
+                "DEFINE EVENT audit ON user WHEN $event = 'CREATE' THEN (SELECT * FROM log);
+                 ALTER EVENT audit ON user DROP WHEN DROP THEN;"
+            )
+            .await
+        );
+        let event = stored_definition(&db, "INFO FOR TABLE user;", "events", "audit").await;
+        assert!(event.contains("WHEN $event = 'CREATE'"), "{event}");
+        assert!(event.contains("THEN (SELECT * FROM log)"), "{event}");
     }
 
     #[tokio::test]

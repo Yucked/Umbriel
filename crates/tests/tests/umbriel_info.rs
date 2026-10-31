@@ -224,7 +224,8 @@ mod results {
             .expect("decoded");
         assert_eq!(status.status, IndexBuildStatus::Ready);
         assert_eq!(status.error, None);
-        // The key set the plan pins: `status` and `compacting` for a built index, nothing else.
+        assert!(status.initial.is_some() && status.pending.is_some() && status.updated.is_some());
+        // The key set 3.3.4 gives an index built by `DEFINE INDEX`: the build counters too.
         let raw: Value = read(&db, "INFO FOR INDEX user_email ON TABLE user;").await;
         let Value::Object(raw) = raw else {
             panic!("an object");
@@ -234,7 +235,7 @@ mod results {
         };
         let mut keys: Vec<&str> = building.keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, vec!["compacting", "status"]);
+        assert_eq!(keys, vec!["compacting", "initial", "pending", "status", "updated"]);
     }
 
     #[test]
@@ -255,11 +256,19 @@ mod results {
         assert!(TableInfo::<Structures>::from_info(Value::Object(info)).is_err());
     }
 
+    /// `BEGIN`, `COMMIT` and `CANCEL` in a function body are not transaction statements: 3.3.4
+    /// parses a body's statements as expressions, so the keywords read as plain values, the
+    /// definition is accepted, and the body runs in the caller's transaction.
     #[tokio::test]
-    async fn begin_inside_a_function_body_is_refused() {
-        let sql = "DEFINE FUNCTION fn::transfer() { BEGIN; RETURN 1; COMMIT; };";
-        assert!(surrealdb_syn::parse(sql).is_err());
+    async fn begin_inside_a_function_body_is_no_transaction() {
+        let sql = "DEFINE FUNCTION fn::transfer() { BEGIN; CREATE log:1; CANCEL; RETURN 1; };";
+        assert!(surrealdb_syn::parse(sql).is_ok());
         let db = db().await;
-        assert!(!succeeds(&db, sql).await);
+        assert!(succeeds(&db, sql).await);
+        let result: i64 = read(&db, "RETURN fn::transfer();").await;
+        assert_eq!(result, 1);
+        // `CANCEL` cancelled nothing: the write inside the body is kept.
+        let kept: usize = read(&db, "RETURN count(SELECT * FROM log);").await;
+        assert_eq!(kept, 1);
     }
 }

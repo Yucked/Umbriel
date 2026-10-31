@@ -190,7 +190,8 @@ mod behaviour {
         assert!(
             succeeds(
                 &db,
-                "DEFINE EVENT audit ON sale WHEN NULL THEN (CREATE log);
+                "DEFINE TABLE log;
+                 DEFINE EVENT audit ON sale WHEN NULL THEN (CREATE log);
                  CREATE sale:1;"
             )
             .await

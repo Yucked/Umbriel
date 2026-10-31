@@ -444,17 +444,25 @@ impl_definition!(AlterFieldStatement);
 
 /// Alters an event: `ALTER EVENT [IF EXISTS] @name ON [TABLE] @table …`.
 ///
-/// `WHEN` and `THEN` are set or dropped; [`async_`](AlterEventStatement::async_) with `retry` and
+/// `WHEN` and `THEN` are replaced; [`async_`](AlterEventStatement::async_) with `retry` and
 /// `max_depth` makes it asynchronous, and [`drop_async`](AlterEventStatement::drop_async) makes
 /// it synchronous again.
 ///
-/// ```rust
-/// use umbriel::{*, statements::{alter_event, select}};
+/// There is no `drop_when` or `drop_then`: SurrealDB 3.3.4 parses `DROP WHEN` and `DROP THEN` but
+/// leaves the event unchanged (`alter/event.rs`). To run on every change, set a condition every
+/// change meets, such as `$event IS NOT NONE`.
 ///
-/// let statement = alter_event("audit").on_table("user").async_().retry(3).drop_when();
+/// ```rust
+/// use umbriel::{*, statements::alter_event};
+///
+/// let statement = alter_event("audit")
+///     .on_table("user")
+///     .async_()
+///     .retry(3)
+///     .when(Param::new("event").is_not(NONE));
 /// assert_eq!(
 ///     statement.to_debug_sql(),
-///     "ALTER EVENT audit ON TABLE user DROP WHEN ASYNC RETRY 3;"
+///     "ALTER EVENT audit ON TABLE user WHEN $event IS NOT NONE ASYNC RETRY 3;"
 /// );
 /// ```
 pub fn alter_event(event: impl Into<Name<Event>>) -> AlterEventStatement {
@@ -462,8 +470,8 @@ pub fn alter_event(event: impl Into<Name<Event>>) -> AlterEventStatement {
         event: event.into(),
         table: None,
         if_exists: false,
-        when: Change::default(),
-        then: Change::default(),
+        when: None,
+        then: Vec::new(),
         mode: Change::default(),
         comment: Change::default(),
     }
@@ -474,8 +482,8 @@ pub struct AlterEventStatement {
     event: Name<Event>,
     table: Option<Name<Table>>,
     if_exists: bool,
-    when: Change<Filter>,
-    then: Change<Vec<Subquery>>,
+    when: Option<Filter>,
+    then: Vec<Subquery>,
     mode: Change<EventMode>,
     comment: Change<String>,
 }
@@ -487,27 +495,15 @@ impl AlterEventStatement {
         self
     }
 
-    /// `WHEN @condition`.
+    /// `WHEN @condition`: replaces when the event runs.
     pub fn when(mut self, condition: impl Conditional) -> Self {
-        self.when.set = Some(Filter::new(condition));
-        self
-    }
-
-    /// `DROP WHEN`: the event runs on every change.
-    pub fn drop_when(mut self) -> Self {
-        self.when.drop = true;
+        self.when = Some(Filter::new(condition));
         self
     }
 
     /// `THEN …`: replaces what the event runs. Each call adds a statement after the earlier ones.
     pub fn then(mut self, query: impl Into<Subquery>) -> Self {
-        self.then.set.get_or_insert_default().push(query.into());
-        self
-    }
-
-    /// `DROP THEN`.
-    pub fn drop_then(mut self) -> Self {
-        self.then.drop = true;
+        self.then.push(query.into());
         self
     }
 
@@ -543,12 +539,12 @@ impl Statement for AlterEventStatement {
         push_head(out, "EVENT", self.if_exists);
         out.push(&self.event);
         push_table(out, self.table.as_ref());
-        self.when.render(out, "WHEN", |when, out| {
+        if let Some(when) = &self.when {
             out.push_str(" WHEN ").push(when);
-        });
-        self.then.render(out, "THEN", |then, out| {
-            out.push_str(" THEN ").push_joined(then, ", ");
-        });
+        }
+        if !self.then.is_empty() {
+            out.push_str(" THEN ").push_joined(&self.then, ", ");
+        }
         self.mode.render(out, "ASYNC", |mode, out| mode.render(out));
         render_comment(&self.comment, out);
     }
