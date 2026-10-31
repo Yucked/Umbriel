@@ -3,7 +3,7 @@
 
 use surrealdb::{Surreal, engine::local::Db, types::Kind};
 use umbriel::{
-    All, Field, NONE, Operatable, Param, Runnable, Table, chain,
+    All, Field, NONE, Operatable, Param, Render, Runnable, Table, chain,
     statements::{
         AnalyzerFilter, FunctionArgument, Tokenizer, alter_analyzer, alter_event, alter_field,
         alter_function, alter_param, alter_table, define_analyzer, define_event, define_field,
@@ -203,6 +203,38 @@ mod rendering {
             &alter_function("add_one").returns(Kind::Int),
             "only with its signature",
         );
+    }
+
+    #[test]
+    fn function_names_are_paths_of_identifiers() {
+        assert_sql(
+            &alter_function("math::add_one").comment("adds one"),
+            "ALTER FUNCTION fn::math::add_one COMMENT 'adds one';",
+        );
+        assert_sql(
+            &alter_analyzer("simple").function("text::normalise"),
+            "ALTER ANALYZER simple FUNCTION fn::text::normalise;",
+        );
+        // Names that would carry SurrealQL of their own, or are not paths, never render.
+        for hostile in [
+            "add_one; REMOVE TABLE user",
+            "add_one() {}; DEFINE USER x",
+            "add_one -- comment",
+            "math::",
+            "::add_one",
+            "math::::add_one",
+            "1st",
+            "add-one",
+            "`add_one`",
+            "",
+        ] {
+            let function = alter_function(hostile).comment("x");
+            assert_render_error(&function, "invalid function name");
+            assert!(!function.to_debug_sql().contains("REMOVE"), "{hostile}");
+            let analyzer = alter_analyzer("simple").function(hostile);
+            assert_render_error(&analyzer, "invalid function name");
+            assert!(!analyzer.to_debug_sql().contains("REMOVE"), "{hostile}");
+        }
     }
 }
 

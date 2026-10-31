@@ -585,9 +585,7 @@ pub struct RemoveUserStatement {
 impl Statement for RemoveUserStatement {
     fn render_body(&self, out: &mut Renderer) {
         push_head(out, "USER", self.if_exists);
-        out.push(&self.user)
-            .push_str(" ON ")
-            .push_display(&self.on);
+        out.push(&self.user).push_str(" ON ").push_display(&self.on);
     }
 }
 

@@ -25,42 +25,42 @@ pub struct Customer {
 }
 
 // `define` gives the whole definition, so each new clause conflicts with it.
-#[model(node, table = "a")]
+#[model(node, table = "define_with_default_always")]
 pub struct DefineWithDefaultAlways {
     pub id: RecordId<Self>,
     #[orm(ty = "int", define = define_amount(), default_always = 0)]
     pub amount: i64,
 }
 
-#[model(node, table = "b")]
+#[model(node, table = "define_with_value_expr")]
 pub struct DefineWithValueExpr {
     pub id: RecordId<Self>,
     #[orm(ty = "int", define = define_amount(), value_expr = Field::new("amount"))]
     pub amount: i64,
 }
 
-#[model(node, table = "c")]
+#[model(node, table = "define_with_computed")]
 pub struct DefineWithComputed {
     pub id: RecordId<Self>,
     #[orm(ty = "int", define = define_amount(), computed = Field::new("amount"))]
     pub amount: i64,
 }
 
-#[model(node, table = "d")]
+#[model(node, table = "define_with_readonly")]
 pub struct DefineWithReadonly {
     pub id: RecordId<Self>,
     #[orm(ty = "int", define = define_amount(), readonly)]
     pub amount: i64,
 }
 
-#[model(node, table = "e")]
+#[model(node, table = "define_with_flexible")]
 pub struct DefineWithFlexible {
     pub id: RecordId<Self>,
     #[orm(ty = "int", define = define_amount(), flexible)]
     pub amount: i64,
 }
 
-#[model(node, table = "f")]
+#[model(node, table = "define_with_comment")]
 pub struct DefineWithComment {
     pub id: RecordId<Self>,
     #[orm(ty = "int", define = define_amount(), comment = "amount")]
@@ -68,7 +68,7 @@ pub struct DefineWithComment {
 }
 
 // A computed field is evaluated on read, so it takes no write-side clause.
-#[model(node, table = "g")]
+#[model(node, table = "computed_with_readonly")]
 pub struct ComputedWithReadonly {
     pub id: RecordId<Self>,
     #[orm(computed = Field::new("amount"), readonly)]
@@ -76,7 +76,7 @@ pub struct ComputedWithReadonly {
 }
 
 // One default per field.
-#[model(node, table = "h")]
+#[model(node, table = "two_defaults")]
 pub struct TwoDefaults {
     pub id: RecordId<Self>,
     #[orm(value = 0, default_always = 0)]

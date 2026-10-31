@@ -11,7 +11,7 @@ use surrealdb::{
 };
 use umbriel::{
     All, Error, Model, Raw, Runnable, SchemaGetter, SetterAssignable, StatementContext,
-    SurrealRead, SurrealCrudNode,
+    SurrealCrudNode, SurrealRead,
     statements::{CreateTarget, Returning, create, create_only, delete, select, update},
 };
 use umbriel_tests::*;

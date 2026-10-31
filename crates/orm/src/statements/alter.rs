@@ -44,7 +44,12 @@ impl<T> Default for Change<T> {
 impl<T> Change<T> {
     /// Writes ` DROP <keyword>`, or the set value through `render_set`. A clause both set and
     /// dropped is an error.
-    fn render(&self, out: &mut Renderer, keyword: &str, render_set: impl FnOnce(&T, &mut Renderer)) {
+    fn render(
+        &self,
+        out: &mut Renderer,
+        keyword: &str,
+        render_set: impl FnOnce(&T, &mut Renderer),
+    ) {
         match (&self.set, self.drop) {
             (Some(_), true) => {
                 out.push_error(format!("ALTER cannot both set and drop {keyword}"));
@@ -73,6 +78,27 @@ fn push_head(out: &mut Renderer, kind: &str, if_exists: bool) {
         out.push_str(" IF EXISTS");
     }
     out.push_str(" ");
+}
+
+/// Writes `fn::<name>`, where `name` is a `::`-separated path of plain identifiers
+/// (`[A-Za-z_][A-Za-z0-9_]*` each). Anything else fails the query and nothing of it is written,
+/// so a name cannot carry SurrealQL of its own.
+fn push_function_path(out: &mut Renderer, name: &str) {
+    let valid_segment = |segment: &str| {
+        let mut bytes = segment.bytes();
+        bytes
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
+            && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    };
+    if !name.split("::").all(valid_segment) {
+        out.push_error(format!(
+            "invalid function name `{name}`: each `::`-separated part must be an identifier \
+             ([A-Za-z_][A-Za-z0-9_]*)"
+        ));
+        return;
+    }
+    out.push_str("fn::").push_str(name);
 }
 
 /// Writes ` ON TABLE @table` when a table is set.
@@ -406,7 +432,8 @@ impl Statement for AlterFieldStatement {
         self.assert.render(out, "ASSERT", |assertion, out| {
             out.push_str(" ASSERT ").push(assertion);
         });
-        self.default.render(out, "DEFAULT", |default, out| default.render(out));
+        self.default
+            .render(out, "DEFAULT", |default, out| default.render(out));
         render_comment(&self.comment, out);
         out.push(&self.permissions);
     }
@@ -605,8 +632,9 @@ impl Statement for AlterParamStatement {
 impl_alter_common!(AlterParamStatement);
 impl_definition!(AlterParamStatement);
 
-/// Alters a function: `ALTER FUNCTION [IF EXISTS] fn::name …`. The name is written after `fn::`,
-/// as for [`define_function`](super::define_function).
+/// Alters a function: `ALTER FUNCTION [IF EXISTS] fn::name …`. The name is written after `fn::`;
+/// each `::`-separated part must be an identifier (`[A-Za-z_][A-Za-z0-9_]*`), or the query fails
+/// when it is rendered.
 ///
 /// [`signature`](AlterFunctionStatement::signature) replaces the arguments and body together, as
 /// SurrealDB takes them, optionally with a return type.
@@ -683,8 +711,7 @@ impl AlterFunctionStatement {
 impl Statement for AlterFunctionStatement {
     fn render_body(&self, out: &mut Renderer) {
         push_head(out, "FUNCTION", self.if_exists);
-        // The name is a `::`-separated path, written as given.
-        out.push_str("fn::").push_str(&self.name);
+        push_function_path(out, &self.name);
         match (&self.signature, &self.returns) {
             (Some((arguments, body)), returns) => {
                 push_arguments(out, arguments);
@@ -787,12 +814,14 @@ impl Statement for AlterAnalyzerStatement {
         push_head(out, "ANALYZER", self.if_exists);
         out.push(&self.name);
         self.function.render(out, "FUNCTION", |name, out| {
-            out.push_str(" FUNCTION fn::").push_str(name);
+            out.push_str(" FUNCTION ");
+            push_function_path(out, name);
         });
-        self.tokenizers.render(out, "TOKENIZERS", |tokenizers, out| {
-            out.push_str(" TOKENIZERS ");
-            push_list(out, tokenizers);
-        });
+        self.tokenizers
+            .render(out, "TOKENIZERS", |tokenizers, out| {
+                out.push_str(" TOKENIZERS ");
+                push_list(out, tokenizers);
+            });
         self.filters.render(out, "FILTERS", |filters, out| {
             out.push_str(" FILTERS ");
             push_list(out, filters);

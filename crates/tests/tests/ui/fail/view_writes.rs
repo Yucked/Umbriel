@@ -42,7 +42,7 @@ fn writes(db: &Surreal<Db>, copy: SaleCopy, id: RecordId<SaleCopy>) {
     let _ = upsert_only::<SaleCopy>(id.clone());
     let _ = delete::<SaleCopy>(id.clone());
     let _ = delete_only::<SaleCopy>(id.clone());
-    let _ = create::<SaleCopy>(SaleCopy::table());
+    let _ = create::<SaleCopy>(Table::new("sale_copy"));
     let _ = insert::<SaleCopy>(vec![]);
     let _ = relate::<SaleCopy>(Field::new("a->b->c"));
 

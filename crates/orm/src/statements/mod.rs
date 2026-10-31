@@ -196,8 +196,7 @@ pub use alter::{
 };
 pub use any::{
     AnyTarget, CreateAnyStatement, InsertAnyStatement, Models, WritableModels, create_any,
-    create_any_only,
-    insert_any,
+    create_any_only, insert_any,
 };
 pub use break_::{BreakStatement, break_};
 pub use continue_::{ContinueStatement, continue_};

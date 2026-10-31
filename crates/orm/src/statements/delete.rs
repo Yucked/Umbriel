@@ -9,8 +9,8 @@
 use std::{marker::PhantomData, ops::Deref};
 
 use crate::{
-    Conditional, DurationLike, Edge, Field, Filter, Model, Renderer, SchemaGetter, ValueLike, Writable,
-    render::Checked,
+    Conditional, DurationLike, Edge, Field, Filter, Model, Renderer, SchemaGetter, ValueLike,
+    Writable, render::Checked,
 };
 
 use super::{

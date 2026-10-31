@@ -270,7 +270,9 @@ impl<M: Models, R: ReturnMode, C: Cardinality> Returning for CreateAnyStatement<
 ///     "INSERT [{ id: user:alice }, { id: post:hello }];"
 /// );
 /// ```
-pub fn insert_any<M: WritableModels>(records: impl IntoIterator<Item = M>) -> InsertAnyStatement<M> {
+pub fn insert_any<M: WritableModels>(
+    records: impl IntoIterator<Item = M>,
+) -> InsertAnyStatement<M> {
     InsertAnyStatement {
         records: records.into_iter().map(SurrealValue::into_value).collect(),
         ignore: false,
