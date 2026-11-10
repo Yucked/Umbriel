@@ -225,6 +225,16 @@ impl<'a> Codegen<'a> {
         for field_receiver in model_attributes.fields()? {
             tokens_generator.set_field_receiver(field_receiver);
 
+            // The SDK's derive documents `skip` but never reads it (3.3.4), so the field would
+            // still be stored.
+            if let Some(skip) = surreal_flag(&field_receiver.attrs, "skip")? {
+                return Err(syn::Error::new_spanned(
+                    skip,
+                    "`#[surreal(skip)]` has no effect: the SurrealValue derive still stores the field; remove the field from the model instead",
+                )
+                .into());
+            }
+
             if let Some(flatten) = surreal_flag(&field_receiver.attrs, "flatten")? {
                 tokens_generator.create_flattened_field(&flatten)?;
                 continue;

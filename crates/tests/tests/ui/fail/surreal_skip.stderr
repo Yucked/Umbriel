@@ -1,0 +1,45 @@
+error: `#[surreal(skip)]` has no effect: the SurrealValue derive still stores the field; remove the field from the model instead
+ --> tests/ui/fail/surreal_skip.rs:8:15
+  |
+8 |     #[surreal(skip)]
+  |               ^^^^
+
+error[E0277]: `User` is not an Umbriel model
+ --> tests/ui/fail/surreal_skip.rs:6:13
+  |
+6 |     pub id: RecordId<Self>,
+  |             ^^^^^^^^^^^^^^ not a model
+  |
+help: the trait `Model` is not implemented for `User`
+ --> tests/ui/fail/surreal_skip.rs:5:1
+  |
+5 | pub struct User {
+  | ^^^^^^^^^^^^^^^
+  = note: declare `User` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+ --> $WORKSPACE/crates/orm/src/query/record_id.rs
+  |
+  | impl<T: Model> SurrealValue for RecordId<T> {
+  | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |         |
+  |         unsatisfied requirement introduced here: `User: Model`
+  = note: required for `umbriel::RecordId<User>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<User>`
+ --> tests/ui/fail/surreal_skip.rs:6:9
+  |
+4 | #[model(node, table = "user")]
+  | ------------------------------ value moved due to this method call
+5 | pub struct User {
+6 |     pub id: RecordId<Self>,
+  |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+  |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+ --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+  |
+  |     fn into_value(self) -> Value;
+  |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+  |
+6 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+  |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
