@@ -20,15 +20,6 @@ use umbriel::{
 };
 use umbriel_tests::*;
 
-/// Definitions joined one per line.
-fn joined(definitions: &[Raw]) -> String {
-    definitions
-        .iter()
-        .map(Raw::as_str)
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 /// The definitions of `field`, in order.
 fn definitions_of(definitions: &[Raw], field: &str) -> Vec<String> {
     let prefix = format!("DEFINE FIELD {field} ");
@@ -92,15 +83,6 @@ fn weapon(key: i64, strength: f64) -> Weapon {
         name: format!("Weapon {key}"),
         strength,
         ..Default::default()
-    }
-}
-
-async fn apply_definitions<M: Model>(db: &Surreal<Db>) {
-    for definition in std::iter::once(M::define_table()).chain(M::define_fields()) {
-        definition
-            .run(db.clone())
-            .await
-            .unwrap_or_else(|error| panic!("`{definition}` is accepted: {error}"));
     }
 }
 

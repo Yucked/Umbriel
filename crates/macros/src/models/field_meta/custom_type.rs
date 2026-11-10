@@ -566,6 +566,19 @@ impl CustomType {
         }
     }
 
+    /// The last path segment's name when it has no generic arguments, e.g. `Uuid` for
+    /// `types::Uuid`; `None` for other types, so `std::ops::Range<i64>` is not `Range`.
+    pub fn plain_type_ident(&self) -> Option<String> {
+        let syn::Type::Path(path) = self.inner() else {
+            return None;
+        };
+        let last_segment = path.path.segments.last()?;
+        last_segment
+            .arguments
+            .is_none()
+            .then(|| last_segment.ident.to_string())
+    }
+
     /// The geometry kinds a geometry type holds; empty for `Geometry`, which holds any.
     pub fn raw_type_geometry_kind(&self) -> Option<Vec<GeometryKind>> {
         let ty = &self.inner();

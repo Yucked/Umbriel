@@ -34,6 +34,17 @@ impl<'a> FieldTypeInference<'a> {
         let ty = self.field_ty;
         let field_name = self.db_field_name;
 
+        // Checked before the inference steps, which replace their own errors with a generic one.
+        // A plain `table` field coerces through `string` in SurrealDB 3.3.4, so it refuses every
+        // table value; only `table<…>` accepts them.
+        if ty.plain_type_ident().is_some_and(|ident| ident == "Table") {
+            return Err(syn::Error::new(
+                ty.span(),
+                "give `ty = \"table<…>\"` naming the tables this field holds: SurrealDB 3.3.4 refuses table values in a plain `table` field",
+            )
+            .into());
+        }
+
         // NOTE: The order of the inference approach is important. Type path should always be first
         let priority1 = || self.based_on_type_path_token_structure(ty, relation_type.clone());
         let priority2 = || self.based_on_db_field_name(ty, field_name, model_attrs);
@@ -205,6 +216,27 @@ impl<'a> FieldTypeInference<'a> {
                 Kind::Geometry(geometry_kinds),
                 assert(quote!(assert_type_is_geometry)),
             )
+        } else if let Some((kind, assertion)) = field_ty
+            .plain_type_ident()
+            .and_then(|ident| sdk_value_kind(&ident))
+        {
+            DbFieldTypeAstMeta::new(kind, assert(assertion))
+        } else if field_ty.type_ident().is_ok_and(|ident| ident == "RecordId")
+            && !self.db_field_name.is_id()
+            && !self
+                .db_field_name
+                .is_in_or_out_edge_node(&self.model_attrs.to_data_type())
+        {
+            // `RecordId<T>` knows its table only once the generated code compiles, so its own
+            // kind is used: `record<table>`, or `record` for `types::RecordId`.
+            DbFieldTypeAstMeta {
+                field_type_db_original: Kind::Record(vec![]),
+                field_type_db_token: quote!(
+                    <#ty as #crate_name::types::SurrealValue>::kind_of()
+                )
+                .into(),
+                static_assertion_token: assert(quote!(assert_type_is_record_id)).into(),
+            }
         } else if let Some(foreign_type) = self.refereces_a_nested_object(&relation_type)? {
             // Guess if its a foreign Table type by comparing the type path segment with the foreign
             // rust field type ident
@@ -383,4 +415,23 @@ impl<'a> FieldTypeInference<'a> {
 
         Ok(Some(meta))
     }
+}
+
+/// The stored type of the SDK value type named `ident`, with the check that the field's Rust type
+/// can hold it. `uuid::Uuid` shares `types::Uuid`'s name and kind. `types::Regex` is absent: it
+/// does not implement `SurrealValue` in 3.3.4, so a regex field is a `Value` with `ty = "regex"`.
+fn sdk_value_kind(ident: &str) -> Option<(Kind, proc_macro2::TokenStream)> {
+    let (kind, assertion) = match ident {
+        "Uuid" => (Kind::Uuid, quote!(assert_type_is_uuid)),
+        "Decimal" => (Kind::Decimal, quote!(assert_type_is_decimal)),
+        "Number" => (Kind::Number, quote!(assert_type_is_number)),
+        "Bytes" => (Kind::Bytes, quote!(assert_type_is_bytes)),
+        "Set" => (
+            Kind::Set(Box::new(Kind::Any), None),
+            quote!(assert_type_is_set),
+        ),
+        "Range" => (Kind::Range, quote!(assert_type_is_range)),
+        _ => return None,
+    };
+    Some((kind, assertion))
 }

@@ -12,7 +12,26 @@ use surrealdb::{
     engine::local::{Db, Mem},
     types::{SurrealValue, Value},
 };
-use umbriel::Render;
+use umbriel::{Model, Raw, Render, Runnable};
+
+/// Definitions joined one per line.
+pub fn joined(definitions: &[Raw]) -> String {
+    definitions
+        .iter()
+        .map(Raw::as_str)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Defines `M`'s table and fields on `db`. Panics when SurrealDB refuses a definition.
+pub async fn apply_definitions<M: Model>(db: &Surreal<Db>) {
+    for definition in std::iter::once(M::define_table()).chain(M::define_fields()) {
+        definition
+            .run(db.clone())
+            .await
+            .unwrap_or_else(|error| panic!("`{definition}` is accepted: {error}"));
+    }
+}
 
 /// Asserts a statement's debug SQL, and that both it and its bound form parse as SurrealQL with
 /// SurrealDB's own parser, so syntax SurrealDB no longer accepts fails even without a database.

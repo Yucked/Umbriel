@@ -1,0 +1,45 @@
+error: give `ty = "table<…>"` naming the tables this field holds: SurrealDB 3.3.4 refuses table values in a plain `table` field
+ --> tests/ui/fail/table_without_ty.rs:7:17
+  |
+7 |     pub source: types::Table,
+  |                 ^^^^^
+
+error[E0277]: `Audit` is not an Umbriel model
+ --> tests/ui/fail/table_without_ty.rs:6:13
+  |
+6 |     pub id: RecordId<Self>,
+  |             ^^^^^^^^^^^^^^ not a model
+  |
+help: the trait `Model` is not implemented for `Audit`
+ --> tests/ui/fail/table_without_ty.rs:5:1
+  |
+5 | pub struct Audit {
+  | ^^^^^^^^^^^^^^^^
+  = note: declare `Audit` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+ --> $WORKSPACE/crates/orm/src/query/record_id.rs
+  |
+  | impl<T: Model> SurrealValue for RecordId<T> {
+  | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |         |
+  |         unsatisfied requirement introduced here: `Audit: Model`
+  = note: required for `umbriel::RecordId<Audit>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<Audit>`
+ --> tests/ui/fail/table_without_ty.rs:6:9
+  |
+4 | #[model(node, table = "audit")]
+  | ------------------------------- value moved due to this method call
+5 | pub struct Audit {
+6 |     pub id: RecordId<Self>,
+  |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+  |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+ --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+  |
+  |     fn into_value(self) -> Value;
+  |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+  |
+6 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+  |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +

@@ -58,6 +58,54 @@ Stored names come from the same attributes the `SurrealValue` derive reads:
 Schema fields are named after the stored name when it is a Rust identifier, and after the Rust
 field otherwise. Two fields stored under one name fail to compile.
 
+`#[surreal(skip)]` is refused: the `SurrealValue` derive documents it but ignores it (3.3.4), so
+the field would still be stored.
+
+# Stored types
+
+A field without `ty = "…"` is stored as the type inferred from its Rust type:
+
+| Rust type | Stored type |
+| --- | --- |
+| `bool` | `bool` |
+| integers | `int` |
+| `f32`, `f64` | `float` |
+| `types::Decimal` | `decimal` |
+| `types::Number` | `number` |
+| `String` | `string` |
+| `chrono::DateTime<Utc>`, `types::Datetime` | `datetime` |
+| `std::time::Duration`, `types::Duration` | `duration` |
+| `uuid::Uuid`, `types::Uuid` | `uuid` |
+| `types::Bytes` | `bytes` |
+| `Vec<T>`, `[T; N]` | `array<T>`, `array<T, N>` (exactly `N` items) |
+| `HashSet<T>`, `BTreeSet<T>` | `array<T>`: the SDK writes and reads them as arrays |
+| `types::Set` | `set<any>` |
+| `HashMap<String, V>`, `BTreeMap<String, V>`, a `#[model(object)]` | `object` |
+| `types::Range` | `range` |
+| `geo::Point`, `LineString`, `Polygon`, `MultiPoint`, `MultiLineString`, `MultiPolygon` | `geometry<point>`, `<line>`, `<polygon>`, `<multipoint>`, `<multiline>`, `<multipolygon>` |
+| `types::Geometry` | `geometry` |
+| `RecordId<T>` | `record<t>` (the model's table) |
+| `Option<T>` | `none \| T` |
+| `Nullable<T>` | `null \| T` |
+
+Give `ty` explicitly for the rest:
+- unions and literals: `ty = "int | string"`, `ty = "'draft' | 'sent'"`, `ty = "{ kind: 'a', n: int }"`. A unit enum deriving `SurrealValue` holds a literal union of its names;
+- a table: `ty = "table<user>"` on a `types::Table`, naming the tables it may hold. A field without `ty` fails to compile, since SurrealDB 3.3.4 refuses table values in a plain `table` field;
+- a regex: `ty = "regex"` on a `types::Value`, since `types::Regex` does not implement `SurrealValue`;
+- a geometry collection: `ty = "geometry<collection>"` on a `types::Geometry`, since `geo::GeometryCollection` does not implement `SurrealValue`;
+- `Vec<u8>`, which is `array<int>`; bytes are `types::Bytes`.
+
+`NONE` and `NULL` are different values: `None` in an `Option` is written as `NONE`, which removes
+the field, and `Nullable::Null` as `NULL`, which is stored. A decimal literal needs the `dec`
+suffix in SurrealQL (`1.25dec`); 3.3.4 fixed fractional decimals losing their fraction through
+`option<decimal>` and union types. SurrealDB 3.3.4 limits geometry nesting to 256 levels, and
+counts a collection's own nesting towards it.
+
+JSON documents can be stored as `serde_json::Value`, which implements `SurrealValue`
+(`ty = "object"` or `ty = "any"`). JSON has no set, decimal, datetime, duration, table, record
+id, range, regex or `NONE`: converting such a value to JSON gives the nearest JSON value (an
+array, a string, `null`), and converting back does not restore its kind.
+
 # Flattened objects
 
 `#[surreal(flatten)]` on a field whose type is a `#[model(object)]` stores the object's fields as

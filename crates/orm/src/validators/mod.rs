@@ -139,6 +139,12 @@ kind_check!(
 impl_marker!(IsBytes: types::Bytes);
 
 kind_check!(
+    /// Types holding a SurrealDB `range`.
+    IsRange, "`{Self}` cannot hold a SurrealDB `range`",assert_type_is_range, assert_value_is_range
+);
+impl_marker!(IsRange: types::Range);
+
+kind_check!(
     /// Types holding a SurrealDB `geometry`.
     IsGeometry, "`{Self}` cannot hold a SurrealDB `geometry`",assert_type_is_geometry, assert_value_is_geometry
 );
