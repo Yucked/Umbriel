@@ -25,6 +25,8 @@ kv-tikv = ["surrealdb/kv-tikv"]
 scripting = ["surrealdb/scripting"]
 http = ["surrealdb/http"]
 jwks = ["surrealdb/jwks"]
+# Offline SurrealQL value parsing (`umbriel::parse::value`).
+parse = ["surrealdb/parse"]
 
 # Exposes internals to `crates/tests`; not part of the public API.
 test-support = []

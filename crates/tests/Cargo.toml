@@ -17,6 +17,7 @@ doctest = false
 umbriel = { workspace = true, default-features = false, features = [
     "kv-mem",
     "migrations",
+    "parse",
     "protocol-http",
     "protocol-ws",
     "test-support",

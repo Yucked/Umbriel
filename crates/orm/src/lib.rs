@@ -38,6 +38,11 @@ pub use traits::*;
 pub use surrealdb::types;
 pub use surrealdb::types::Table;
 
+/// Parses SurrealQL value text without a database: `parse::value("{ name: 'Alice' }")` returns a
+/// [`types::Value`], or an error for text that is not one value.
+#[cfg(feature = "parse")]
+pub use surrealdb::parse;
+
 /// Embedded and file-based schema migrations, generated from model definitions.
 #[cfg(feature = "migrations")]
 pub mod migrations;
