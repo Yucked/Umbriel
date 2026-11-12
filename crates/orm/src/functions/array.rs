@@ -112,9 +112,9 @@ functions! { $ "array" "::", array, array;
     reduce(array: ArrayLike, closure: ClosureLike) -> kinds::Any [ArrayLike.reduce];
     /// The array without the element at `index`.
     remove(array: ArrayLike, index: NumberLike) -> kinds::Array [ArrayLike.remove];
-    /// An array of `value` repeated `count` times. Its method form is on every value except
-    /// strings, where `.repeat()` is `string::repeat`.
-    repeat(value: ValueLike, count: NumberLike) -> kinds::Array [ValueLike.repeat];
+    /// An array of `value` repeated `count` times. Its method form is
+    /// [`ValueLike::repeat`](crate::ValueLike::repeat), whose result is untyped.
+    repeat(value: ValueLike, count: NumberLike) -> kinds::Array;
     /// The array reversed.
     reverse(array: ArrayLike) -> kinds::Array [ArrayLike.reverse];
     /// `length` consecutive integers from `start`, or `start` integers from 0.
@@ -145,6 +145,16 @@ functions! { $ "array" "::", array, array;
     /// Every run of `size` consecutive elements.
     windows(array: ArrayLike, size: NumberLike) -> kinds::Array<kinds::Array>
         [ArrayLike.windows];
+}
+
+impl crate::ValueLike {
+    /// `value.repeat(count)`. SurrealDB dispatches it by the value's runtime type: on a string it
+    /// is `string::repeat` (a string), on any other value `array::repeat` (an array). The result
+    /// is untyped, since a `ValueLike` may be either; `StrandLike::repeat` is the typed string
+    /// form.
+    pub fn repeat(&self, count: impl Into<crate::NumberLike>) -> crate::Function<kinds::Any> {
+        crate::Function::method(self.clone(), "repeat").arg(count.into())
+    }
 }
 
 /// Sorting functions, `array::sort::*`.
