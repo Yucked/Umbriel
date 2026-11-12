@@ -7,10 +7,46 @@ use umbriel::{
     ArrayLike, BytesLike, DatetimeLike, DurationLike, Field, GeometryLike, Model, NumberLike,
     ObjectLike, Operatable, Param, RecordIdLike, Render, Runnable, SetLike, StrandLike, ValueLike,
     closure, define_function,
-    functions::{array, function, string, type_},
+    functions::{array, function, rand, string, type_},
     kinds,
 };
 use umbriel_tests::*;
+
+#[tokio::test]
+async fn a_skipped_optional_argument_is_a_render_error() {
+    let name = StrandLike::from(Field::new("name"));
+    let skipped = "the optional argument `end` is given without `start` before it";
+    assert_render_error(&string::slice_fn("Alice", None::<i64>, Some(3)), skipped);
+    assert_render_error(&name.slice(None::<i64>, Some(3)), skipped);
+    assert_render_error(
+        &array::fill_fn(vec![1, 2], 0, None::<i64>, Some(1)),
+        skipped,
+    );
+    assert_render_error(
+        &rand::id_fn(None::<i64>, Some(10)),
+        "the optional argument `max` is given without `length` before it",
+    );
+    calls!(
+        (string::slice_fn("Alice", Some(1), None::<i64>), "string::slice('Alice', 1)"),
+        (string::slice_fn("Alice", Some(1), Some(3)), "string::slice('Alice', 1, 3)"),
+        (string::slice_fn("Alice", None::<i64>, None::<i64>), "string::slice('Alice')"),
+        (name.slice(Some(1), None::<i64>), "name.slice(1)"),
+        (rand::float_fn(Some((1, 2))), "rand::float(1, 2)"),
+        (rand::float_fn(None::<(i64, i64)>), "rand::float()"),
+    );
+    let db = db().await;
+    holds(&db, &string::slice_fn("Alice", Some(1), Some(3)), "'li'").await;
+}
+
+#[tokio::test]
+async fn repeat_dispatches_by_the_receivers_type() {
+    let db = db().await;
+    let text = ValueLike::from("ab").repeat(2);
+    let array = ValueLike::from(1).repeat(2);
+    holds_all!(&db, [(text.clone(), "'abab'"), (array.clone(), "[1, 1]")]);
+    assert_eq!(StrandLike::from(text).to_debug_sql(), "('ab').repeat(2)");
+    assert_eq!(ArrayLike::from(array).to_debug_sql(), "(1).repeat(2)");
+}
 
 define_function!(greet(name: string) {
     return name;
