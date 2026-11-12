@@ -14,19 +14,37 @@ fn alice() -> BTreeMap<String, i64> {
 fn rendering() {
     let settings = Field::new("settings");
     calls!(
-        (object::entries!(settings.clone()), "object::entries(settings)"),
-        (object::extend!(settings.clone(), Field::new("defaults")), "object::extend(settings, defaults)"),
-        (object::from_entries!(Field::new("pairs")), "object::from_entries(pairs)"),
-        (object::is_empty!(settings.clone()), "object::is_empty(settings)"),
+        (
+            object::entries!(settings.clone()),
+            "object::entries(settings)"
+        ),
+        (
+            object::extend!(settings.clone(), Field::new("defaults")),
+            "object::extend(settings, defaults)"
+        ),
+        (
+            object::from_entries!(Field::new("pairs")),
+            "object::from_entries(pairs)"
+        ),
+        (
+            object::is_empty!(settings.clone()),
+            "object::is_empty(settings)"
+        ),
         (object::keys!(settings.clone()), "object::keys(settings)"),
         (object::len!(settings.clone()), "object::len(settings)"),
-        (object::remove!(settings.clone(), "age"), "object::remove(settings, 'age')"),
+        (
+            object::remove!(settings.clone(), "age"),
+            "object::remove(settings, 'age')"
+        ),
         (object::values!(settings), "object::values(settings)"),
     );
     let settings = ObjectLike::from(Field::new("settings"));
     calls!(
         (settings.entries(), "settings.entries()"),
-        (settings.extend(Field::new("defaults")), "settings.extend(defaults)"),
+        (
+            settings.extend(Field::new("defaults")),
+            "settings.extend(defaults)"
+        ),
         (settings.is_empty(), "settings.is_empty()"),
         (settings.keys(), "settings.keys()"),
         (settings.len(), "settings.len()"),
@@ -38,17 +56,26 @@ fn rendering() {
 #[tokio::test]
 async fn results() {
     let db = db().await;
-    holds_all!(&db, [
-        (object::entries!(alice()), "[['age', 30], ['score', 7]]"),
-        (object::extend!(alice(), BTreeMap::from([("age".to_owned(), 31)])), "{ age: 31, score: 7 }"),
-        (object::from_entries!(object::entries!(alice())), "{ age: 30, score: 7 }"),
-        (object::is_empty!(BTreeMap::<String, i64>::new()), "true"),
-        (object::keys!(alice()), "['age', 'score']"),
-        (object::len!(alice()), "2"),
-        (object::remove!(alice(), "age"), "{ score: 7 }"),
-        (object::values!(alice()), "[30, 7]"),
-        (ObjectLike::from(alice()).len(), "2"),
-    ]);
+    holds_all!(
+        &db,
+        [
+            (object::entries!(alice()), "[['age', 30], ['score', 7]]"),
+            (
+                object::extend!(alice(), BTreeMap::from([("age".to_owned(), 31)])),
+                "{ age: 31, score: 7 }"
+            ),
+            (
+                object::from_entries!(object::entries!(alice())),
+                "{ age: 30, score: 7 }"
+            ),
+            (object::is_empty!(BTreeMap::<String, i64>::new()), "true"),
+            (object::keys!(alice()), "['age', 'score']"),
+            (object::len!(alice()), "2"),
+            (object::remove!(alice(), "age"), "{ score: 7 }"),
+            (object::values!(alice()), "[30, 7]"),
+            (ObjectLike::from(alice()).len(), "2"),
+        ]
+    );
 }
 
 #[test]

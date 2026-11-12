@@ -48,7 +48,11 @@ impl Closure {
     #[must_use]
     pub fn typed<'a>(mut self, kinds: impl IntoIterator<Item = (&'a str, Kind)>) -> Self {
         for (name, kind) in kinds {
-            match self.params.iter_mut().find(|(param, _)| param.name() == name) {
+            match self
+                .params
+                .iter_mut()
+                .find(|(param, _)| param.name() == name)
+            {
                 Some((_, slot)) => *slot = Some(kind),
                 None => self.unknown.push(name.to_owned()),
             }
@@ -67,12 +71,17 @@ impl Closure {
     /// The first reason the closure cannot be written, if any.
     fn error(&self) -> Option<String> {
         if let Some(name) = self.unknown.first() {
-            return Some(format!("closure kind given for `{name}`, which is not one of its parameters"));
+            return Some(format!(
+                "closure kind given for `{name}`, which is not one of its parameters"
+            ));
         }
         let mut seen = HashSet::with_capacity(self.params.len());
         for (param, _) in &self.params {
             if let Err(error) = Param::check(param.name()) {
-                return Some(format!("invalid closure parameter `${}`: {error}", param.name()));
+                return Some(format!(
+                    "invalid closure parameter `${}`: {error}",
+                    param.name()
+                ));
             }
             if !seen.insert(param.name()) {
                 return Some(format!("closure parameter `${}` is repeated", param.name()));

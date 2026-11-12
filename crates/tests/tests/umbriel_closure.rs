@@ -20,12 +20,18 @@ fn closures_render() {
         "|$n: int| $n * 2"
     );
     assert_eq!(
-        doubled.typed([("n", Kind::Int)]).returns(Kind::Int).to_debug_sql(),
+        doubled
+            .typed([("n", Kind::Int)])
+            .returns(Kind::Int)
+            .to_debug_sql(),
         "|$n: int| -> int { $n * 2 }"
     );
     let summed = closure(["total", "n"], |[total, n]| total.add(n))
         .typed([("n", Kind::Either(vec![Kind::Int, Kind::Float]))]);
-    assert_eq!(summed.to_debug_sql(), "|$total, $n: <int | float>| $total + $n");
+    assert_eq!(
+        summed.to_debug_sql(),
+        "|$total, $n: <int | float>| $total + $n"
+    );
     for closure in [
         "|$n| $n * 2",
         "|$n: int| $n * 2",
@@ -40,25 +46,47 @@ fn closures_render() {
 async fn array_map_filter_fold_run() {
     let db = db().await;
     let numbers = vec![1, 2, 3];
-    holds_all!(&db, [
-        (array::map!(numbers.clone(), closure(["n"], |[n]| n.multiply(2))), "[2, 4, 6]"),
-        (array::filter!(numbers.clone(), closure(["n"], |[n]| n.gt(1))), "[2, 3]"),
-        (
-            array::fold!(numbers.clone(), 0, closure(["total", "n"], |[total, n]| total.add(n))),
-            "6",
-        ),
-        (
-            array::reduce!(numbers.clone(), closure(["total", "n"], |[total, n]| total.add(n))),
-            "6",
-        ),
-        (array::find!(numbers.clone(), closure(["n"], |[n]| n.gt(1))), "2"),
-        (array::all!(numbers.clone(), closure(["n"], |[n]| n.gt(0))), "true"),
-        (array::any!(numbers, closure(["n"], |[n]| n.gt(2))), "true"),
-        (
-            set::map!(BTreeSet::from([1, 2]), closure(["n"], |[n]| n.add(1))),
-            "<set> [2, 3]",
-        ),
-    ]);
+    holds_all!(
+        &db,
+        [
+            (
+                array::map!(numbers.clone(), closure(["n"], |[n]| n.multiply(2))),
+                "[2, 4, 6]"
+            ),
+            (
+                array::filter!(numbers.clone(), closure(["n"], |[n]| n.gt(1))),
+                "[2, 3]"
+            ),
+            (
+                array::fold!(
+                    numbers.clone(),
+                    0,
+                    closure(["total", "n"], |[total, n]| total.add(n))
+                ),
+                "6",
+            ),
+            (
+                array::reduce!(
+                    numbers.clone(),
+                    closure(["total", "n"], |[total, n]| total.add(n))
+                ),
+                "6",
+            ),
+            (
+                array::find!(numbers.clone(), closure(["n"], |[n]| n.gt(1))),
+                "2"
+            ),
+            (
+                array::all!(numbers.clone(), closure(["n"], |[n]| n.gt(0))),
+                "true"
+            ),
+            (array::any!(numbers, closure(["n"], |[n]| n.gt(2))), "true"),
+            (
+                set::map!(BTreeSet::from([1, 2]), closure(["n"], |[n]| n.add(1))),
+                "<set> [2, 3]",
+            ),
+        ]
+    );
 }
 
 #[tokio::test]

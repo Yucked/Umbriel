@@ -6,7 +6,13 @@ use umbriel_tests::*;
 
 fn square() -> geo::Polygon {
     geo::Polygon::new(
-        geo::LineString::from(vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]),
+        geo::LineString::from(vec![
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+            (0.0, 0.0),
+        ]),
         vec![],
     )
 }
@@ -18,15 +24,30 @@ fn rendering() {
     let to = Field::new("to");
     calls!(
         (geo_fn::area!(area.clone()), "geo::area(area)"),
-        (geo_fn::bearing!(from.clone(), to.clone()), "geo::bearing(from, to)"),
+        (
+            geo_fn::bearing!(from.clone(), to.clone()),
+            "geo::bearing(from, to)"
+        ),
         (geo_fn::centroid!(area.clone()), "geo::centroid(area)"),
-        (geo_fn::distance!(from.clone(), to), "geo::distance(from, to)"),
+        (
+            geo_fn::distance!(from.clone(), to),
+            "geo::distance(from, to)"
+        ),
         (geo_fn::is_valid!(area), "geo::is_valid(area)"),
-        (geo_fn::hash::decode!("mpuxk4s24f51"), "geo::hash::decode('mpuxk4s24f51')"),
-        (geo_fn::hash::encode!(from.clone()), "geo::hash::encode(from)"),
+        (
+            geo_fn::hash::decode!("mpuxk4s24f51"),
+            "geo::hash::decode('mpuxk4s24f51')"
+        ),
+        (
+            geo_fn::hash::encode!(from.clone()),
+            "geo::hash::encode(from)"
+        ),
         (geo_fn::hash::encode!(from, 5), "geo::hash::encode(from, 5)"),
     );
-    assert_parses(&format!("RETURN {};", geo_fn::area!(square()).to_debug_sql()));
+    assert_parses(&format!(
+        "RETURN {};",
+        geo_fn::area!(square()).to_debug_sql()
+    ));
 }
 
 #[test]
@@ -58,7 +79,12 @@ async fn results() {
     is_a(&db, &geo_fn::centroid!(square()), "point").await;
     is_a(&db, &geo_fn::hash::encode!(london), "string").await;
     holds(&db, &geo_fn::hash::encode!(london, 5), "'gcpvj'").await;
-    holds(&db, &GeometryLike::from(london).hash_encode(Some(5)), "'gcpvj'").await;
+    holds(
+        &db,
+        &GeometryLike::from(london).hash_encode(Some(5)),
+        "'gcpvj'",
+    )
+    .await;
     is_a(&db, &geo_fn::hash::decode!("gcpvj"), "point").await;
     holds(&db, &geo_fn::is_valid!(square()), "true").await;
 }
@@ -77,5 +103,10 @@ async fn runtime_type_failures() {
     let error = failure(&db, "RETURN geo::area('not a geometry');").await;
     assert!(error.contains("geo::area"), "{error}");
     // `geo::hash::decode` takes any value and gives `NONE` for one that is not a geohash string.
-    holds(&db, &GeometryLike::from(geo::Point::new(1.0, 2.0)).hash_decode(), "NONE").await;
+    holds(
+        &db,
+        &GeometryLike::from(geo::Point::new(1.0, 2.0)).hash_decode(),
+        "NONE",
+    )
+    .await;
 }

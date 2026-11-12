@@ -269,11 +269,14 @@ impl FromStr for MlVersion {
                 .ok_or_else(error)
         };
         let mut parts = version.split('.');
-        let parsed = Self::new(part(parts.next())?, part(parts.next())?, part(parts.next())?);
+        let parsed = Self::new(
+            part(parts.next())?,
+            part(parts.next())?,
+            part(parts.next())?,
+        );
         if parts.next().is_some() {
             return Err(error());
         }
         Ok(parsed)
     }
 }
-

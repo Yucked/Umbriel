@@ -23,23 +23,41 @@ fn rendering() {
         (set::all!(tags.clone()), "set::all(tags)"),
         (set::any!(tags.clone(), 1), "set::any(tags, 1)"),
         (set::at!(tags.clone(), 0), "set::at(tags, 0)"),
-        (set::complement!(tags.clone(), other()), "set::complement(tags, other)"),
+        (
+            set::complement!(tags.clone(), other()),
+            "set::complement(tags, other)"
+        ),
         (set::contains!(tags.clone(), 1), "set::contains(tags, 1)"),
-        (set::difference!(tags.clone(), other()), "set::difference(tags, other)"),
+        (
+            set::difference!(tags.clone(), other()),
+            "set::difference(tags, other)"
+        ),
         (set::filter!(tags.clone(), 1), "set::filter(tags, 1)"),
         (set::find!(tags.clone(), 1), "set::find(tags, 1)"),
         (set::first!(tags.clone()), "set::first(tags)"),
         (set::flatten!(tags.clone()), "set::flatten(tags)"),
-        (set::fold!(tags.clone(), 0, sum()), "set::fold(tags, 0, |$a, $b| $a + $b)"),
-        (set::intersect!(tags.clone(), other()), "set::intersect(tags, other)"),
+        (
+            set::fold!(tags.clone(), 0, sum()),
+            "set::fold(tags, 0, |$a, $b| $a + $b)"
+        ),
+        (
+            set::intersect!(tags.clone(), other()),
+            "set::intersect(tags, other)"
+        ),
         (set::is_empty!(tags.clone()), "set::is_empty(tags)"),
         (set::join!(tags.clone(), ","), "set::join(tags, ',')"),
         (set::last!(tags.clone()), "set::last(tags)"),
         (set::len!(tags.clone()), "set::len(tags)"),
-        (set::map!(tags.clone(), closure(["n"], |[n]| n)), "set::map(tags, |$n| $n)"),
+        (
+            set::map!(tags.clone(), closure(["n"], |[n]| n)),
+            "set::map(tags, |$n| $n)"
+        ),
         (set::max!(tags.clone()), "set::max(tags)"),
         (set::min!(tags.clone()), "set::min(tags)"),
-        (set::reduce!(tags.clone(), sum()), "set::reduce(tags, |$a, $b| $a + $b)"),
+        (
+            set::reduce!(tags.clone(), sum()),
+            "set::reduce(tags, |$a, $b| $a + $b)"
+        ),
         (set::remove!(tags.clone(), 1), "set::remove(tags, 1)"),
         (set::slice!(tags.clone(), 1, 2), "set::slice(tags, 1, 2)"),
         (set::union!(tags, other()), "set::union(tags, other)"),
@@ -77,31 +95,49 @@ fn rendering() {
 async fn results() {
     let db = db().await;
     let other = BTreeSet::from([3, 4]);
-    holds_all!(&db, [
-        (set::add!(numbers(), 4), "<set> [1, 2, 3, 4]"),
-        (set::all!(numbers()), "true"),
-        (set::any!(numbers(), 2), "true"),
-        (set::at!(numbers(), 0), "1"),
-        (set::complement!(numbers(), other.clone()), "<set> [1, 2]"),
-        (set::contains!(numbers(), 2), "true"),
-        (set::difference!(numbers(), other.clone()), "<set> [1, 2, 4]"),
-        (set::filter!(numbers(), closure(["n"], |[n]| n.gt(1))), "<set> [2, 3]"),
-        (set::find!(numbers(), closure(["n"], |[n]| n.gt(1))), "2"),
-        (set::first!(numbers()), "1"),
-        (set::fold!(numbers(), 0, closure(["a", "b"], |[a, b]| a.add(b))), "6"),
-        (set::intersect!(numbers(), other.clone()), "<set> [3]"),
-        (set::is_empty!(BTreeSet::<i64>::new()), "true"),
-        (set::join!(numbers(), "-"), "'1-2-3'"),
-        (set::last!(numbers()), "3"),
-        (set::len!(numbers()), "3"),
-        (set::map!(numbers(), closure(["n"], |[n]| n.multiply(2))), "<set> [2, 4, 6]"),
-        (set::max!(numbers()), "3"),
-        (set::min!(numbers()), "1"),
-        (set::reduce!(numbers(), closure(["a", "b"], |[a, b]| a.add(b))), "6"),
-        (set::remove!(numbers(), 2), "<set> [1, 3]"),
-        (set::slice!(numbers(), 1, 2), "<set> [2]"),
-        (set::union!(numbers(), other), "<set> [1, 2, 3, 4]"),
-    ]);
+    holds_all!(
+        &db,
+        [
+            (set::add!(numbers(), 4), "<set> [1, 2, 3, 4]"),
+            (set::all!(numbers()), "true"),
+            (set::any!(numbers(), 2), "true"),
+            (set::at!(numbers(), 0), "1"),
+            (set::complement!(numbers(), other.clone()), "<set> [1, 2]"),
+            (set::contains!(numbers(), 2), "true"),
+            (
+                set::difference!(numbers(), other.clone()),
+                "<set> [1, 2, 4]"
+            ),
+            (
+                set::filter!(numbers(), closure(["n"], |[n]| n.gt(1))),
+                "<set> [2, 3]"
+            ),
+            (set::find!(numbers(), closure(["n"], |[n]| n.gt(1))), "2"),
+            (set::first!(numbers()), "1"),
+            (
+                set::fold!(numbers(), 0, closure(["a", "b"], |[a, b]| a.add(b))),
+                "6"
+            ),
+            (set::intersect!(numbers(), other.clone()), "<set> [3]"),
+            (set::is_empty!(BTreeSet::<i64>::new()), "true"),
+            (set::join!(numbers(), "-"), "'1-2-3'"),
+            (set::last!(numbers()), "3"),
+            (set::len!(numbers()), "3"),
+            (
+                set::map!(numbers(), closure(["n"], |[n]| n.multiply(2))),
+                "<set> [2, 4, 6]"
+            ),
+            (set::max!(numbers()), "3"),
+            (set::min!(numbers()), "1"),
+            (
+                set::reduce!(numbers(), closure(["a", "b"], |[a, b]| a.add(b))),
+                "6"
+            ),
+            (set::remove!(numbers(), 2), "<set> [1, 3]"),
+            (set::slice!(numbers(), 1, 2), "<set> [2]"),
+            (set::union!(numbers(), other), "<set> [1, 2, 3, 4]"),
+        ]
+    );
     is_a(&db, &set::flatten!(numbers()), "set").await;
 }
 

@@ -17,7 +17,10 @@ fn calls_render() {
         version(),
         [Field::new("age"), Field::new("income")],
     );
-    assert_eq!(call.to_debug_sql(), "ml::insurance::prediction<1.0.0>(age, income)");
+    assert_eq!(
+        call.to_debug_sql(),
+        "ml::insurance::prediction<1.0.0>(age, income)"
+    );
     assert_parses(&format!("RETURN {};", call.to_debug_sql()));
     let bound = ml::call::<kinds::Any, _>("insurance", MlVersion::new(2, 10, 3), [42]);
     let query = bound.to_query().expect("renders");
@@ -28,7 +31,17 @@ fn calls_render() {
 
 #[test]
 fn malformed_versions_are_refused() {
-    for text in ["1.0", "1.0.0.0", "a.b.c", "-1.0.0", "1.0.0-beta", "", "1..0", "+1.0.0", "4294967296.0.0"] {
+    for text in [
+        "1.0",
+        "1.0.0.0",
+        "a.b.c",
+        "-1.0.0",
+        "1.0.0-beta",
+        "",
+        "1..0",
+        "+1.0.0",
+        "4294967296.0.0",
+    ] {
         let error = text.parse::<MlVersion>().expect_err(text);
         assert!(error.to_string().contains(&format!("`{text}`")), "{error}");
     }

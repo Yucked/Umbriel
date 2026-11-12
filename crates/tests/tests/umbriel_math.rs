@@ -20,13 +20,19 @@ fn rendering() {
         (math::atan!(score.clone()), "math::atan(score)"),
         (math::bottom!(scores.clone(), 2), "math::bottom(scores, 2)"),
         (math::ceil!(1.5), "math::ceil(1.5f)"),
-        (math::clamp!(score.clone(), 0, 10), "math::clamp(score, 0, 10)"),
+        (
+            math::clamp!(score.clone(), 0, 10),
+            "math::clamp(score, 0, 10)"
+        ),
         (math::cos!(score.clone()), "math::cos(score)"),
         (math::cot!(score.clone()), "math::cot(score)"),
         (math::deg2rad!(score.clone()), "math::deg2rad(score)"),
         (math::fixed!(1.2345, 2), "math::fixed(1.2345f, 2)"),
         (math::floor!(1.5), "math::floor(1.5f)"),
-        (math::interquartile!(scores.clone()), "math::interquartile(scores)"),
+        (
+            math::interquartile!(scores.clone()),
+            "math::interquartile(scores)"
+        ),
         (math::lerp!(0, 10, 0.5), "math::lerp(0, 10, 0.5f)"),
         (math::lerpangle!(0, 90, 0.5), "math::lerpangle(0, 90, 0.5f)"),
         (math::ln!(score.clone()), "math::ln(score)"),
@@ -39,8 +45,14 @@ fn rendering() {
         (math::midhinge!(scores.clone()), "math::midhinge(scores)"),
         (math::min!(vec![1, 2]), "math::min([1, 2])"),
         (math::mode!(vec![1, 2]), "math::mode([1, 2])"),
-        (math::nearestrank!(scores.clone(), 50), "math::nearestrank(scores, 50)"),
-        (math::percentile!(scores.clone(), 50), "math::percentile(scores, 50)"),
+        (
+            math::nearestrank!(scores.clone(), 50),
+            "math::nearestrank(scores, 50)"
+        ),
+        (
+            math::percentile!(scores.clone(), 50),
+            "math::percentile(scores, 50)"
+        ),
         (math::pow!(2, 3), "math::pow(2, 3)"),
         (math::product!(vec![1, 2]), "math::product([1, 2])"),
         (math::rad2deg!(score.clone()), "math::rad2deg(score)"),
@@ -87,32 +99,35 @@ fn method_rendering() {
 #[tokio::test]
 async fn results() {
     let db = db().await;
-    holds_all!(&db, [
-        (math::abs!(-5), "5"),
-        (array::sort!(math::bottom!(vec![3, 1, 2], 2)), "[1, 2]"),
-        (math::ceil!(1.2), "2"),
-        (math::clamp!(15, 0, 10), "10"),
-        (math::fixed!(1.2345, 2), "1.23"),
-        (math::floor!(1.8), "1"),
-        (math::lerp!(0, 10, 0.5), "5"),
-        (math::log10!(100), "2"),
-        (math::log2!(8), "3"),
-        (math::max!(vec![1, 4, 2]), "4"),
-        (math::mean!(vec![1, 2, 3]), "2"),
-        (math::median!(vec![1, 5, 3]), "3"),
-        (math::min!(vec![4, 1, 2]), "1"),
-        (math::mode!(vec![1, 2, 2]), "2"),
-        (math::pow!(2, 3), "8"),
-        (math::product!(vec![2, 3, 4]), "24"),
-        (math::round!(1.5), "2"),
-        (math::sign!(-3), "-1"),
-        (math::spread!(vec![1, 5]), "4"),
-        (math::sqrt!(16), "4"),
-        (math::sum!(vec![1, 2, 3]), "6"),
-        (array::sort!(math::top!(vec![3, 1, 2], 2)), "[2, 3]"),
-        (NumberLike::from(-5).abs(), "5"),
-        (NumberLike::from(2.7).floor(), "2"),
-    ]);
+    holds_all!(
+        &db,
+        [
+            (math::abs!(-5), "5"),
+            (array::sort!(math::bottom!(vec![3, 1, 2], 2)), "[1, 2]"),
+            (math::ceil!(1.2), "2"),
+            (math::clamp!(15, 0, 10), "10"),
+            (math::fixed!(1.2345, 2), "1.23"),
+            (math::floor!(1.8), "1"),
+            (math::lerp!(0, 10, 0.5), "5"),
+            (math::log10!(100), "2"),
+            (math::log2!(8), "3"),
+            (math::max!(vec![1, 4, 2]), "4"),
+            (math::mean!(vec![1, 2, 3]), "2"),
+            (math::median!(vec![1, 5, 3]), "3"),
+            (math::min!(vec![4, 1, 2]), "1"),
+            (math::mode!(vec![1, 2, 2]), "2"),
+            (math::pow!(2, 3), "8"),
+            (math::product!(vec![2, 3, 4]), "24"),
+            (math::round!(1.5), "2"),
+            (math::sign!(-3), "-1"),
+            (math::spread!(vec![1, 5]), "4"),
+            (math::sqrt!(16), "4"),
+            (math::sum!(vec![1, 2, 3]), "6"),
+            (array::sort!(math::top!(vec![3, 1, 2], 2)), "[2, 3]"),
+            (NumberLike::from(-5).abs(), "5"),
+            (NumberLike::from(2.7).floor(), "2"),
+        ]
+    );
     for function in [
         math::acos!(0.5),
         math::acot!(1),
@@ -150,6 +165,10 @@ fn generated_bindings() {
 #[tokio::test]
 async fn runtime_type_failures() {
     let db = db().await;
-    let error = call_failure(&db, &math::abs!(NumberLike::from(Field::from_expr(ValueLike::from("five"))))).await;
+    let error = call_failure(
+        &db,
+        &math::abs!(NumberLike::from(Field::from_expr(ValueLike::from("five")))),
+    )
+    .await;
     assert!(error.contains("math::abs"), "{error}");
 }

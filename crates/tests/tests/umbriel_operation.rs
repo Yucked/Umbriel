@@ -58,7 +58,10 @@ async fn new_operators_render_and_evaluate() {
         assert!(as_bool.starts_with("!!"), "{as_bool}");
         equals(&as_bool, "false").await;
         let negated = not(literal(value)).to_debug_sql();
-        assert!(negated.starts_with('!') && !negated.starts_with("!!"), "{negated}");
+        assert!(
+            negated.starts_with('!') && !negated.starts_with("!!"),
+            "{negated}"
+        );
         equals(&negated, "true").await;
     }
 
@@ -78,7 +81,12 @@ async fn new_operators_render_and_evaluate() {
 #[tokio::test]
 async fn precedence_is_kept() {
     evaluates(literal(NONE).coalesce(2).add(1), "(NONE ?? 2) + 1", "3").await;
-    evaluates(literal(1).equal(literal(NONE).coalesce(1)), "1 = (NONE ?? 1)", "true").await;
+    evaluates(
+        literal(1).equal(literal(NONE).coalesce(1)),
+        "1 = (NONE ?? 1)",
+        "true",
+    )
+    .await;
     evaluates(
         literal(1).or_else_truthy(literal(2).add(3)),
         "(1 ?: (2 + 3))",

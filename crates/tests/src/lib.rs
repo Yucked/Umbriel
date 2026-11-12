@@ -44,7 +44,10 @@ pub async fn call_failure<K: KindOf>(db: &Surreal<Db>, function: &Function<K>) -
 }
 
 /// Runs the call with its values bound, through [`Function::run`], and decodes the result.
-pub async fn bound<T: SurrealValue, K: KindOf>(db: &Surreal<Db>, function: &Function<K>) -> Option<T> {
+pub async fn bound<T: SurrealValue, K: KindOf>(
+    db: &Surreal<Db>,
+    function: &Function<K>,
+) -> Option<T> {
     function.run(db.clone()).await.expect("ran")
 }
 

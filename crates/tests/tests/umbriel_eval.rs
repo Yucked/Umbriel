@@ -12,10 +12,16 @@ fn rendering() {
     let bindings = BTreeMap::from([("n".to_owned(), 1)]);
     calls!(
         (eval::surql!("RETURN 1"), "eval::surql('RETURN 1')"),
-        (eval::gql!("{ user { id } }"), "eval::gql('{ user { id } }')"),
+        (
+            eval::gql!("{ user { id } }"),
+            "eval::gql('{ user { id } }')"
+        ),
     );
     let with_bindings = eval::surql!("RETURN $n", bindings).to_debug_sql();
-    assert!(with_bindings.starts_with("eval::surql('RETURN $n', {"), "{with_bindings}");
+    assert!(
+        with_bindings.starts_with("eval::surql('RETURN $n', {"),
+        "{with_bindings}"
+    );
     assert_parses(&format!("RETURN {with_bindings};"));
 }
 

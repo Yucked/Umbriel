@@ -7,7 +7,10 @@ use umbriel_tests::*;
 #[test]
 fn rendering() {
     calls!(
-        (record::exists!(User::id("alice")), "record::exists(user:alice)"),
+        (
+            record::exists!(User::id("alice")),
+            "record::exists(user:alice)"
+        ),
         (record::id!(User::id("alice")), "record::id(user:alice)"),
         (record::is_edge!(Field::new("id")), "record::is_edge(id)"),
         (record::table!(Field::new("id")), "record::table(id)"),
@@ -26,19 +29,31 @@ fn rendering() {
 #[tokio::test]
 async fn results() {
     let db = db().await;
-    holds_all!(&db, [
-        (record::id!(User::id("alice")), "'alice'"),
-        (record::tb!(User::id("alice")), "'user'"),
-        (record::table!(User::id("alice")), "'user'"),
-        (record::exists!(User::id("alice")), "false"),
-        (RecordIdLike::from(User::id("alice")).id(), "'alice'"),
-    ]);
-    assert!(succeeds(&db, "CREATE user:alice; CREATE user:bob; RELATE user:alice->follows:x->user:bob;").await);
-    holds_all!(&db, [
-        (record::exists!(User::id("alice")), "true"),
-        (record::is_edge!(User::id("alice")), "false"),
-        (record::is_edge!(Field::raw("follows:x")), "true"),
-    ]);
+    holds_all!(
+        &db,
+        [
+            (record::id!(User::id("alice")), "'alice'"),
+            (record::tb!(User::id("alice")), "'user'"),
+            (record::table!(User::id("alice")), "'user'"),
+            (record::exists!(User::id("alice")), "false"),
+            (RecordIdLike::from(User::id("alice")).id(), "'alice'"),
+        ]
+    );
+    assert!(
+        succeeds(
+            &db,
+            "CREATE user:alice; CREATE user:bob; RELATE user:alice->follows:x->user:bob;"
+        )
+        .await
+    );
+    holds_all!(
+        &db,
+        [
+            (record::exists!(User::id("alice")), "true"),
+            (record::is_edge!(User::id("alice")), "false"),
+            (record::is_edge!(Field::raw("follows:x")), "true"),
+        ]
+    );
 }
 
 #[test]

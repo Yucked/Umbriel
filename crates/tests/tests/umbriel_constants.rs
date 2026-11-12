@@ -16,9 +16,17 @@ async fn constants_render_without_parentheses_and_evaluate() {
     let floats = [
         (math::E, "math::E", consts::E),
         (math::FRAC_1_PI, "math::FRAC_1_PI", consts::FRAC_1_PI),
-        (math::FRAC_1_SQRT_2, "math::FRAC_1_SQRT_2", consts::FRAC_1_SQRT_2),
+        (
+            math::FRAC_1_SQRT_2,
+            "math::FRAC_1_SQRT_2",
+            consts::FRAC_1_SQRT_2,
+        ),
         (math::FRAC_2_PI, "math::FRAC_2_PI", consts::FRAC_2_PI),
-        (math::FRAC_2_SQRT_PI, "math::FRAC_2_SQRT_PI", consts::FRAC_2_SQRT_PI),
+        (
+            math::FRAC_2_SQRT_PI,
+            "math::FRAC_2_SQRT_PI",
+            consts::FRAC_2_SQRT_PI,
+        ),
         (math::FRAC_PI_2, "math::FRAC_PI_2", consts::FRAC_PI_2),
         (math::FRAC_PI_3, "math::FRAC_PI_3", consts::FRAC_PI_3),
         (math::FRAC_PI_4, "math::FRAC_PI_4", consts::FRAC_PI_4),
@@ -53,7 +61,11 @@ async fn constants_render_without_parentheses_and_evaluate() {
         let is_datetime: bool = read(&db, &format!("RETURN type::is_datetime({name});")).await;
         assert!(is_datetime, "{name}");
     }
-    let ordered: bool = read(&db, "RETURN time::MINIMUM < time::EPOCH AND time::EPOCH < time::MAXIMUM;").await;
+    let ordered: bool = read(
+        &db,
+        "RETURN time::MINIMUM < time::EPOCH AND time::EPOCH < time::MAXIMUM;",
+    )
+    .await;
     assert!(ordered);
 
     assert_eq!(duration::MAX.to_debug_sql(), "duration::MAX");

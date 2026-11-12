@@ -1399,7 +1399,11 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     /// assert_eq!(name.or_else_truthy("unnamed").to_debug_sql(), "(name ?: 'unnamed')");
     /// ```
     fn or_else_truthy<T: Into<ValueLike>>(&self, value: T) -> Operation {
-        Operation::nullish(self.clone().into(), Operator::TernaryCondition, value.into())
+        Operation::nullish(
+            self.clone().into(),
+            Operator::TernaryCondition,
+            value.into(),
+        )
     }
 
     /// `self % value`: the remainder, with the sign of `self`.

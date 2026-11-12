@@ -16,42 +16,105 @@ fn rendering() {
         (array::any!(Param::new("goals")), "array::any($goals)"),
         (array::append!(vec![1, 2], 3), "array::append([1, 2], 3)"),
         (array::at!(vec![1, 2], 1), "array::at([1, 2], 1)"),
-        (array::boolean_and!(vec![true], vec![false]), "array::boolean_and([true], [false])"),
-        (array::boolean_not!(vec![true]), "array::boolean_not([true])"),
-        (array::boolean_or!(vec![true], vec![false]), "array::boolean_or([true], [false])"),
-        (array::boolean_xor!(vec![true], vec![false]), "array::boolean_xor([true], [false])"),
-        (array::clump!(vec![1, 2, 3, 4], 2), "array::clump([1, 2, 3, 4], 2)"),
-        (array::combine!(vec![1, 2], vec![3]), "array::combine([1, 2], [3])"),
-        (array::complement!(vec![1, 2], vec![2]), "array::complement([1, 2], [2])"),
+        (
+            array::boolean_and!(vec![true], vec![false]),
+            "array::boolean_and([true], [false])"
+        ),
+        (
+            array::boolean_not!(vec![true]),
+            "array::boolean_not([true])"
+        ),
+        (
+            array::boolean_or!(vec![true], vec![false]),
+            "array::boolean_or([true], [false])"
+        ),
+        (
+            array::boolean_xor!(vec![true], vec![false]),
+            "array::boolean_xor([true], [false])"
+        ),
+        (
+            array::clump!(vec![1, 2, 3, 4], 2),
+            "array::clump([1, 2, 3, 4], 2)"
+        ),
+        (
+            array::combine!(vec![1, 2], vec![3]),
+            "array::combine([1, 2], [3])"
+        ),
+        (
+            array::complement!(vec![1, 2], vec![2]),
+            "array::complement([1, 2], [2])"
+        ),
         (array::concat!(vec![1], vec![2]), "array::concat([1], [2])"),
-        (array::difference!(vec![1, 2], vec![2]), "array::difference([1, 2], [2])"),
+        (
+            array::difference!(vec![1, 2], vec![2]),
+            "array::difference([1, 2], [2])"
+        ),
         (array::distinct!(vec![1, 1]), "array::distinct([1, 1])"),
         (array::every!(goals.clone()), "array::every(goals)"),
         (array::fill!(goals.clone(), 0), "array::fill(goals, 0)"),
-        (array::fill!(goals.clone(), 0, 1, 2), "array::fill(goals, 0, 1, 2)"),
+        (
+            array::fill!(goals.clone(), 0, 1, 2),
+            "array::fill(goals, 0, 1, 2)"
+        ),
         (array::filter!(goals.clone(), 1), "array::filter(goals, 1)"),
-        (array::filter_index!(vec![1, 2, 1], 1), "array::filter_index([1, 2, 1], 1)"),
+        (
+            array::filter_index!(vec![1, 2, 1], 1),
+            "array::filter_index([1, 2, 1], 1)"
+        ),
         (array::find!(vec![1, 2], 2), "array::find([1, 2], 2)"),
-        (array::find_index!(vec![1, 2], 2), "array::find_index([1, 2], 2)"),
+        (
+            array::find_index!(vec![1, 2], 2),
+            "array::find_index([1, 2], 2)"
+        ),
         (array::first!(vec![1, 2]), "array::first([1, 2])"),
-        (array::flatten!(vec![vec![1], vec![2, 3]]), "array::flatten([[1], [2, 3]])"),
+        (
+            array::flatten!(vec![vec![1], vec![2, 3]]),
+            "array::flatten([[1], [2, 3]])"
+        ),
         (
             array::fold!(goals.clone(), 0, closure(["a", "b"], |[a, b]| a.add(b))),
             "array::fold(goals, 0, |$a, $b| $a + $b)",
         ),
-        (array::group!(vec![vec![1], vec![1, 2]]), "array::group([[1], [1, 2]])"),
-        (array::includes!(goals.clone(), 1), "array::includes(goals, 1)"),
-        (array::index_of!(goals.clone(), 1), "array::index_of(goals, 1)"),
-        (array::insert!(vec![1, 2], 5, 1), "array::insert([1, 2], 5, 1)"),
+        (
+            array::group!(vec![vec![1], vec![1, 2]]),
+            "array::group([[1], [1, 2]])"
+        ),
+        (
+            array::includes!(goals.clone(), 1),
+            "array::includes(goals, 1)"
+        ),
+        (
+            array::index_of!(goals.clone(), 1),
+            "array::index_of(goals, 1)"
+        ),
+        (
+            array::insert!(vec![1, 2], 5, 1),
+            "array::insert([1, 2], 5, 1)"
+        ),
         (array::insert!(vec![1, 2], 5), "array::insert([1, 2], 5)"),
-        (array::intersect!(vec![1, 2], vec![2]), "array::intersect([1, 2], [2])"),
+        (
+            array::intersect!(vec![1, 2], vec![2]),
+            "array::intersect([1, 2], [2])"
+        ),
         (array::is_empty!(goals.clone()), "array::is_empty(goals)"),
-        (array::join!(vec!["a", "b"], "-"), "array::join(['a', 'b'], '-')"),
+        (
+            array::join!(vec!["a", "b"], "-"),
+            "array::join(['a', 'b'], '-')"
+        ),
         (array::last!(vec![1, 2]), "array::last([1, 2])"),
         (array::len!(goals.clone()), "array::len(goals)"),
-        (array::logical_and!(vec![true], vec![1]), "array::logical_and([true], [1])"),
-        (array::logical_or!(vec![true], vec![1]), "array::logical_or([true], [1])"),
-        (array::logical_xor!(vec![true], vec![1]), "array::logical_xor([true], [1])"),
+        (
+            array::logical_and!(vec![true], vec![1]),
+            "array::logical_and([true], [1])"
+        ),
+        (
+            array::logical_or!(vec![true], vec![1]),
+            "array::logical_or([true], [1])"
+        ),
+        (
+            array::logical_xor!(vec![true], vec![1]),
+            "array::logical_xor([true], [1])"
+        ),
         (
             array::map!(goals.clone(), closure(["n"], |[n]| n.add(1))),
             "array::map(goals, |$n| $n + 1)",
@@ -74,21 +137,51 @@ fn rendering() {
         (array::sequence!(3), "array::sequence(3)"),
         (array::sequence!(1, 3), "array::sequence(1, 3)"),
         (array::shuffle!(goals.clone()), "array::shuffle(goals)"),
-        (array::slice!(vec![1, 2, 3], 1, 2), "array::slice([1, 2, 3], 1, 2)"),
+        (
+            array::slice!(vec![1, 2, 3], 1, 2),
+            "array::slice([1, 2, 3], 1, 2)"
+        ),
         (array::some!(goals.clone(), 1), "array::some(goals, 1)"),
         (array::sort!(vec![2, 1]), "array::sort([2, 1])"),
-        (array::sort!(vec![2, 1], "asc"), "array::sort([2, 1], 'asc')"),
-        (array::sort!(vec![2, 1], "desc"), "array::sort([2, 1], 'desc')"),
-        (array::sort!(vec![2, 1], false), "array::sort([2, 1], false)"),
-        (array::sort_lexical!(goals.clone()), "array::sort_lexical(goals)"),
-        (array::sort_natural!(goals.clone(), "desc"), "array::sort_natural(goals, 'desc')"),
-        (array::sort_natural_lexical!(goals.clone()), "array::sort_natural_lexical(goals)"),
+        (
+            array::sort!(vec![2, 1], "asc"),
+            "array::sort([2, 1], 'asc')"
+        ),
+        (
+            array::sort!(vec![2, 1], "desc"),
+            "array::sort([2, 1], 'desc')"
+        ),
+        (
+            array::sort!(vec![2, 1], false),
+            "array::sort([2, 1], false)"
+        ),
+        (
+            array::sort_lexical!(goals.clone()),
+            "array::sort_lexical(goals)"
+        ),
+        (
+            array::sort_natural!(goals.clone(), "desc"),
+            "array::sort_natural(goals, 'desc')"
+        ),
+        (
+            array::sort_natural_lexical!(goals.clone()),
+            "array::sort_natural_lexical(goals)"
+        ),
         (array::sort::asc!(vec![2, 1]), "array::sort::asc([2, 1])"),
         (array::sort::desc!(vec![2, 1]), "array::sort::desc([2, 1])"),
-        (array::swap!(goals.clone(), 0, 1), "array::swap(goals, 0, 1)"),
-        (array::transpose!(vec![vec![1, 2], vec![3, 4]]), "array::transpose([[1, 2], [3, 4]])"),
+        (
+            array::swap!(goals.clone(), 0, 1),
+            "array::swap(goals, 0, 1)"
+        ),
+        (
+            array::transpose!(vec![vec![1, 2], vec![3, 4]]),
+            "array::transpose([[1, 2], [3, 4]])"
+        ),
         (array::union!(vec![1], vec![2]), "array::union([1], [2])"),
-        (array::windows!(goals.clone(), 2), "array::windows(goals, 2)"),
+        (
+            array::windows!(goals.clone(), 2),
+            "array::windows(goals, 2)"
+        ),
         (array::len!(arr![1, goals]), "array::len([1, goals])"),
     );
 }
@@ -151,81 +244,102 @@ fn method_rendering() {
         (tags.sort(Some("desc")), "tags.sort('desc')"),
         (tags.sort_lexical(None::<i64>), "tags.sort_lexical()"),
         (tags.sort_natural(None::<i64>), "tags.sort_natural()"),
-        (tags.sort_natural_lexical(None::<i64>), "tags.sort_natural_lexical()"),
+        (
+            tags.sort_natural_lexical(None::<i64>),
+            "tags.sort_natural_lexical()"
+        ),
         (tags.sort_asc(), "tags.sort_asc()"),
         (tags.sort_desc(), "tags.sort_desc()"),
         (tags.swap(0, 1), "tags.swap(0, 1)"),
         (tags.transpose(), "tags.transpose()"),
         (tags.union(other()), "tags.union(other)"),
         (tags.windows(2), "tags.windows(2)"),
-        (ValueLike::from(Field::new("input")).repeat(3), "input.repeat(3)"),
+        (
+            ValueLike::from(Field::new("input")).repeat(3),
+            "input.repeat(3)"
+        ),
     );
 }
 
 #[tokio::test]
 async fn results() {
     let db = db().await;
-    holds_all!(&db, [
-        (array::add!(vec![1, 2], 3), "[1, 2, 3]"),
-        (array::add!(vec![1, 2], 2), "[1, 2]"),
-        (array::all!(vec![1, 2]), "true"),
-        (array::all!(vec![1, 0]), "false"),
-        (array::any!(vec![0, 1]), "true"),
-        (array::append!(vec![1, 2], 3), "[1, 2, 3]"),
-        (array::at!(vec![1, 2, 3], 1), "2"),
-        (array::at!(vec![1, 2, 3], -1), "3"),
-        (array::boolean_and!(vec![true, false], vec![true, true]), "[true, false]"),
-        (array::boolean_not!(vec![true, false]), "[false, true]"),
-        (array::boolean_or!(vec![true, false], vec![false, false]), "[true, false]"),
-        (array::boolean_xor!(vec![true, false], vec![true, true]), "[false, true]"),
-        (array::clump!(vec![1, 2, 3, 4], 2), "[[1, 2], [3, 4]]"),
-        (array::combine!(vec![1, 2], vec![3]), "[[1, 3], [2, 3]]"),
-        (array::complement!(vec![1, 2, 3], vec![2]), "[1, 3]"),
-        (array::concat!(vec![1], vec![2]), "[1, 2]"),
-        (array::concat!(vec![1], vec![2], vec![3]), "[1, 2, 3]"),
-        (array::difference!(vec![1, 2], vec![2, 3]), "[1, 3]"),
-        (array::distinct!(vec![1, 1, 2]), "[1, 2]"),
-        (array::every!(vec![1, 2]), "true"),
-        (array::fill!(vec![1, 2, 3], 0), "[0, 0, 0]"),
-        (array::filter_index!(vec![1, 2, 1], 1), "[0, 2]"),
-        (array::find!(vec![1, 2, 3], 2), "2"),
-        (array::find_index!(vec![1, 2, 3], 2), "1"),
-        (array::first!(vec![1, 2]), "1"),
-        (array::flatten!(vec![vec![1], vec![2, 3]]), "[1, 2, 3]"),
-        (array::includes!(vec![1, 2], 2), "true"),
-        (array::index_of!(vec![1, 2], 2), "1"),
-        (array::insert!(vec![1, 2, 3, 4], 5, 2), "[1, 2, 5, 3, 4]"),
-        (array::intersect!(vec![1, 2], vec![2, 3]), "[2]"),
-        (array::is_empty!(Vec::<i64>::new()), "true"),
-        (array::join!(vec!["a", "b"], "-"), "'a-b'"),
-        (array::last!(vec![1, 2]), "2"),
-        (array::len!(vec![1, 2]), "2"),
-        (array::matches!(vec![1, 2, 1], 1), "[true, false, true]"),
-        (array::max!(vec![1, 3]), "3"),
-        (array::min!(vec![1, 3]), "1"),
-        (array::pop!(vec![1, 2]), "2"),
-        (array::prepend!(vec![1], 0), "[0, 1]"),
-        (array::push!(vec![1], 2), "[1, 2]"),
-        (array::range!(1, 4), "[1, 2, 3]"),
-        (array::remove!(vec![1, 2, 3], 1), "[1, 3]"),
-        (array::repeat!(1, 3), "[1, 1, 1]"),
-        (array::reverse!(vec![1, 2]), "[2, 1]"),
-        (array::sequence!(3), "[0, 1, 2]"),
-        (array::sequence!(1, 3), "[1, 2, 3]"),
-        (array::some!(vec![1, 2], 2), "true"),
-        (array::sort!(vec![3, 1, 2]), "[1, 2, 3]"),
-        (array::sort!(vec![3, 1, 2], "desc"), "[3, 2, 1]"),
-        (array::sort_natural!(vec!["a10", "a2"]), "['a2', 'a10']"),
-        (array::sort_lexical!(vec!["b", "A", "a"]), "['A', 'a', 'b']"),
-        (array::sort::asc!(vec![3, 1, 2]), "[1, 2, 3]"),
-        (array::sort::desc!(vec![3, 1, 2]), "[3, 2, 1]"),
-        (array::swap!(vec![1, 2, 3], 0, 2), "[3, 2, 1]"),
-        (array::transpose!(vec![vec![1, 2], vec![3, 4]]), "[[1, 3], [2, 4]]"),
-        (array::union!(vec![1, 2], vec![2, 3]), "[1, 2, 3]"),
-        (array::windows!(vec![1, 2, 3], 2), "[[1, 2], [2, 3]]"),
-        (ArrayLike::from(vec![3, 1, 2]).sort_asc(), "[1, 2, 3]"),
-        (ValueLike::from(2).repeat(2), "[2, 2]"),
-    ]);
+    holds_all!(
+        &db,
+        [
+            (array::add!(vec![1, 2], 3), "[1, 2, 3]"),
+            (array::add!(vec![1, 2], 2), "[1, 2]"),
+            (array::all!(vec![1, 2]), "true"),
+            (array::all!(vec![1, 0]), "false"),
+            (array::any!(vec![0, 1]), "true"),
+            (array::append!(vec![1, 2], 3), "[1, 2, 3]"),
+            (array::at!(vec![1, 2, 3], 1), "2"),
+            (array::at!(vec![1, 2, 3], -1), "3"),
+            (
+                array::boolean_and!(vec![true, false], vec![true, true]),
+                "[true, false]"
+            ),
+            (array::boolean_not!(vec![true, false]), "[false, true]"),
+            (
+                array::boolean_or!(vec![true, false], vec![false, false]),
+                "[true, false]"
+            ),
+            (
+                array::boolean_xor!(vec![true, false], vec![true, true]),
+                "[false, true]"
+            ),
+            (array::clump!(vec![1, 2, 3, 4], 2), "[[1, 2], [3, 4]]"),
+            (array::combine!(vec![1, 2], vec![3]), "[[1, 3], [2, 3]]"),
+            (array::complement!(vec![1, 2, 3], vec![2]), "[1, 3]"),
+            (array::concat!(vec![1], vec![2]), "[1, 2]"),
+            (array::concat!(vec![1], vec![2], vec![3]), "[1, 2, 3]"),
+            (array::difference!(vec![1, 2], vec![2, 3]), "[1, 3]"),
+            (array::distinct!(vec![1, 1, 2]), "[1, 2]"),
+            (array::every!(vec![1, 2]), "true"),
+            (array::fill!(vec![1, 2, 3], 0), "[0, 0, 0]"),
+            (array::filter_index!(vec![1, 2, 1], 1), "[0, 2]"),
+            (array::find!(vec![1, 2, 3], 2), "2"),
+            (array::find_index!(vec![1, 2, 3], 2), "1"),
+            (array::first!(vec![1, 2]), "1"),
+            (array::flatten!(vec![vec![1], vec![2, 3]]), "[1, 2, 3]"),
+            (array::includes!(vec![1, 2], 2), "true"),
+            (array::index_of!(vec![1, 2], 2), "1"),
+            (array::insert!(vec![1, 2, 3, 4], 5, 2), "[1, 2, 5, 3, 4]"),
+            (array::intersect!(vec![1, 2], vec![2, 3]), "[2]"),
+            (array::is_empty!(Vec::<i64>::new()), "true"),
+            (array::join!(vec!["a", "b"], "-"), "'a-b'"),
+            (array::last!(vec![1, 2]), "2"),
+            (array::len!(vec![1, 2]), "2"),
+            (array::matches!(vec![1, 2, 1], 1), "[true, false, true]"),
+            (array::max!(vec![1, 3]), "3"),
+            (array::min!(vec![1, 3]), "1"),
+            (array::pop!(vec![1, 2]), "2"),
+            (array::prepend!(vec![1], 0), "[0, 1]"),
+            (array::push!(vec![1], 2), "[1, 2]"),
+            (array::range!(1, 4), "[1, 2, 3]"),
+            (array::remove!(vec![1, 2, 3], 1), "[1, 3]"),
+            (array::repeat!(1, 3), "[1, 1, 1]"),
+            (array::reverse!(vec![1, 2]), "[2, 1]"),
+            (array::sequence!(3), "[0, 1, 2]"),
+            (array::sequence!(1, 3), "[1, 2, 3]"),
+            (array::some!(vec![1, 2], 2), "true"),
+            (array::sort!(vec![3, 1, 2]), "[1, 2, 3]"),
+            (array::sort!(vec![3, 1, 2], "desc"), "[3, 2, 1]"),
+            (array::sort_natural!(vec!["a10", "a2"]), "['a2', 'a10']"),
+            (array::sort_lexical!(vec!["b", "A", "a"]), "['A', 'a', 'b']"),
+            (array::sort::asc!(vec![3, 1, 2]), "[1, 2, 3]"),
+            (array::sort::desc!(vec![3, 1, 2]), "[3, 2, 1]"),
+            (array::swap!(vec![1, 2, 3], 0, 2), "[3, 2, 1]"),
+            (
+                array::transpose!(vec![vec![1, 2], vec![3, 4]]),
+                "[[1, 3], [2, 4]]"
+            ),
+            (array::union!(vec![1, 2], vec![2, 3]), "[1, 2, 3]"),
+            (array::windows!(vec![1, 2, 3], 2), "[[1, 2], [2, 3]]"),
+            (ArrayLike::from(vec![3, 1, 2]).sort_asc(), "[1, 2, 3]"),
+            (ValueLike::from(2).repeat(2), "[2, 2]"),
+        ]
+    );
     for function in [
         array::group!(vec![vec![1], vec![1, 2]]),
         array::logical_and!(vec![true, false], vec![1, 1]),
@@ -252,6 +366,10 @@ async fn generated_bindings() {
 #[tokio::test]
 async fn runtime_type_failures() {
     let db = db().await;
-    let error = call_failure(&db, &array::len!(ArrayLike::from(Field::from_expr(ValueLike::from("text"))))).await;
+    let error = call_failure(
+        &db,
+        &array::len!(ArrayLike::from(Field::from_expr(ValueLike::from("text")))),
+    )
+    .await;
     assert!(error.contains("array::len"), "{error}");
 }

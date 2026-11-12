@@ -11,13 +11,28 @@ fn rendering() {
     let elapsed = Field::new("elapsed");
     calls!(
         (duration::days!(elapsed.clone()), "duration::days(elapsed)"),
-        (duration::hours!(elapsed.clone()), "duration::hours(elapsed)"),
-        (duration::micros!(elapsed.clone()), "duration::micros(elapsed)"),
-        (duration::millis!(elapsed.clone()), "duration::millis(elapsed)"),
+        (
+            duration::hours!(elapsed.clone()),
+            "duration::hours(elapsed)"
+        ),
+        (
+            duration::micros!(elapsed.clone()),
+            "duration::micros(elapsed)"
+        ),
+        (
+            duration::millis!(elapsed.clone()),
+            "duration::millis(elapsed)"
+        ),
         (duration::mins!(elapsed.clone()), "duration::mins(elapsed)"),
-        (duration::nanos!(elapsed.clone()), "duration::nanos(elapsed)"),
+        (
+            duration::nanos!(elapsed.clone()),
+            "duration::nanos(elapsed)"
+        ),
         (duration::secs!(elapsed.clone()), "duration::secs(elapsed)"),
-        (duration::weeks!(elapsed.clone()), "duration::weeks(elapsed)"),
+        (
+            duration::weeks!(elapsed.clone()),
+            "duration::weeks(elapsed)"
+        ),
         (duration::years!(elapsed), "duration::years(elapsed)"),
         (duration::from_days!(1), "duration::from_days(1)"),
         (duration::from_hours!(1), "duration::from_hours(1)"),
@@ -50,26 +65,29 @@ fn method_rendering() {
 async fn results() {
     let db = db().await;
     let week_and_a_day = Duration::from_secs(8 * 86_400 + 90);
-    holds_all!(&db, [
-        (duration::days!(week_and_a_day), "8"),
-        (duration::hours!(week_and_a_day), "192"),
-        (duration::mins!(week_and_a_day), "11521"),
-        (duration::secs!(week_and_a_day), "691290"),
-        (duration::millis!(Duration::from_millis(1500)), "1500"),
-        (duration::micros!(Duration::from_millis(2)), "2000"),
-        (duration::nanos!(Duration::from_micros(3)), "3000"),
-        (duration::weeks!(week_and_a_day), "1"),
-        (duration::years!(Duration::from_secs(400 * 86_400)), "1"),
-        (duration::from_days!(2), "2d"),
-        (duration::from_hours!(3), "3h"),
-        (duration::from_micros!(4), "4us"),
-        (duration::from_millis!(5), "5ms"),
-        (duration::from_mins!(6), "6m"),
-        (duration::from_nanos!(7), "7ns"),
-        (duration::from_secs!(8), "8s"),
-        (duration::from_weeks!(9), "9w"),
-        (DurationLike::from(week_and_a_day).days(), "8"),
-    ]);
+    holds_all!(
+        &db,
+        [
+            (duration::days!(week_and_a_day), "8"),
+            (duration::hours!(week_and_a_day), "192"),
+            (duration::mins!(week_and_a_day), "11521"),
+            (duration::secs!(week_and_a_day), "691290"),
+            (duration::millis!(Duration::from_millis(1500)), "1500"),
+            (duration::micros!(Duration::from_millis(2)), "2000"),
+            (duration::nanos!(Duration::from_micros(3)), "3000"),
+            (duration::weeks!(week_and_a_day), "1"),
+            (duration::years!(Duration::from_secs(400 * 86_400)), "1"),
+            (duration::from_days!(2), "2d"),
+            (duration::from_hours!(3), "3h"),
+            (duration::from_micros!(4), "4us"),
+            (duration::from_millis!(5), "5ms"),
+            (duration::from_mins!(6), "6m"),
+            (duration::from_nanos!(7), "7ns"),
+            (duration::from_secs!(8), "8s"),
+            (duration::from_weeks!(9), "9w"),
+            (DurationLike::from(week_and_a_day).days(), "8"),
+        ]
+    );
 }
 
 #[test]
@@ -83,6 +101,12 @@ fn generated_bindings() {
 #[tokio::test]
 async fn runtime_type_failures() {
     let db = db().await;
-    let error = call_failure(&db, &duration::days!(DurationLike::from(Field::from_expr(umbriel::ValueLike::from("long"))))).await;
+    let error = call_failure(
+        &db,
+        &duration::days!(DurationLike::from(Field::from_expr(
+            umbriel::ValueLike::from("long")
+        ))),
+    )
+    .await;
     assert!(error.contains("duration::days"), "{error}");
 }

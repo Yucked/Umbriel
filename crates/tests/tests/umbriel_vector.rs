@@ -11,13 +11,25 @@ fn rendering() {
     call(&vector::add!(a.clone(), b.clone()), "vector::add(a, b)");
     call(&vector::angle!(a.clone(), b.clone()), "vector::angle(a, b)");
     call(&vector::cross!(a.clone(), b.clone()), "vector::cross(a, b)");
-    call(&vector::divide!(a.clone(), b.clone()), "vector::divide(a, b)");
+    call(
+        &vector::divide!(a.clone(), b.clone()),
+        "vector::divide(a, b)",
+    );
     call(&vector::dot!(a.clone(), b.clone()), "vector::dot(a, b)");
     call(&vector::magnitude!(a.clone()), "vector::magnitude(a)");
-    call(&vector::multiply!(a.clone(), b.clone()), "vector::multiply(a, b)");
+    call(
+        &vector::multiply!(a.clone(), b.clone()),
+        "vector::multiply(a, b)",
+    );
     call(&vector::normalize!(a.clone()), "vector::normalize(a)");
-    call(&vector::project!(a.clone(), b.clone()), "vector::project(a, b)");
-    call(&vector::subtract!(a.clone(), b.clone()), "vector::subtract(a, b)");
+    call(
+        &vector::project!(a.clone(), b.clone()),
+        "vector::project(a, b)",
+    );
+    call(
+        &vector::subtract!(a.clone(), b.clone()),
+        "vector::subtract(a, b)",
+    );
     call(
         &vector::distance::chebyshev!(a.clone(), b.clone()),
         "vector::distance::chebyshev(a, b)",
@@ -42,7 +54,10 @@ fn rendering() {
         &vector::similarity::cosine!(a.clone(), b.clone()),
         "vector::similarity::cosine(a, b)",
     );
-    call(&vector::similarity::jaccard!(a, b), "vector::similarity::jaccard(a, b)");
+    call(
+        &vector::similarity::jaccard!(a, b),
+        "vector::similarity::jaccard(a, b)",
+    );
 }
 
 #[tokio::test]

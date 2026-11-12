@@ -31,16 +31,22 @@ fn rendering() {
 #[tokio::test]
 async fn results() {
     let db = db().await;
-    holds_all!(&db, [
-        (session::ns!(), "'test'"),
-        (session::db!(), "'test'"),
-        (session::rd!(), "NONE"),
-        (count!(), "1"),
-        (count!(vec![1, 0, 1]), "2"),
-    ]);
+    holds_all!(
+        &db,
+        [
+            (session::ns!(), "'test'"),
+            (session::db!(), "'test'"),
+            (session::rd!(), "NONE"),
+            (count!(), "1"),
+            (count!(vec![1, 0, 1]), "2"),
+        ]
+    );
     let _: Value = read(
         &db,
-        &format!("RETURN {};", sleep::sleep!(Duration::from_millis(1)).to_debug_sql()),
+        &format!(
+            "RETURN {};",
+            sleep::sleep!(Duration::from_millis(1)).to_debug_sql()
+        ),
     )
     .await;
 }

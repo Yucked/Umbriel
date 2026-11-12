@@ -6,7 +6,8 @@ use umbriel_tests::*;
 
 #[test]
 fn calls_render() {
-    let call = module::call::<kinds::Number, _>("geo::distance", [Field::new("a"), Field::new("b")]);
+    let call =
+        module::call::<kinds::Number, _>("geo::distance", [Field::new("a"), Field::new("b")]);
     assert_eq!(call.to_debug_sql(), "mod::geo::distance(a, b)");
     let bound = module::call::<kinds::Any, _>("tools", [1]);
     assert_eq!(bound.to_query().expect("renders").sql(), "mod::tools($_p0)");

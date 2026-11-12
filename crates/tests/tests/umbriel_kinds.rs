@@ -61,6 +61,9 @@ async fn every_marker_renders_its_kind() {
         defined_as::<kinds::Optional<kinds::Int>>(),
     ] {
         let definition = definition.replace("DEFINE FIELD", "DEFINE FIELD OVERWRITE");
-        assert!(succeeds(&db, &definition).await, "`{definition}` is accepted");
+        assert!(
+            succeeds(&db, &definition).await,
+            "`{definition}` is accepted"
+        );
     }
 }

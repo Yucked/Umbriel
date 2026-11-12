@@ -36,8 +36,11 @@ async fn sets_and_bytes_bind_as_their_kind() {
     let db = db().await;
     let length: Option<i64> = bound(&db, &umbriel::functions::bytes::len!(vec![1u8, 2, 3])).await;
     assert_eq!(length, Some(3));
-    let size: Option<i64> =
-        bound(&db, &umbriel::functions::set::len!(BTreeSet::from([1, 2, 2]))).await;
+    let size: Option<i64> = bound(
+        &db,
+        &umbriel::functions::set::len!(BTreeSet::from([1, 2, 2])),
+    )
+    .await;
     assert_eq!(size, Some(2));
 }
 
