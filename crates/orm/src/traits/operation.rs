@@ -78,6 +78,12 @@ pub enum Operator {
     Inc,
     /// `-=`
     Dec,
+    /// `%`
+    Modulo,
+    /// `??`
+    NullCoalescing,
+    /// `?:`
+    TernaryCondition,
 }
 
 impl Operator {
@@ -119,6 +125,9 @@ impl Operator {
             Self::Matches => "@@",
             Self::Inc => "+=",
             Self::Dec => "-=",
+            Self::Modulo => "%",
+            Self::NullCoalescing => "??",
+            Self::TernaryCondition => "?:",
         }
     }
 }
@@ -162,6 +171,18 @@ enum OperationNode {
         reference: u8,
         terms: StrandLike,
     },
+    /// `(lhs ?? rhs)` or `(lhs ?: rhs)`: parenthesized as a whole, since these bind more loosely
+    /// than `OR`, and with operation operands parenthesized too.
+    Nullish {
+        lhs: ValueLike,
+        operator: Operator,
+        rhs: ValueLike,
+    },
+    /// `!operand`, `!!operand` or `-operand`, with an operation operand parenthesized.
+    Prefix {
+        operator: &'static str,
+        operand: ValueLike,
+    },
 }
 
 impl Operation {
@@ -175,6 +196,14 @@ impl Operation {
 
     pub(crate) fn arithmetic(lhs: ValueLike, operator: Operator, rhs: ValueLike) -> Self {
         Self::new(OperationNode::Arithmetic { lhs, operator, rhs })
+    }
+
+    fn nullish(lhs: ValueLike, operator: Operator, rhs: ValueLike) -> Self {
+        Self::new(OperationNode::Nullish { lhs, operator, rhs })
+    }
+
+    fn prefix(operator: &'static str, operand: ValueLike) -> Self {
+        Self::new(OperationNode::Prefix { operator, operand })
     }
 }
 
@@ -221,6 +250,17 @@ impl Render for Operation {
                     .push_display(reference)
                     .push_str("@ ")
                     .push(terms);
+            }
+            OperationNode::Nullish { lhs, operator, rhs } => {
+                out.push_str("(");
+                lhs.render_operand(out);
+                out.push_str(" ").push(operator).push_str(" ");
+                rhs.render_operand(out);
+                out.push_str(")");
+            }
+            OperationNode::Prefix { operator, operand } => {
+                out.push_str(operator);
+                operand.render_operand(out);
             }
         }
     }
@@ -1338,8 +1378,74 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
         )
     }
 
+    /// `(self ?? value)`: `self` unless it is `NONE` or `NULL`, otherwise `value`. Written in
+    /// parentheses, since `??` binds more loosely than every other operator.
+    ///
+    /// ```rust
+    /// # use umbriel::*;
+    /// let nickname = Field::new("nickname");
+    /// assert_eq!(nickname.coalesce("anonymous").to_debug_sql(), "(nickname ?? 'anonymous')");
+    /// ```
+    fn coalesce<T: Into<ValueLike>>(&self, value: T) -> Operation {
+        Operation::nullish(self.clone().into(), Operator::NullCoalescing, value.into())
+    }
+
+    /// `(self ?: value)`: `self` when it is truthy, otherwise `value`. Written in parentheses, since
+    /// `?:` binds more loosely than every other operator.
+    ///
+    /// ```rust
+    /// # use umbriel::*;
+    /// let name = Field::new("name");
+    /// assert_eq!(name.or_else_truthy("unnamed").to_debug_sql(), "(name ?: 'unnamed')");
+    /// ```
+    fn or_else_truthy<T: Into<ValueLike>>(&self, value: T) -> Operation {
+        Operation::nullish(self.clone().into(), Operator::TernaryCondition, value.into())
+    }
+
+    /// `self % value`: the remainder, with the sign of `self`.
+    ///
+    /// ```rust
+    /// # use umbriel::*;
+    /// let count = Field::new("count");
+    /// assert_eq!(count.modulo(3).to_debug_sql(), "count % 3");
+    /// ```
+    fn modulo<T: Into<ValueLike>>(&self, value: T) -> Operation {
+        Operation::arithmetic(self.clone().into(), Operator::Modulo, value.into())
+    }
+
     /// `self <operator> value`.
     fn operate(&self, operator: Operator, value: impl Into<ValueLike>) -> Operation {
         Operation::binary(self.clone().into(), operator, value.into())
     }
+}
+
+/// `!value`: `true` when `value` is falsy. Also SurrealDB's `not()` function.
+///
+/// ```rust
+/// # use umbriel::*;
+/// assert_eq!(not(Field::new("active")).to_debug_sql(), "!active");
+/// ```
+pub fn not(value: impl Into<ValueLike>) -> Operation {
+    Operation::prefix("!", value.into())
+}
+
+/// `!!value`: whether `value` is truthy, as a boolean.
+///
+/// ```rust
+/// # use umbriel::*;
+/// assert_eq!(truthy(Field::new("tags")).to_debug_sql(), "!!tags");
+/// ```
+pub fn truthy(value: impl Into<ValueLike>) -> Operation {
+    Operation::prefix("!!", value.into())
+}
+
+/// `-value`: the negated number or duration.
+///
+/// ```rust
+/// # use umbriel::*;
+/// let balance = Field::new("balance");
+/// assert_eq!(negate(balance.add(1)).to_debug_sql(), "-(balance + 1)");
+/// ```
+pub fn negate(value: impl Into<ValueLike>) -> Operation {
+    Operation::prefix("-", value.into())
 }
