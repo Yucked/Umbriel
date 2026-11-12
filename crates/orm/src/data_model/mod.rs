@@ -1,12 +1,7 @@
-/// Contains all the casting functions
+/// Casts, `<kind> value`.
 mod casting;
+pub use casting::{Cast, cast, cast_dynamic};
 
-/// Mathematic constants supported by surrealdb
-pub mod math_constants;
-
-pub use math_constants as MATH;
-
-/// Contains all the casting functions
-pub mod cast {
-    pub use super::casting::*;
-}
+/// SurrealQL constants, such as `math::PI`.
+mod constant;
+pub use constant::Constant;

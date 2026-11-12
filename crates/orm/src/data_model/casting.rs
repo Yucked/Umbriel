@@ -1,92 +1,85 @@
-use crate::{Render, Renderer, ValueLike};
+use std::{fmt, marker::PhantomData};
 
-/// Represents a cast function.
-#[derive(Debug, Clone)]
-pub struct Cast(ValueLike);
+use surrealdb::types::Kind;
 
-impl std::ops::Deref for Cast {
-    type Target = ValueLike;
+use crate::{
+    Render, Renderer, ValueLike,
+    kinds::{self, KindOf},
+};
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+/// A cast, `<kind> value`, typed by the kind `K` it converts to.
+pub struct Cast<K: KindOf> {
+    kind: Kind,
+    value: ValueLike,
+    marker: PhantomData<fn() -> K>,
+}
+
+/// `<K> value`: converts `value` to the kind of the marker `K`, e.g.
+/// `cast::<kinds::Array<kinds::Int>>(tags)` renders `<array<int>> tags`. The result enters the
+/// typed expressions `K` does (see [`kinds`]).
+///
+/// ```rust
+/// use umbriel::{*, kinds};
+/// assert_eq!(cast::<kinds::Int>("5").to_debug_sql(), "<int> '5'");
+/// ```
+pub fn cast<K: KindOf>(value: impl Into<ValueLike>) -> Cast<K> {
+    Cast {
+        kind: K::kind(),
+        value: value.into(),
+        marker: PhantomData,
     }
 }
 
-impl Render for Cast {
+/// `<kind> value` for a kind known only at run time, or one no marker names: a union
+/// (`int | string`, tried in order), a literal or a fixed-length array.
+///
+/// The result is untyped: it enters [`ValueLike`] and every typed expression, unchecked, so the
+/// kind is the caller's to keep consistent.
+pub fn cast_dynamic(kind: Kind, value: impl Into<ValueLike>) -> Cast<kinds::Any> {
+    Cast {
+        kind,
+        value: value.into(),
+        marker: PhantomData,
+    }
+}
+
+impl<K: KindOf> Clone for Cast<K> {
+    fn clone(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            value: self.value.clone(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<K: KindOf> fmt::Debug for Cast<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Cast")
+            .field("kind", &self.kind)
+            .field("value", &self.value)
+            .finish()
+    }
+}
+
+impl<K: KindOf> PartialEq for Cast<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind && self.value == other.value
+    }
+}
+
+/// The value is parenthesized when it is an operation, since a cast binds tighter than any
+/// binary operator.
+impl<K: KindOf> Render for Cast<K> {
     fn render(&self, out: &mut Renderer) {
-        out.push(&self.0);
+        out.push_str("<").push_syntax(&self.kind).push_str("> ");
+        self.value.render_operand(out);
     }
 }
 
 /// A cast is an expression, usable wherever a value is.
-impl From<Cast> for ValueLike {
-    fn from(cast: Cast) -> Self {
-        cast.0
+impl<K: KindOf> From<Cast<K>> for ValueLike {
+    fn from(cast: Cast<K>) -> Self {
+        ValueLike::new(cast)
     }
 }
-
-/// `<kind> value`
-struct CastExpression {
-    prefix: &'static str,
-    value: ValueLike,
-}
-
-impl Render for CastExpression {
-    fn render(&self, out: &mut Renderer) {
-        out.push_str(self.prefix).push(&self.value);
-    }
-}
-
-macro_rules! create_cast_function {
-    ($(#[$attr:meta])* => $function_name: expr) => {
-        paste::paste! {
-            $(#[$attr])*
-            pub fn [<$function_name>](value: impl Into<ValueLike>) -> Cast {
-                Cast(ValueLike::new(CastExpression {
-                    prefix: concat!("<", $function_name, "> "),
-                    value: value.into(),
-                }))
-            }
-        }
-    };
-}
-
-create_cast_function!(
-    /// Casts a value to a boolean.
-    => "bool"
-);
-
-create_cast_function!(
-    /// Casts a value to a datetime.
-    => "datetime"
-);
-
-create_cast_function!(
-    /// Casts a value to a decimal.
-    => "decimal"
-);
-
-create_cast_function!(
-    /// Casts a value to a duration.
-    => "duration"
-);
-
-create_cast_function!(
-    /// Casts a value to a float.
-    => "float"
-);
-
-create_cast_function!(
-    /// Casts a value to an int.
-    => "int"
-);
-
-create_cast_function!(
-    /// Casts a value to a number.
-    => "number"
-);
-
-create_cast_function!(
-    /// Casts a value to a string.
-    => "string"
-);
