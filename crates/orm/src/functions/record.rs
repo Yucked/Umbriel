@@ -1,80 +1,23 @@
-// Record functions
-// These functions retrieve specific metadata from a SurrealDB record ID.
+//! Record id functions, `record::*`.
+//!
+//! ```rust
+//! use umbriel::{*, functions::record};
+//! let owner = Field::new("owner");
+//! assert_eq!(record::tb!(owner.clone()).to_debug_sql(), "record::tb(owner)");
+//! assert_eq!(RecordIdLike::from(owner).id().to_debug_sql(), "owner.id()");
+//! ```
 
-use crate::{Function, RecordIdLike};
+use crate::kinds;
 
-/// Extracts and returns the key of a SurrealDB record ID
-pub fn id_fn(record_id: impl Into<RecordIdLike>) -> Function {
-    Function::new("record::id").arg(record_id.into())
+functions! { $ "record" "::", record, record;
+    /// Whether the record exists.
+    exists(record: RecordIdLike) -> kinds::Bool [RecordIdLike.exists];
+    /// The key of a record id.
+    id(record: RecordIdLike) -> kinds::Any [RecordIdLike.id];
+    /// Whether the record is an edge.
+    is_edge(record: RecordIdLike) -> kinds::Bool [RecordIdLike.is_edge];
+    /// The table of a record id.
+    table(record: RecordIdLike) -> kinds::String [RecordIdLike.table];
+    /// The table of a record id; the same as `table`.
+    tb(record: RecordIdLike) -> kinds::String [RecordIdLike.tb];
 }
-
-/**
-Extracts and returns the key of a SurrealDB record ID
-Also aliased as `record_id!`
-
-# Arguments
-* `record_id` - The record id to extract the key from. Can also be a field or a parameter
-  representing the record id.
-
-# Example
-```rust
-use umbriel::{*, functions::record, statements::let_, types::RecordId};
-
-let record_id = RecordId::new("person", "alice");
-let result = record::id!(record_id);
-assert_eq!(result.to_debug_sql(), "record::id(person:alice)");
-
-let id_field = Field::new("id_field");
-let result = record::id!(id_field);
-assert_eq!(result.to_debug_sql(), "record::id(id_field)");
-
-let id_param = let_("id_param").equal_to("person:alice").get_param();
-let result = record::id!(id_param);
-assert_eq!(result.to_debug_sql(), "record::id($id_param)");
-```
-*/
-#[macro_export]
-macro_rules! record_id {
-    ($record_id: expr) => {
-        $crate::functions::record::id_fn($record_id)
-    };
-}
-pub use record_id as id;
-
-/// Extracts and returns the table name from a SurrealDB record ID
-pub fn tb_fn(record_id: impl Into<RecordIdLike>) -> Function {
-    Function::new("record::tb").arg(record_id.into())
-}
-
-/**
-Extracts and returns the table name from a SurrealDB record ID
-Also aliased as `record_tb!`
-
-# Arguments
-* `record_id` - The record id to extract the table name from. Can also be a field or a parameter
-  representing the record id.
-
-# Example
-```rust
-use umbriel::{*, functions::record, statements::let_, types::RecordId};
-
-let record_id = RecordId::new("person", "alice");
-let result = record::tb!(record_id);
-assert_eq!(result.to_debug_sql(), "record::tb(person:alice)");
-
-let id_field = Field::new("id_field");
-let result = record::tb!(id_field);
-assert_eq!(result.to_debug_sql(), "record::tb(id_field)");
-
-let id_param = let_("id_param").equal_to("person:alice").get_param();
-let result = record::tb!(id_param);
-assert_eq!(result.to_debug_sql(), "record::tb($id_param)");
-```
-*/
-#[macro_export]
-macro_rules! record_tb {
-    ($record_id: expr) => {
-        $crate::functions::record::tb_fn($record_id)
-    };
-}
-pub use record_tb as tb;

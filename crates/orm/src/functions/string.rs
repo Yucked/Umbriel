@@ -1,1184 +1,194 @@
-// String functions
-// These functions can be used when working with and manipulating text and string values.
-//
-// Function	Description
-// string::concat()	Concatenates strings together
-// string::contains()	Check wether a string contains another string
-// string::endsWith()	Checks whether a string ends with another string
-// string::join()	Joins strings together with a delimiter
-// string::len()	Returns the length of a string
-// string::lowercase()	Converts a string to lowercase
-// string::repeat()	Repeats a string a number of times
-// string::replace()	Replaces an occurence of a string with another string
-// string::reverse()	Reverses a string
-// string::slice()	Extracts and returns a section of a string
-// string::slug()	Converts a string into human and URL-friendly string
-// string::split()	Divides a string into an ordered list of substrings
-// string::startsWith()	Checks whether a string starts with another string
-// string::trim()	Removes whitespace from the start and end of a string
-// string::uppercase()	Converts a string to uppercase
-// string::words()	Splits a string into an array of separate words
-// string::distance::hamming
-// string::distance::levenshtein,
-// string::similarity::fuzzy
-// string::similarity::jaro
-// string::similarity::smithwaterman
-// string::is_alphanum()	Checks whether a value has only alphanumeric characters
-// string::is_alpha()	Checks whether a value has only alpha characters
-// string::is_ascii()	Checks whether a value has only ascii characters
-// string::is_datetime() Checks whether a value matches a datetime format
-// string::is_domain()	Checks whether a value is a domain
-// string::is_email()	Checks whether a value is an email
-// string::is_hexadecimal()	Checks whether a value is hexadecimal
-// string::is_latitude()	Checks whether a value is a latitude value
-// string::is_longitude()	Checks whether a value is a longitude value
-// string::is_numeric()	Checks whether a value has only numeric characters
-// string::is_semver()	Checks whether a value matches a semver version
-// string::is_url() Checks whether a value is a valid URL
-// string::is_uuid()	Checks whether a value is a UUID
+//! String functions, `string::*`.
+//!
+//! ```rust
+//! use umbriel::{*, functions::string};
+//! let name = Field::new("name");
+//! assert_eq!(string::len!(name.clone()).to_debug_sql(), "string::len(name)");
+//! assert_eq!(StrandLike::from(name).uppercase().to_debug_sql(), "name.uppercase()");
+//! ```
 
-use crate::{ArgsList, Function, NumberLike, StrandLike, ValueLike};
+use crate::kinds;
 
-fn create_fn_with_single_string_arg(
-    value: impl Into<StrandLike>,
-    function_name: &'static str,
-) -> Function {
-    Function::new(function_name).arg(value.into())
+functions! { $ "string" "::", string, string;
+    /// Capitalises the first letter of every word.
+    capitalize(string: StrandLike) -> kinds::String [StrandLike.capitalize];
+    /// Concatenates the values as strings.
+    concat(.. values: ValueLike) -> kinds::String [StrandLike.concat];
+    /// Whether `string` contains `other`.
+    contains(string: StrandLike, other: StrandLike) -> kinds::Bool [StrandLike.contains];
+    /// Whether `string` ends with `suffix`.
+    ends_with(string: StrandLike, suffix: StrandLike) -> kinds::Bool [StrandLike.ends_with];
+    /// Joins the values with the first one as the separator.
+    join(.. values: ValueLike) -> kinds::String [StrandLike.join];
+    /// The number of characters.
+    len(string: StrandLike) -> kinds::Int [StrandLike.len];
+    /// The string in lower case.
+    lowercase(string: StrandLike) -> kinds::String [StrandLike.lowercase];
+    /// Whether `string` matches the regular expression `pattern`.
+    matches(string: StrandLike, pattern: ValueLike) -> kinds::Bool [StrandLike.matches];
+    /// The string repeated `count` times.
+    repeat(string: StrandLike, count: NumberLike) -> kinds::String [StrandLike.repeat];
+    /// Replaces each occurrence of `search` (a string or a regex) with `replacement`.
+    replace(string: StrandLike, search: ValueLike, replacement: StrandLike) -> kinds::String
+        [StrandLike.replace];
+    /// The string reversed.
+    reverse(string: StrandLike) -> kinds::String [StrandLike.reverse];
+    /// The characters from the index `start` up to the index `end`, exclusive, or in the range
+    /// `start`.
+    slice(string: StrandLike; start: ValueLike, end: NumberLike) -> kinds::String
+        [StrandLike.slice];
+    /// A URL-friendly version of the string.
+    slug(string: StrandLike) -> kinds::String [StrandLike.slug];
+    /// The parts of `string` between occurrences of `delimiter`.
+    split(string: StrandLike, delimiter: StrandLike) -> kinds::Array<kinds::String>
+        [StrandLike.split];
+    /// Whether `string` starts with `prefix`.
+    starts_with(string: StrandLike, prefix: StrandLike) -> kinds::Bool
+        [StrandLike.starts_with];
+    /// The string without leading and trailing whitespace.
+    trim(string: StrandLike) -> kinds::String [StrandLike.trim];
+    /// The string in upper case.
+    uppercase(string: StrandLike) -> kinds::String [StrandLike.uppercase];
+    /// The words of the string.
+    words(string: StrandLike) -> kinds::Array<kinds::String> [StrandLike.words];
+    /// Whether the string has only letters.
+    is_alpha(string: StrandLike) -> kinds::Bool [StrandLike.is_alpha];
+    /// Whether the string has only letters and digits.
+    is_alphanum(string: StrandLike) -> kinds::Bool [StrandLike.is_alphanum];
+    /// Whether the string has only ASCII characters.
+    is_ascii(string: StrandLike) -> kinds::Bool [StrandLike.is_ascii];
+    /// Whether the string is a datetime, in `format` when given.
+    is_datetime(string: StrandLike; format: StrandLike) -> kinds::Bool [StrandLike.is_datetime];
+    /// Whether the string is a domain name.
+    is_domain(string: StrandLike) -> kinds::Bool [StrandLike.is_domain];
+    /// Whether the string is an email address.
+    is_email(string: StrandLike) -> kinds::Bool [StrandLike.is_email];
+    /// Whether the string is hexadecimal.
+    is_hexadecimal(string: StrandLike) -> kinds::Bool [StrandLike.is_hexadecimal];
+    /// Whether the string is an IP address.
+    is_ip(string: StrandLike) -> kinds::Bool [StrandLike.is_ip];
+    /// Whether the string is an IPv4 address.
+    is_ipv4(string: StrandLike) -> kinds::Bool [StrandLike.is_ipv4];
+    /// Whether the string is an IPv6 address.
+    is_ipv6(string: StrandLike) -> kinds::Bool [StrandLike.is_ipv6];
+    /// Whether the string is a latitude.
+    is_latitude(string: StrandLike) -> kinds::Bool [StrandLike.is_latitude];
+    /// Whether the string is a longitude.
+    is_longitude(string: StrandLike) -> kinds::Bool [StrandLike.is_longitude];
+    /// Whether the string has only digits.
+    is_numeric(string: StrandLike) -> kinds::Bool [StrandLike.is_numeric];
+    /// Whether the string is a record id, of `table` when given.
+    is_record(string: StrandLike; table: ValueLike) -> kinds::Bool [StrandLike.is_record];
+    /// Whether the string is a semantic version.
+    is_semver(string: StrandLike) -> kinds::Bool [StrandLike.is_semver];
+    /// Whether the string is a ULID.
+    is_ulid(string: StrandLike) -> kinds::Bool [StrandLike.is_ulid];
+    /// Whether the string is a URL.
+    is_url(string: StrandLike) -> kinds::Bool [StrandLike.is_url];
+    /// Whether the string is a UUID.
+    is_uuid(string: StrandLike) -> kinds::Bool [StrandLike.is_uuid];
 }
 
-/// Returns length of a string
-pub fn len_fn(string: impl Into<StrandLike>) -> Function {
-    create_fn_with_single_string_arg(string, "string::len")
-}
-
-/// Returns length of a string.
-/// The macro function is also aliases as `string_len!`
-///
-/// # Arguments
-/// * `string` - The string to get the length of. Can be a string literal, a field or a parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let len = string::len!("Alice Smith");
-/// assert_eq!(len.to_debug_sql(), "string::len('Alice Smith')");
-///
-/// let string_field = Field::new("string_field");
-/// let len = string::len!(string_field);
-/// assert_eq!(len.to_debug_sql(), "string::len(string_field)");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let len = string::len!(string_param);
-/// assert_eq!(len.to_debug_sql(), "string::len($string_param)");
-/// ```
-#[macro_export]
-macro_rules! string_len {
-    ( $string:expr ) => {
-        $crate::functions::string::len_fn($string)
-    };
-}
-pub use string_len as len;
-
-/// The string::lowercase function converts a string to lowercase.
-pub fn lowercase_fn(string: impl Into<StrandLike>) -> Function {
-    create_fn_with_single_string_arg(string, "string::lowercase")
-}
-
-/// The string::lowercase function converts a string to lowercase.
-/// The macro function is also aliases as `string_lowercase!`
-/// # Arguments
-/// * `string` - The string to convert to lowercase. Can be a string literal, a field or a parameter representing a string.
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let lowercase = string::lowercase!("Alice Smith");
-/// assert_eq!(lowercase.to_debug_sql(), "string::lowercase('Alice Smith')");
-///
-/// let string_field = Field::new("string_field");
-/// let lowercase = string::lowercase!(string_field);
-/// assert_eq!(lowercase.to_debug_sql(), "string::lowercase(string_field)");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let lowercase = string::lowercase!(string_param);
-/// assert_eq!(lowercase.to_debug_sql(), "string::lowercase($string_param)");
-/// ```
-#[macro_export]
-macro_rules! string_lowercase {
-    ( $string:expr ) => {
-        $crate::functions::string::lowercase_fn($string)
-    };
-}
-
-pub use string_lowercase as lowercase;
-
-/// The string::uppercase function converts a string to uppercase.
-pub fn uppercase_fn(string: impl Into<StrandLike>) -> Function {
-    create_fn_with_single_string_arg(string, "string::uppercase")
-}
-
-/// The string::uppercase function converts a string to uppercase.
-/// The macro function is also aliases as `string_uppercase!`
-///
-/// # Arguments
-///
-/// * `string` - The string to convert to uppercase. Can be a string literal, a field or a parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let uppercase = string::uppercase!("Alice Smith");
-/// assert_eq!(uppercase.to_debug_sql(), "string::uppercase('Alice Smith')");
-///
-/// let string_field = Field::new("string_field");
-/// let uppercase = string::uppercase!(string_field);
-/// assert_eq!(uppercase.to_debug_sql(), "string::uppercase(string_field)");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let uppercase = string::uppercase!(string_param);
-/// assert_eq!(uppercase.to_debug_sql(), "string::uppercase($string_param)");
-/// ```
-#[macro_export]
-macro_rules! string_uppercase {
-    ( $string:expr ) => {
-        $crate::functions::string::uppercase_fn($string)
-    };
-}
-pub use string_uppercase as uppercase;
-
-/// The string::words function splits a string into an array of separate words.
-pub fn words_fn(string: impl Into<StrandLike>) -> Function {
-    create_fn_with_single_string_arg(string, "string::words")
-}
-
-/// The string::words function splits a string into an array of separate words.
-/// The macro function is also aliases as `string_words!`
-///
-/// # Arguments
-/// * `string` - The string to split into words. Can be a string literal, a field or a parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let words = string::words!("Alice Smith");
-/// assert_eq!(words.to_debug_sql(), "string::words('Alice Smith')");
-///
-/// let string_field = Field::new("string_field");
-/// let words = string::words!(string_field);
-/// assert_eq!(words.to_debug_sql(), "string::words(string_field)");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let words = string::words!(string_param);
-/// assert_eq!(words.to_debug_sql(), "string::words($string_param)");
-/// ```
-#[macro_export]
-macro_rules! string_words {
-    ( $string:expr ) => {
-        $crate::functions::string::words_fn($string)
-    };
-}
-pub use string_words as words;
-
-/// The string::reverse function reverses a string.
-pub fn reverse_fn(string: impl Into<StrandLike>) -> Function {
-    create_fn_with_single_string_arg(string, "string::reverse")
-}
-
-/// The string::reverse function reverses a string.
-/// The macro function is also aliases as `string_reverse!`
-///
-/// # Arguments
-/// * `string` - The string to reverse. Can be a string literal, a field or a parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let reverse = string::reverse!("Alice Smith");
-/// assert_eq!(reverse.to_debug_sql(), "string::reverse('Alice Smith')");
-///
-/// let string_field = Field::new("string_field");
-/// let reverse = string::reverse!(string_field);
-/// assert_eq!(reverse.to_debug_sql(), "string::reverse(string_field)");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let reverse = string::reverse!(string_param);
-/// assert_eq!(reverse.to_debug_sql(), "string::reverse($string_param)");
-/// ```
-#[macro_export]
-macro_rules! string_reverse {
-    ( $string:expr ) => {
-        $crate::functions::string::reverse_fn($string)
-    };
-}
-
-pub use string_reverse as reverse;
-
-/// The string::trim function removes leading and trailing whitespace from a string.
-pub fn trim_fn(string: impl Into<StrandLike>) -> Function {
-    create_fn_with_single_string_arg(string, "string::trim")
-}
-
-/// The string::trim function removes leading and trailing whitespace from a string.
-/// The macro function is also aliases as `string_trim!`
-///
-/// # Arguments
-/// * `string` - The string to trim. Can be a string literal, a field or a parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let trim = string::trim!("Alice Smith");
-/// assert_eq!(trim.to_debug_sql(), "string::trim('Alice Smith')");
-///
-/// let string_field = Field::new("string_field");
-/// let trim = string::trim!(string_field);
-/// assert_eq!(trim.to_debug_sql(), "string::trim(string_field)");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let trim = string::trim!(string_param);
-/// assert_eq!(trim.to_debug_sql(), "string::trim($string_param)");
-/// ```
-#[macro_export]
-macro_rules! string_trim {
-    ( $string:expr ) => {
-        $crate::functions::string::trim_fn($string)
-    };
-}
-pub use string_trim as trim;
-
-/// The string::slug function converts a string into a human and URL-friendly string.
-pub fn slug_fn(string: impl Into<StrandLike>) -> Function {
-    create_fn_with_single_string_arg(string, "string::slug")
-}
-
-/// The string::slug function converts a string into a human and URL-friendly string.
-/// The macro function is also aliases as `string_slug!`
-///
-/// # Arguments
-///
-/// * `string` - The string to convert into a slug. Can be a string literal, a field or a parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let slug = string::slug!("Alice Smith");
-/// assert_eq!(slug.to_debug_sql(), "string::slug('Alice Smith')");
-/// let string_field = Field::new("string_field");
-/// let slug = string::slug!(string_field);
-/// assert_eq!(slug.to_debug_sql(), "string::slug(string_field)");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let slug = string::slug!(string_param);
-/// assert_eq!(slug.to_debug_sql(), "string::slug($string_param)");
-/// ```
-#[macro_export]
-macro_rules! string_slug {
-    ( $string:expr ) => {
-        $crate::functions::string::slug_fn($string)
-    };
-}
-
-pub use string_slug as slug;
-
-/// The string::concat function concatenates strings together.
-pub fn concat_fn<T: Into<ValueLike>>(values: Vec<T>) -> Function {
-    values
-        .into_iter()
-        .fold(Function::new("string::concat"), |function, value| {
-            function.arg(value.into())
-        })
-}
-
-/// The string::concat function concatenates strings together.
-/// The macro function is also aliases as `string_concat!`
-///
-/// # Arguments
-///
-/// * `values` - The strings to concatenate. Can be string literals, fields or parameters representing strings.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let concat = string::concat!("Alice", "Smith");
-/// assert_eq!(concat.to_debug_sql(), "string::concat('Alice', 'Smith')");
-///
-/// let concat = string::concat!(vec!["Alice", "Smith"]);
-/// assert_eq!(concat.to_debug_sql(), "string::concat('Alice', 'Smith')");
-///
-/// let string_field = Field::new("string_field");
-/// let concat = string::concat!(string_field, "Smith");
-/// assert_eq!(concat.to_debug_sql(), "string::concat(string_field, 'Smith')");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let concat = string::concat!(string_param, "Smith");
-/// assert_eq!(concat.to_debug_sql(), "string::concat($string_param, 'Smith')");
-/// ```
-#[macro_export]
-macro_rules! string_concat {
-        ( $val:expr ) => {
-            $crate::functions::string::concat_fn( $val )
-        };
-        ($( $val:expr ),*) => {
-            $crate::functions::string::concat_fn($crate::arr![ $( $val ), * ])
-        };
-    }
-
-pub use string_concat as concat;
-
-// contains
-/// The string::contains function checks whether a string contains another string.
-pub fn contains_fn(string: impl Into<StrandLike>, contains: impl Into<StrandLike>) -> Function {
-    Function::new("string::contains")
-        .arg(string.into())
-        .arg(contains.into())
-}
-
-/// The string::contains function checks whether a string contains another string.
-/// The macro function is also aliases as `string_contains!`
-/// # Arguments
-/// * `string` - The string to check. Can be a string literal, field or parameter representing a string.
-/// * `contains` - The string to check for. Can be a string literal, field or parameter representing a string.
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-///
-/// let contains = string::contains!("Alice Smith", "Smith");
-/// assert_eq!(contains.to_debug_sql(), "string::contains('Alice Smith', 'Smith')");
-///
-/// let string_field = Field::new("string_field");
-/// let contains = string::contains!(string_field, "Smith");
-/// assert_eq!(contains.to_debug_sql(), "string::contains(string_field, 'Smith')");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let contains = string::contains!(string_param, "Smith");
-/// assert_eq!(contains.to_debug_sql(), "string::contains($string_param, 'Smith')");
-/// ```
-#[macro_export]
-macro_rules! string_contains {
-    ( $string:expr, $contains: expr ) => {
-        $crate::functions::string::contains_fn($string, $contains)
-    };
-}
-pub use string_contains as contains;
-
-/// The string::join function joins strings together with a delimiter.
-pub fn join_fn(values: impl Into<ArgsList>) -> Function {
-    Function::new("string::join").arg(values.into())
-}
-
-/// The string::join function joins strings together with a delimiter.
-/// The macro function is also aliases as `string_join!`
-///
-/// # Arguments
-///
-/// * `values` - The strings to join. Can be string literals, fields or parameters representing strings.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let join = string::join!("Alice", "Smith");
-/// assert_eq!(join.to_debug_sql(), "string::join('Alice', 'Smith')");
-///
-/// let join = string::join!(vec!["Alice", "Smith"]);
-/// assert_eq!(join.to_debug_sql(), "string::join('Alice', 'Smith')");
-/// let string_field = Field::new("string_field");
-///
-/// let join = string::join!(string_field);
-/// assert_eq!(join.to_debug_sql(), "string::join(string_field)");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let join = string::join!(string_param);
-/// assert_eq!(join.to_debug_sql(), "string::join($string_param)");
-/// ```
-#[macro_export]
-macro_rules! string_join {
-        ( $val:expr ) => {
-            $crate::functions::string::join_fn( $val )
-        };
-        ($( $val:expr ),*) => {
-            $crate::functions::string::join_fn($crate::arr![ $( $val ), * ])
-        };
-    }
-
-pub use string_join as join;
-
-/// The string::endsWith function checks whether a string ends with another string.
-pub fn ends_with_fn(string: impl Into<StrandLike>, ending: impl Into<StrandLike>) -> Function {
-    Function::new("string::ends_with")
-        .arg(string.into())
-        .arg(ending.into())
-}
-
-/// The string::endsWith function checks whether a string ends with another string.
-/// The macro function is also aliases as `string_ends_with!`
-///
-/// # Arguments
-///
-/// * `string` - The string to check. Can be a string literal, field or parameter representing a string.
-/// * `ending` - The string to check for. Can be a string literal, field or parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let ends_with = string::ends_with!("Alice", "Smith");
-/// assert_eq!(ends_with.to_debug_sql(), "string::ends_with('Alice', 'Smith')");
-/// let string_field = Field::new("string_field");
-/// let ends_with = string::ends_with!(string_field, "Smith");
-/// assert_eq!(ends_with.to_debug_sql(), "string::ends_with(string_field, 'Smith')");
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let ends_with = string::ends_with!(string_param, "Smith");
-/// assert_eq!(ends_with.to_debug_sql(), "string::ends_with($string_param, 'Smith')");
-/// ```
-#[macro_export]
-macro_rules! string_ends_with {
-    ( $string:expr, $ending: expr ) => {
-        $crate::functions::string::ends_with_fn($string, $ending)
-    };
-}
-
-pub use string_ends_with as ends_with;
-
-/// The string::startsWith function checks whether a string starts with another string.
-pub fn starts_with_fn(string: impl Into<StrandLike>, starting: impl Into<StrandLike>) -> Function {
-    Function::new("string::starts_with")
-        .arg(string.into())
-        .arg(starting.into())
-}
-
-/// The string::startsWith function checks whether a string starts with another string.
-/// The macro function is also aliases as `string_starts_with!`
-///
-/// # Arguments
-///
-/// * `string` - The string to check. Can be a string literal, field or parameter representing a string.
-/// * `starting` - The string to check for. Can be a string literal, field or parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let starts_with = string::starts_with!("Alice", "Smith");
-/// assert_eq!(starts_with.to_debug_sql(), "string::starts_with('Alice', 'Smith')");
-///
-/// let string_field = Field::new("string_field");
-/// let starts_with = string::starts_with!(string_field, "Smith");
-/// assert_eq!(starts_with.to_debug_sql(), "string::starts_with(string_field, 'Smith')");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let starts_with = string::starts_with!(string_param, "Smith");
-/// assert_eq!(starts_with.to_debug_sql(), "string::starts_with($string_param, 'Smith')");
-/// ```
-#[macro_export]
-macro_rules! string_starts_with {
-    ( $string:expr, $ending: expr ) => {
-        $crate::functions::string::starts_with_fn($string, $ending)
-    };
-}
-pub use string_starts_with as starts_with;
-
-/// The string::split function splits a string by a given delimiter.
-pub fn split_fn(string: impl Into<StrandLike>, by: impl Into<StrandLike>) -> Function {
-    Function::new("string::split")
-        .arg(string.into())
-        .arg(by.into())
-}
-
-/// The string::split function splits a string by a given delimiter.
-/// The macro function is also aliases as `string_split!`
-///
-/// # Arguments
-///
-/// * `string` - The string to check. Can be a string literal, field or parameter representing a string.
-/// * `by` - The string to check for. Can be a string literal, field or parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let split = string::split!("Alice Smith", " ");
-/// assert_eq!(split.to_debug_sql(), "string::split('Alice Smith', ' ')");
-///
-/// let string_field = Field::new("string_field");
-/// let split = string::split!(string_field, " ");
-/// assert_eq!(split.to_debug_sql(), "string::split(string_field, ' ')");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let split = string::split!(string_param, " ");
-/// assert_eq!(split.to_debug_sql(), "string::split($string_param, ' ')");
-/// ```
-#[macro_export]
-macro_rules! string_split {
-    ( $string:expr, $by: expr ) => {
-        $crate::functions::string::split_fn($string, $by)
-    };
-}
-
-pub use string_split as split;
-
-/// The string::repeat function repeats a string a number of times.
-pub fn repeat_fn(string: impl Into<StrandLike>, ending: impl Into<NumberLike>) -> Function {
-    Function::new("string::repeat")
-        .arg(string.into())
-        .arg(ending.into())
-}
-
-/// The string::repeat function repeats a string a number of times.
-/// The macro function is also aliases as `string_repeat!`
-///
-/// # Arguments
-///
-/// * `string` - The string to check. Can be a string literal, field or parameter representing a string.
-/// * `count` - The number of times to repeat the string. Can be a number, field or parameter representing a number.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let repeat = string::repeat!("Alice", 3);
-/// assert_eq!(repeat.to_debug_sql(), "string::repeat('Alice', 3)");
-/// let string_field = Field::new("string_field");
-/// let repeat = string::repeat!(string_field, 3);
-///
-/// assert_eq!(repeat.to_debug_sql(), "string::repeat(string_field, 3)");
-/// let string_param = let_("string_param").equal_to("Alice").get_param();
-/// let repeat = string::repeat!(string_param, 3);
-/// assert_eq!(repeat.to_debug_sql(), "string::repeat($string_param, 3)");
-/// ```
-#[macro_export]
-macro_rules! string_repeat {
-    ( $string:expr, $count: expr ) => {
-        $crate::functions::string::repeat_fn($string, $count)
-    };
-}
-
-pub use string_repeat as repeat;
-
-/// The string::slice function extracts and returns a section of a string.
-pub fn slice_fn(
-    string: impl Into<StrandLike>,
-    from: impl Into<NumberLike>,
-    to: impl Into<NumberLike>,
-) -> Function {
-    Function::new("string::slice")
-        .arg(string.into())
-        .arg(from.into())
-        .arg(to.into())
-}
-
-/// The string::slice function extracts and returns a section of a string.
-/// The macro function is also aliases as `string_slice!`
-///
-/// # Arguments
-/// * `string` - The string to check. Can be a string literal, field or parameter representing a string.
-/// * `from` - The index to start the slice from. Can be a number, field or parameter representing a number.
-/// * `to` - The index to end the slice at. Can be a number, field or parameter representing a number.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// let slice = string::slice!("Alice Smith", 0, 7);
-/// assert_eq!(slice.to_debug_sql(), "string::slice('Alice Smith', 0, 7)");
-///
-/// let string_field = Field::new("string_field");
-/// let slice = string::slice!(string_field, 0, 7);
-/// assert_eq!(slice.to_debug_sql(), "string::slice(string_field, 0, 7)");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let slice = string::slice!(string_param, 0, 7);
-/// assert_eq!(slice.to_debug_sql(), "string::slice($string_param, 0, 7)");
-/// ```
-#[macro_export]
-macro_rules! string_slice {
-    ( $string:expr, $from: expr, $to: expr ) => {
-        $crate::functions::string::slice_fn($string, $from, $to)
-    };
-}
-
-pub use string_slice as slice;
-
-/// The string::replace function replaces an occurence of a string with another string.
-pub fn replace_fn(
-    string: impl Into<StrandLike>,
-    to_match: impl Into<StrandLike>,
-    replacement: impl Into<StrandLike>,
-) -> Function {
-    Function::new("string::replace")
-        .arg(string.into())
-        .arg(to_match.into())
-        .arg(replacement.into())
-}
-
-/// The string::replace function replaces an occurence of a string with another string.
-/// The macro function is also aliases as `string_replace!`
-///
-/// # Arguments
-///
-/// * `string` - The string to check. Can be a string literal, field or parameter representing a string.
-/// * `to_match` - The string to match. Can be a string literal, field or parameter representing a string.
-/// * `replacement` - The string to replace the matched string with. Can be a string literal, field or parameter representing a string.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::string, statements::let_};
-/// string::replace!("Alice Smith", "Smith", "Alice");
-///
-/// let string_field = Field::new("string_field");
-/// let replace = string::replace!(string_field, "Smith", "Alice");
-/// assert_eq!(replace.to_debug_sql(), "string::replace(string_field, 'Smith', 'Alice')");
-///
-/// let string_param = let_("string_param").equal_to("Alice Smith").get_param();
-/// let replace = string::replace!(string_param, "Smith", "Alice");
-/// assert_eq!(replace.to_debug_sql(), "string::replace($string_param, 'Smith', 'Alice')");
-/// ```
-#[macro_export]
-macro_rules! string_replace {
-    ( $string:expr, $match: expr, $replacement: expr ) => {
-        $crate::functions::string::replace_fn($string, $match, $replacement)
-    };
-}
-
-pub use string_replace as replace;
-
-fn create_string_validation_function(
-    value: impl Into<ValueLike>,
-    function_name: &'static str,
-) -> Function {
-    Function::new(function_name).arg(value.into())
-}
-
-macro_rules! create_validation_with_tests {
-    ($(#[$attr:meta])* => $function_name: expr) => {
-        paste::paste! {
-            $(#[$attr])*
-            pub fn [<is_ $function_name _fn>](value: impl Into<$crate::ValueLike>) -> $crate::Function {
-                // Pathed: this module exports its own `concat` macro (`string::concat`).
-                create_string_validation_function(value, ::core::concat!("string::is_", $function_name))
-            }
-
-            $(#[$attr])*
-            #[macro_export]
-            macro_rules!  [<string_is_ $function_name>]{
-                ( $value:expr ) => {
-                    $crate::functions::string::[<is_ $function_name _fn>]($value)
-                };
-            }
-            pub use [<string_is_ $function_name>] as [<is_ $function_name>];
-
-
-        }
-    };
-}
-
-fn create_two_strings_args_helper(
-    str1: impl Into<StrandLike>,
-    str2: impl Into<StrandLike>,
-    function_name: &'static str,
-) -> Function {
-    Function::new(function_name)
-        .arg(str1.into())
-        .arg(str2.into())
-}
-
-macro_rules! create_fn_with_two_strings_args {
-    ($(#[$attr:meta])* => $function_name:expr, $function_path:expr) => {
-        paste::paste! {
-            $(#[$attr])*
-            pub fn [<$function_name _fn>](str1: impl Into<$crate::StrandLike>, str2: impl Into<$crate::StrandLike>) -> $crate::Function {
-                create_two_strings_args_helper(str1, str2, ::core::concat!("string::", $function_path))
-            }
-
-            $(#[$attr])*
-            #[macro_export]
-            macro_rules! [<string_ $function_name>] {
-                ( $str1:expr, $str2:expr ) => {
-                    $crate::functions::string::[<$function_name _fn>]($str1, $str2)
-                };
-            }
-            pub use [<string_ $function_name>];
-            // pub(self) use [<string_ $function_name>] as [<$function_name>];
-
-        }
-    };
-}
-
-// Validation functions (`string::is_*`).
-create_validation_with_tests!(
-    /// The string::is_alphanum function checks whether a value has only alphanumeric characters.
-    /// Also aliased as `string_is_alphanum!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_alphanum!("alice1234");
-    /// assert_eq!(result.to_debug_sql(), "string::is_alphanum('alice1234')");
-    ///
-    /// let alphanum_field = Field::new("alphanum_field");
-    /// let result = string::is_alphanum!(alphanum_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_alphanum(alphanum_field)");
-    ///
-    /// let alphanum_param = let_("alphanum_param").equal_to("alice1234").get_param();
-    /// let result = string::is_alphanum!(alphanum_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_alphanum($alphanum_param)");
-    /// ```
-    =>
-    "alphanum"
-);
-
-create_validation_with_tests!(
-    /// The string::is_alpha function checks whether a value has only alpha characters.
-    /// Also aliased as `string_is_alpha!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_alpha!("alice");
-    /// assert_eq!(result.to_debug_sql(), "string::is_alpha('alice')");
-    ///
-    /// let alpha_field = Field::new("alpha_field");
-    /// let result = string::is_alpha!(alpha_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_alpha(alpha_field)");
-    ///
-    /// let alpha_param = let_("alpha_param").equal_to("alice").get_param();
-    /// let result = string::is_alpha!(alpha_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_alpha($alpha_param)");
-    /// ```
-    =>
-    "alpha"
-);
-
-create_validation_with_tests!(
-    /// The string::is_ascii function checks whether a value has only ascii characters.
-    /// Also aliased as `string_is_ascii!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_ascii!("alice");
-    /// assert_eq!(result.to_debug_sql(), "string::is_ascii('alice')");
-    ///
-    /// let ascii_field = Field::new("ascii_field");
-    /// let result = string::is_ascii!(ascii_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_ascii(ascii_field)");
-    ///
-    /// let ascii_param = let_("ascii_param").equal_to("alice").get_param();
-    /// let result = string::is_ascii!(ascii_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_ascii($ascii_param)");
-    /// ```
-    =>
-    "ascii"
-);
-
-create_validation_with_tests!(
-    /// The string::is_domain function checks whether a value is a domain.
-    /// Also aliased as `string_is_domain!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_domain!("example.com");
-    /// assert_eq!(result.to_debug_sql(), "string::is_domain('example.com')");
-    ///
-    /// let domain_field = Field::new("domain_field");
-    /// let result = string::is_domain!(domain_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_domain(domain_field)");
-    ///
-    /// let domain_param = let_("domain_param").equal_to("example.com").get_param();
-    /// let result = string::is_domain!(domain_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_domain($domain_param)");
-    /// ```
-    =>
-    "domain"
-);
-
-create_validation_with_tests!(
-    /// The string::is_email function checks whether a value is an email.
-    /// Also aliased as `string_is_email!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_email!("alice@example.com");
-    /// assert_eq!(result.to_debug_sql(), "string::is_email('alice@example.com')");
-    ///
-    /// let email_field = Field::new("email_field");
-    /// let result = string::is_email!(email_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_email(email_field)");
-    ///
-    /// let email_param = let_("email_param").equal_to("alice@exampleco").get_param();
-    ///
-    /// let result = string::is_email!(email_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_email($email_param)");
-    /// ```
-    =>
-    "email"
-);
-
-create_validation_with_tests!(
-    /// The string::is_hexadecimal function checks whether a value is hexadecimal.
-    /// Also aliased as `string_is_hexadecimal!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_hexadecimal!("alice");
-    /// assert_eq!(result.to_debug_sql(), "string::is_hexadecimal('alice')");
-    ///
-    /// let hexadecimal_field = Field::new("hexadecimal_field");
-    /// let result = string::is_hexadecimal!(hexadecimal_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_hexadecimal(hexadecimal_field)");
-    ///
-    /// let hexadecimal_param = let_("hexadecimal_param").equal_to("alice").get_param();
-    /// let result = string::is_hexadecimal!(hexadecimal_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_hexadecimal($hexadecimal_param)");
-    /// ```
-    =>
-    "hexadecimal"
-);
-
-create_validation_with_tests!(
-    /// The string::is_latitude function checks whether a value is a latitude value.
-    /// Also aliased as `string_is_latitude!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_latitude!("-0.118092");
-    /// assert_eq!(result.to_debug_sql(), "string::is_latitude('-0.118092')");
-    ///
-    /// let latitude_field = Field::new("latitude_field");
-    /// let result = string::is_latitude!(latitude_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_latitude(latitude_field)");
-    ///
-    /// let latitude_param = let_("latitude_param").equal_to("alice").get_param();
-    /// let result = string::is_latitude!(latitude_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_latitude($latitude_param)");
-    /// ```
-    =>
-    "latitude"
-);
-
-create_validation_with_tests!(
-    /// The string::is_longitude function checks whether a value is a longitude value.
-    /// Also aliased as `string_is_longitude!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_longitude!("51.509865");
-    /// assert_eq!(result.to_debug_sql(), "string::is_longitude('51.509865')");
-    ///
-    /// let longitude_field = Field::new("longitude_field");
-    /// let result = string::is_longitude!(longitude_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_longitude(longitude_field)");
-    ///
-    /// let longitude_param = let_("longitude_param").equal_to("alice").get_param();
-    /// let result = string::is_longitude!(longitude_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_longitude($longitude_param)");
-    /// ```
-    =>
-    "longitude"
-);
-
-create_validation_with_tests!(
-    /// The string::is_numeric function checks whether a value has only numeric characters.
-    /// Also aliased as `string_is_numeric!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_numeric!("alice");
-    /// assert_eq!(result.to_debug_sql(), "string::is_numeric('alice')");
-    ///
-    /// let numeric_field = Field::new("numeric_field");
-    /// let result = string::is_numeric!(numeric_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_numeric(numeric_field)");
-    ///
-    /// let numeric_param = let_("numeric_param").equal_to("alice").get_param();
-    /// let result = string::is_numeric!(numeric_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_numeric($numeric_param)");
-    /// ```
-    =>
-    "numeric"
-);
-
-create_validation_with_tests!(
-    /// The string::is_semver function checks whether a value matches a semver version.
-    /// Also aliased as `string_is_semver!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_semver!("alice");
-    /// assert_eq!(result.to_debug_sql(), "string::is_semver('alice')");
-    ///
-    /// let semver_field = Field::new("semver_field");
-    /// let result = string::is_semver!(semver_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_semver(semver_field)");
-    ///
-    /// let semver_param = let_("semver_param").equal_to("alice").get_param();
-    /// let result = string::is_semver!(semver_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_semver($semver_param)");
-    /// ```
-    =>
-    "semver"
-);
-
-create_validation_with_tests!(
-    /// The string::is_uuid function checks whether a value is a UUID.
-    /// Also aliased as `string_is_uuid!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_uuid!("alice");
-    /// assert_eq!(result.to_debug_sql(), "string::is_uuid('alice')");
-    ///
-    /// let uuid_field = Field::new("uuid_field");
-    /// let result = string::is_uuid!(uuid_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_uuid(uuid_field)");
-    ///
-    /// let uuid_param = let_("uuid_param").equal_to("alice").get_param();
-    /// let result = string::is_uuid!(uuid_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_uuid($uuid_param)");
-    /// ```
-    =>
-    "uuid"
-);
-
-create_validation_with_tests!(
-    /// The string::is_datetime function checks whether a value matches a datetime format.
-    /// Also aliased as `string_is_datetime!`
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let result = string::is_datetime!("alice");
-    /// assert_eq!(result.to_debug_sql(), "string::is_datetime('alice')");
-    ///
-    /// let datetime_field = Field::new("datetime_field");
-    /// let result = string::is_datetime!(datetime_field);
-    /// assert_eq!(result.to_debug_sql(), "string::is_datetime(datetime_field)");
-    ///
-    /// let datetime_param = let_("datetime_param").equal_to("alice").get_param();
-    /// let result = string::is_datetime!(datetime_param);
-    /// assert_eq!(result.to_query().unwrap().sql(), "string::is_datetime($datetime_param)");
-    /// ```
-    =>
-    "datetime"
-);
-
-create_fn_with_two_strings_args!(
-    /// The string::distance::hamming function calculates the hamming distance between two strings.
-    /// Also aliased as `string_distance_hamming!`
-    ///
-    /// # Arguments
-    ///
-    /// * `str1` - The first string to compare. Could be a field or a parameter that represents the
-    /// value.
-    /// * `str2` - The second string to compare. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let name = Field::new("name");
-    /// let result = string::distance::hamming!(name, "Alice");
-    /// assert_eq!(result.to_debug_sql(), "string::distance::hamming(name, 'Alice')");
-    ///
-    /// let result = string::distance::hamming!("Alice", "Smith");
-    /// assert_eq!(result.to_debug_sql(), "string::distance::hamming('Alice', 'Smith')");
-    /// ```
-    =>
-    "distance_hamming",
-    "distance::hamming"
-);
-
-create_fn_with_two_strings_args!(
-    /// The string::distance::levenshtein function calculates the levenshtein distance between two strings.
-    /// Also aliased as `string_distance_levenshtein!`
-    ///
-    /// # Arguments
-    ///
-    /// * `str1` - The first string to compare. Could be a field or a parameter that represents the
-    /// value.
-    /// * `str2` - The second string to compare. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let name = Field::new("name");
-    /// let result = string::distance::levenshtein!(name, "Alice");
-    /// assert_eq!(result.to_debug_sql(), "string::distance::levenshtein(name, 'Alice')");
-    ///
-    /// let result = string::distance::levenshtein!("Alice", "Smith");
-    /// assert_eq!(result.to_debug_sql(), "string::distance::levenshtein('Alice', 'Smith')");
-    /// ```
-    =>
-    "distance_levenshtein",
-    "distance::levenshtein"
-);
-
-/// The string::distance::levenshtein function calculates the damerau levenshtein distance between two strings.
+/// String distance functions, `string::distance::*`.
 pub mod distance {
-    pub use super::string_distance_hamming as hamming;
-    pub use super::string_distance_levenshtein as levenshtein;
+    use crate::kinds;
+
+    functions! { $ "string::distance" "::", string_distance, string::distance;
+        /// The Damerau–Levenshtein distance.
+        damerau_levenshtein(a: StrandLike, b: StrandLike) -> kinds::Int
+            [StrandLike.distance_damerau_levenshtein];
+        /// The Hamming distance between two strings of equal length.
+        hamming(a: StrandLike, b: StrandLike) -> kinds::Int [StrandLike.distance_hamming];
+        /// The Levenshtein distance.
+        levenshtein(a: StrandLike, b: StrandLike) -> kinds::Int
+            [StrandLike.distance_levenshtein];
+        /// The normalised Damerau–Levenshtein distance, from 0 to 1.
+        normalized_damerau_levenshtein(a: StrandLike, b: StrandLike) -> kinds::Float
+            [StrandLike.distance_normalized_damerau_levenshtein];
+        /// The normalised Levenshtein distance, from 0 to 1.
+        normalized_levenshtein(a: StrandLike, b: StrandLike) -> kinds::Float
+            [StrandLike.distance_normalized_levenshtein];
+        /// The optimal string alignment distance. SurrealDB has no method form of it.
+        osa(a: StrandLike, b: StrandLike) -> kinds::Int;
+    }
 }
 
-create_fn_with_two_strings_args!(
-    /// The string::similarity::fuzzy function calculates the fuzzy similarity between two strings.
-    /// Also aliased as `string_similarity_fuzzy!`
-    ///
-    /// # Arguments
-    ///
-    /// * `str1` - The first string to compare. Could be a field or a parameter that represents the
-    /// value.
-    /// * `str2` - The second string to compare. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let name = Field::new("name");
-    /// let result = string::similarity::fuzzy!(name, "Alice");
-    /// assert_eq!(result.to_debug_sql(), "string::similarity::fuzzy(name, 'Alice')");
-    ///
-    /// let result = string::similarity::fuzzy!("Alice", "Smith");
-    /// assert_eq!(result.to_debug_sql(), "string::similarity::fuzzy('Alice', 'Smith')");
-    /// ```
-    =>
-    "similarity_fuzzy",
-    "similarity::fuzzy"
-);
+/// HTML functions, `string::html::*`.
+pub mod html {
+    use crate::kinds;
 
-create_fn_with_two_strings_args!(
-    /// The string::similarity::jaro function calculates the jaro similarity between two strings.
-    /// Also aliased as `string_similarity_jaro!`
-    ///
-    /// # Arguments
-    ///
-    /// * `str1` - The first string to compare. Could be a field or a parameter that represents the
-    /// value.
-    /// * `str2` - The second string to compare. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let name = Field::new("name");
-    /// let result = string::similarity::jaro!(name, "Alice");
-    /// assert_eq!(result.to_debug_sql(), "string::similarity::jaro(name, 'Alice')");
-    ///
-    /// let result = string::similarity::jaro!("Alice", "Smith");
-    /// assert_eq!(result.to_debug_sql(), "string::similarity::jaro('Alice', 'Smith')");
-    /// ```
-    =>
-    "similarity_jaro",
-    "similarity::jaro"
-);
+    functions! { $ "string::html" "::", string_html, string::html;
+        /// The string with HTML special characters escaped.
+        encode(string: StrandLike) -> kinds::String [StrandLike.html_encode];
+        /// The string with unsafe HTML removed.
+        sanitize(string: StrandLike) -> kinds::String [StrandLike.html_sanitize];
+    }
+}
 
-create_fn_with_two_strings_args!(
-    /// The string::similarity::smithwaterman function calculates the smithwaterman similarity between two strings.
-    /// Also aliased as `string_similarity_smithwaterman!`
-    ///
-    /// # Arguments
-    ///
-    /// * `str1` - The first string to compare. Could be a field or a parameter that represents the
-    /// value.
-    /// * `str2` - The second string to compare. Could be a field or a parameter that represents the
-    /// value.
-    ///
-    /// # Example
-    /// ```rust
-    /// use umbriel::{*, functions::string, statements::let_};
-    ///
-    /// let name = Field::new("name");
-    /// let result = string::similarity::smithwaterman!(name, "Alice");
-    /// assert_eq!(result.to_debug_sql(), "string::similarity::smithwaterman(name, 'Alice')");
-    ///
-    /// let result = string::similarity::smithwaterman!("Alice", "Smith");
-    /// assert_eq!(result.to_debug_sql(), "string::similarity::smithwaterman('Alice', 'Smith')");
-    /// ```
-    =>
-    "similarity_smithwaterman",
-    "similarity::smithwaterman"
-);
-
-/// The string::similarity module contains functions that calculate the similarity between two strings.
+/// String similarity functions, `string::similarity::*`.
 pub mod similarity {
-    pub use super::string_similarity_fuzzy as fuzzy;
-    pub use super::string_similarity_jaro as jaro;
-    pub use super::string_similarity_smithwaterman as smithwaterman;
+    use crate::kinds;
+
+    functions! { $ "string::similarity" "::", string_similarity, string::similarity;
+        /// The fuzzy match score; the same as `smithwaterman`.
+        fuzzy(a: StrandLike, b: StrandLike) -> kinds::Int [StrandLike.similarity_fuzzy];
+        /// The Jaro similarity, from 0 to 1.
+        jaro(a: StrandLike, b: StrandLike) -> kinds::Float [StrandLike.similarity_jaro];
+        /// The Jaro–Winkler similarity, from 0 to 1.
+        jaro_winkler(a: StrandLike, b: StrandLike) -> kinds::Float
+            [StrandLike.similarity_jaro_winkler];
+        /// The Smith–Waterman fuzzy match score. Undocumented in 3.3.4 but still dispatched.
+        smithwaterman(a: StrandLike, b: StrandLike) -> kinds::Int
+            [StrandLike.similarity_smithwaterman];
+        /// The Sørensen–Dice coefficient, from 0 to 1.
+        sorensen_dice(a: StrandLike, b: StrandLike) -> kinds::Float
+            [StrandLike.similarity_sorensen_dice];
+    }
+}
+
+/// Semantic version functions, `string::semver::*`.
+pub mod semver {
+    use crate::kinds;
+
+    functions! { $ "string::semver" "::", string_semver, string::semver;
+        /// `-1`, `0` or `1` as `left` is lower than, equal to or higher than `right`.
+        compare(left: StrandLike, right: StrandLike) -> kinds::Int [StrandLike.semver_compare];
+        /// The major version.
+        major(version: StrandLike) -> kinds::Int [StrandLike.semver_major];
+        /// The minor version.
+        minor(version: StrandLike) -> kinds::Int [StrandLike.semver_minor];
+        /// The patch version.
+        patch(version: StrandLike) -> kinds::Int [StrandLike.semver_patch];
+    }
+
+    /// Version increments, `string::semver::inc::*`.
+    pub mod inc {
+        use crate::kinds;
+
+        functions! { $ "string::semver::inc" "::", string_semver_inc, string::semver::inc;
+            /// The version with its major part incremented.
+            major(version: StrandLike) -> kinds::String [StrandLike.semver_inc_major];
+            /// The version with its minor part incremented.
+            minor(version: StrandLike) -> kinds::String [StrandLike.semver_inc_minor];
+            /// The version with its patch part incremented.
+            patch(version: StrandLike) -> kinds::String [StrandLike.semver_inc_patch];
+        }
+    }
+
+    /// Version updates, `string::semver::set::*`.
+    pub mod set {
+        use crate::kinds;
+
+        functions! { $ "string::semver::set" "::", string_semver_set, string::semver::set;
+            /// The version with its major part set to `value`.
+            major(version: StrandLike, value: NumberLike) -> kinds::String
+                [StrandLike.semver_set_major];
+            /// The version with its minor part set to `value`.
+            minor(version: StrandLike, value: NumberLike) -> kinds::String
+                [StrandLike.semver_set_minor];
+            /// The version with its patch part set to `value`.
+            patch(version: StrandLike, value: NumberLike) -> kinds::String
+                [StrandLike.semver_set_patch];
+        }
+    }
 }

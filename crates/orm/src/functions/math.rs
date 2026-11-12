@@ -1,456 +1,157 @@
-// Math functions
-// These functions can be used when analysing numeric data and numeric collections.
-//
-// Function	Description
-// math::abs()	Returns the absolute value of a number
-// math::ceil()	Rounds a number up to the next largest integer
-// math::fixed()	Returns a number with the specified number of decimal places
-// math::floor()	Rounds a number down to the next largest integer
-// math::max()	Returns the maximum number in a set of numbers
-// math::mean()	Returns the mean of a set of numbers
-// math::median()	Returns the median of a set of numbers
-// math::min()	Returns the minimum number in a set of numbers
-// math::product()	Returns the product of a set of numbers
-// math::round()	Rounds a number up or down to the nearest integer
-// math::sqrt()	Returns the square root of a number
-// math::sum()	Returns the total sum of a set of numbers
+//! Math functions and constants, `math::*`.
+//!
+//! Results that keep the kind of their input (an `int` stays an `int`) are typed
+//! [`kinds::Number`]; the constants are `float`s SurrealDB evaluates at its own precision.
+//!
+//! ```rust
+//! use umbriel::{*, functions::math};
+//! let score = Field::new("score");
+//! assert_eq!(math::abs!(score.clone()).to_debug_sql(), "math::abs(score)");
+//! assert_eq!(NumberLike::from(score).round().to_debug_sql(), "score.round()");
+//! assert_eq!(math::PI.to_debug_sql(), "math::PI");
+//! ```
 
-use crate::{ArrayLike, Function, NumberLike};
+use crate::{Constant, kinds};
 
-fn create_fn_with_single_num_arg(
-    number: impl Into<NumberLike>,
-    function_name: &'static str,
-) -> Function {
-    Function::new(function_name).arg(number.into())
+functions! { $ "math" "::", math, math;
+    /// The absolute value.
+    abs(number: NumberLike) -> kinds::Number [NumberLike.abs];
+    /// The arccosine, in radians.
+    acos(number: NumberLike) -> kinds::Number [NumberLike.acos];
+    /// The arccotangent, in radians.
+    acot(number: NumberLike) -> kinds::Number [NumberLike.acot];
+    /// The arcsine, in radians.
+    asin(number: NumberLike) -> kinds::Number [NumberLike.asin];
+    /// The arctangent, in radians.
+    atan(number: NumberLike) -> kinds::Number [NumberLike.atan];
+    /// The `count` least numbers.
+    bottom(numbers: ArrayLike, count: NumberLike) -> kinds::Array<kinds::Number>;
+    /// Rounded up to an integer.
+    ceil(number: NumberLike) -> kinds::Number [NumberLike.ceil];
+    /// `number` limited to the range `min` to `max`.
+    clamp(number: NumberLike, min: NumberLike, max: NumberLike) -> kinds::Number;
+    /// The cosine of an angle in radians.
+    cos(number: NumberLike) -> kinds::Number [NumberLike.cos];
+    /// The cotangent of an angle in radians.
+    cot(number: NumberLike) -> kinds::Number [NumberLike.cot];
+    /// Degrees converted to radians.
+    deg2rad(number: NumberLike) -> kinds::Number [NumberLike.deg2rad];
+    /// Rounded to `places` decimal places. SurrealDB has no method form of it.
+    fixed(number: NumberLike, places: NumberLike) -> kinds::Number;
+    /// Rounded down to an integer.
+    floor(number: NumberLike) -> kinds::Number [NumberLike.floor];
+    /// The interquartile range.
+    interquartile(numbers: ArrayLike) -> kinds::Number;
+    /// The linear interpolation from `from` to `to` by `factor`.
+    lerp(from: NumberLike, to: NumberLike, factor: NumberLike) -> kinds::Number;
+    /// The angular linear interpolation, in degrees, from `from` to `to` by `factor`.
+    lerpangle(from: NumberLike, to: NumberLike, factor: NumberLike) -> kinds::Number;
+    /// The natural logarithm.
+    ln(number: NumberLike) -> kinds::Number [NumberLike.ln];
+    /// The logarithm in `base`.
+    log(number: NumberLike, base: NumberLike) -> kinds::Number [NumberLike.log];
+    /// The base-10 logarithm.
+    log10(number: NumberLike) -> kinds::Number [NumberLike.log10];
+    /// The base-2 logarithm.
+    log2(number: NumberLike) -> kinds::Number [NumberLike.log2];
+    /// The greatest number.
+    max(numbers: ArrayLike) -> kinds::Number;
+    /// The mean.
+    mean(numbers: ArrayLike) -> kinds::Number;
+    /// The median.
+    median(numbers: ArrayLike) -> kinds::Number;
+    /// The midhinge.
+    midhinge(numbers: ArrayLike) -> kinds::Number;
+    /// The least number.
+    min(numbers: ArrayLike) -> kinds::Number;
+    /// The most frequent number.
+    mode(numbers: ArrayLike) -> kinds::Number;
+    /// The nearest-rank `percentile`.
+    nearestrank(numbers: ArrayLike, percentile: NumberLike) -> kinds::Number;
+    /// The `percentile`.
+    percentile(numbers: ArrayLike, percentile: NumberLike) -> kinds::Number;
+    /// `number` raised to `power`. SurrealDB has no method form of it.
+    pow(number: NumberLike, power: NumberLike) -> kinds::Number;
+    /// The product.
+    product(numbers: ArrayLike) -> kinds::Number;
+    /// Radians converted to degrees.
+    rad2deg(number: NumberLike) -> kinds::Number [NumberLike.rad2deg];
+    /// Rounded to the nearest integer.
+    round(number: NumberLike) -> kinds::Number [NumberLike.round];
+    /// `-1`, `0` or `1` as the number is negative, zero or positive.
+    sign(number: NumberLike) -> kinds::Number [NumberLike.sign];
+    /// The sine of an angle in radians.
+    sin(number: NumberLike) -> kinds::Number [NumberLike.sin];
+    /// The difference between the greatest and least numbers.
+    spread(numbers: ArrayLike) -> kinds::Number;
+    /// The square root.
+    sqrt(number: NumberLike) -> kinds::Number;
+    /// The standard deviation.
+    stddev(numbers: ArrayLike) -> kinds::Number;
+    /// The sum.
+    sum(numbers: ArrayLike) -> kinds::Number;
+    /// The tangent of an angle in radians.
+    tan(number: NumberLike) -> kinds::Number [NumberLike.tan];
+    /// The `count` greatest numbers.
+    top(numbers: ArrayLike, count: NumberLike) -> kinds::Array<kinds::Number>;
+    /// The trimean.
+    trimean(numbers: ArrayLike) -> kinds::Number;
+    /// The variance.
+    variance(numbers: ArrayLike) -> kinds::Number;
 }
 
-fn create_fn_with_single_array_arg(
-    value: impl Into<ArrayLike>,
-    function_name: &'static str,
-) -> Function {
-    Function::new(function_name).arg(value.into())
-}
-
-/// The math::fixed function returns a number with the specified number of decimal places.
-///
-/// math::fixed(number, number) -> number
-/// The following example shows this function, and its output, when used in a select statement:
-///
-/// SELECT * FROM math::fixed(13.146572, 2);
-/// 13.15
-pub fn fixed_fn(number: impl Into<NumberLike>, decimal_place: impl Into<NumberLike>) -> Function {
-    Function::new("math::fixed")
-        .arg(number.into())
-        .arg(decimal_place.into())
-}
-
-/// The math::fixed function returns a number with the specified number of decimal places.
-/// Also aliased as `math_fixed`
-/// math::fixed(number, number) -> number
-/// The following example shows this function, and its output, when used in a select statement:
-/// SELECT * FROM math::fixed(13.146572, 2);
-/// 13.15
-///
-/// # Arguments
-/// * `number` - The number to be rounded. This can be a number or a field or a parameter.
-/// * `decimal_place` - The number of decimal places to round to. This can be a number or a field or a parameter.
-///
-/// # Example
-/// ```rust
-/// use umbriel::{*, functions::math};
-///
-/// math::fixed!(13.146572, 2);
-/// # let score_field = Field::new("score_field");
-/// # math::fixed!(score_field, 2);
-///
-/// let score_param = Param::new("score_param");
-/// math::fixed!(score_param, 2);
-///
-/// let decimal_place_param = Param::new("decimal_place_param");
-/// math::fixed!(13.146572, decimal_place_param);
-/// ```
-#[macro_export]
-macro_rules! math_fixed {
-    ( $number:expr, $decimal_place:expr ) => {
-        $crate::functions::math::fixed_fn($number, $decimal_place)
+/// Defines math constants: each is the SurrealQL constant, written by name.
+macro_rules! constants {
+    ($($(#[$attr:meta])* $name:ident;)*) => {
+        $(
+            $(#[$attr])*
+            pub const $name: Constant<kinds::Float> =
+                Constant::new(::core::concat!("math::", ::core::stringify!($name)));
+        )*
     };
 }
 
-pub use math_fixed as fixed;
-
-macro_rules! create_test_for_fn_with_single_arg {
-    ($(#[$attr:meta])* => $function_name: expr) => {
-        paste::paste! {
-            // Although, surrealdb technically accepts stringified number also,
-            // I dont see why that should be allowed at the app layer in rust
-            // Obviously, if a field has stringified number that would work
-            // during query execution
-            $(#[$attr])*
-            pub fn [<$function_name _fn>](number: impl Into<NumberLike>) -> Function {
-                create_fn_with_single_num_arg(number, concat!("math::", $function_name))
-            }
-
-            $(#[$attr])*
-            #[macro_export]
-            macro_rules!  [<math_ $function_name>] {
-                ( $value:expr ) => {
-                    $crate::functions::math::[<$function_name _fn>]($value)
-                };
-            }
-
-            pub use [<math_ $function_name>] as [<$function_name>];
-
-
-        }
-    };
+constants! {
+    /// `math::E`, Euler's number.
+    E;
+    /// `math::FRAC_1_PI`, 1/π.
+    FRAC_1_PI;
+    /// `math::FRAC_1_SQRT_2`, 1/√2.
+    FRAC_1_SQRT_2;
+    /// `math::FRAC_2_PI`, 2/π.
+    FRAC_2_PI;
+    /// `math::FRAC_2_SQRT_PI`, 2/√π.
+    FRAC_2_SQRT_PI;
+    /// `math::FRAC_PI_2`, π/2.
+    FRAC_PI_2;
+    /// `math::FRAC_PI_3`, π/3.
+    FRAC_PI_3;
+    /// `math::FRAC_PI_4`, π/4.
+    FRAC_PI_4;
+    /// `math::FRAC_PI_6`, π/6.
+    FRAC_PI_6;
+    /// `math::FRAC_PI_8`, π/8.
+    FRAC_PI_8;
+    /// `math::INFINITY`, positive infinity.
+    INFINITY;
+    /// `math::LN_10`, ln 10.
+    LN_10;
+    /// `math::LN_2`, ln 2.
+    LN_2;
+    /// `math::LOG10_2`, log₁₀ 2.
+    LOG10_2;
+    /// `math::LOG10_E`, log₁₀ e.
+    LOG10_E;
+    /// `math::LOG2_10`, log₂ 10.
+    LOG2_10;
+    /// `math::LOG2_E`, log₂ e.
+    LOG2_E;
+    /// `math::NEG_INFINITY`, negative infinity.
+    NEG_INFINITY;
+    /// `math::PI`, π.
+    PI;
+    /// `math::SQRT_2`, √2.
+    SQRT_2;
+    /// `math::TAU`, τ = 2π.
+    TAU;
 }
-
-create_test_for_fn_with_single_arg!(
-    /// The math::abs function returns the absolute value of a number.
-    /// The function is also aliased as `math_abs!`
-    ///
-    /// math::abs(number) -> number
-    /// The following example shows this function, and its output, when used in a select statement:
-    ///
-    /// SELECT * FROM math::abs(13.746189);
-    /// 13
-    ///
-    /// # Arguments
-    /// * `number` - The number to get the absolute value of. The number can be a positive or negative value. Can be a number or field or param.
-    ///
-    /// # Example
-    /// ```rust
-    /// # use umbriel::{*, functions::math};
-    ///
-    /// math::abs!(45.23);
-    /// # let score_field = Field::new("score_field");
-    /// # math::abs!(score_field);
-    ///
-    /// # let score_param = Param::new("score_param");
-    /// # math::abs!(score_param);
-    /// ```
-=>
-    "abs"
-);
-
-create_test_for_fn_with_single_arg!(
-    /// The math::ceil function rounds a number up to the next largest integer.
-    /// The function is also aliased as `math_ceil!`
-    ///
-    /// math::ceil(number) -> number
-    /// The following example shows this function, and its output, when used in a select statement:
-    ///
-    /// SELECT * FROM math::ceil(13.146572);
-    /// 14
-    ///
-    /// # Arguments
-    /// * `number` - The number to round up. The number can be a positive or negative value. Can be a number or field or param.
-    ///
-    /// # Example
-    /// ```rust
-    /// # use umbriel::{*, functions::math};
-    ///
-    /// math::ceil!(45.23);
-    /// # let score_field = Field::new("score_field");
-    /// # math::ceil!(score_field);
-    ///
-    /// # let score_param = Param::new("score_param");
-    /// # math::ceil!(score_param);
-    /// ```
-=>
-    "ceil"
-);
-
-create_test_for_fn_with_single_arg!(
-    /// The math::floor function rounds a number down to the next largest integer.
-    /// The function is also aliased as `math_floor!`
-    ///
-    /// math::floor(number) -> number
-    /// The following example shows this function, and its output, when used in a select statement:
-    ///
-    /// SELECT * FROM math::floor(13.746189);
-    /// 13
-    ///
-    /// # Arguments
-    /// * `number` - The number to round down. The number can be a positive or negative value. Can be a number or field or param.
-    ///
-    /// # Example
-    /// ```rust
-    /// # use umbriel::{*, functions::math};
-    ///
-    /// math::floor!(45.23);
-    /// # let score_field = Field::new("score_field");
-    /// # math::floor!(score_field);
-    ///
-    /// # let score_param = Param::new("score_param");
-    /// # math::floor!(score_param);
-    /// ```
-=>
-    "floor"
-);
-
-create_test_for_fn_with_single_arg!(
-    /// The math::round function rounds a number up or down to the nearest integer.
-    /// The function is also aliased as `math_round!`
-    ///
-    /// math::round(number) -> number
-    /// The following example shows this function, and its output, when used in a select statement:
-    ///
-    /// SELECT * FROM math::round(13.53124);
-    /// 14
-    ///
-    /// # Arguments
-    /// * `number` - The number to round. The number can be a positive or negative value. Can be a number or field or param.
-    ///
-    /// # Example
-    /// ```rust
-    /// # use umbriel::{*, functions::math};
-    ///
-    /// math::round!(45.23);
-    /// # let score_field = Field::new("score_field");
-    /// # math::round!(score_field);
-    ///
-    /// # let score_param = Param::new("score_param");
-    /// # math::round!(score_param);
-    /// ```
-=>
-    "round"
-);
-
-create_test_for_fn_with_single_arg!(
-    /// The math::sqrt function returns the square root of a number.
-    ///
-    /// math::sqrt(number) -> number
-    /// The following example shows this function, and its output, when used in a select statement:
-    ///
-    /// SELECT * FROM math::sqrt(15);
-    /// 3.872983346207417
-    ///
-    /// # Arguments
-    /// * `number` - The number to get the square root of. The number can be a positive or negative value. Can be a number or field or param.
-    ///
-    /// # Example
-    /// ```rust
-    /// # use umbriel::{*, functions::math};
-    ///
-    /// math::sqrt!(45.23);
-    /// # let score_field = Field::new("score_field");
-    /// # math::sqrt!(score_field);
-    ///
-    /// # let score_param = Param::new("score_param");
-    /// # math::sqrt!(score_param);
-    /// ```
-=>
-    "sqrt"
-);
-
-macro_rules! create_test_for_fn_with_single_array_arg {
-    ($(#[$attr:meta])* => $function_name: expr) => {
-        paste::paste! {
-            $(#[$attr])*
-            pub fn [<$function_name _fn>](number: impl Into<ArrayLike>) -> Function {
-                create_fn_with_single_array_arg(number, concat!("math::", $function_name))
-            }
-
-            $(#[$attr])*
-            #[macro_export]
-            macro_rules!  [<math_ $function_name>] {
-                ( $value:expr ) => {
-                    $crate::functions::math::[<$function_name _fn>]($value)
-                };
-            }
-            pub use [<math_ $function_name>] as [<$function_name>];
-        }
-    };
-}
-
-create_test_for_fn_with_single_array_arg!(
-/// The math::mean function returns the average of a set of numbers.
-/// This function is aliased as `math_mean!`.
-/// math::mean(number) -> number
-/// The following example shows this function, and its output, when used in a select statement:
-/// SELECT * FROM math::mean([26.164, 13.746189, 23, 16.4, 41.42]);
-/// 24.432838
-///
-/// # Arguments
-/// * `number` - The number to be averaged. Can be an array of numbers or field or parameter
-/// representing an array of numbers.
-///
-/// # Example
-/// ```rust
-/// # use umbriel::{*, functions::math};
-///
-/// math::mean!(vec![1, 2, 3, 4, 5]);
-/// math::mean!(arr![1, 2, 3, 4, 5]);
-/// math::mean!(array![1, 2, 3, 4, 5]);
-/// let scores_field = Field::new("scores_field");
-/// math::mean!(scores_field);
-///
-/// let scores_param = Param::new("scores_param");
-/// math::mean!(scores_param);
-/// ```
-=> "mean"
-);
-
-create_test_for_fn_with_single_array_arg!(
-/// The math::median function returns the median of a set of numbers.
-/// This function is aliased as `math_median!`.
-/// math::median(number) -> number
-/// The following example shows this function, and its output, when used in a select statement:
-/// SELECT * FROM math::median([26.164, 13.746189, 23, 16.4, 41.42]);
-/// 23
-/// # Arguments
-/// * `number` - The number from which to calculate the median. Can be an array of numbers or field or parameter
-/// representing an array of numbers.
-///
-/// # Example
-/// ```rust
-/// # use umbriel::{*, functions::math};
-///
-/// math::median!(vec![1, 2, 3, 4, 5]);
-/// math::median!(arr![1, 2, 3, 4, 5]);
-/// math::median!(array![1, 2, 3, 4, 5]);
-/// let scores_field = Field::new("scores_field");
-/// math::median!(scores_field);
-/// let scores_param = Param::new("scores_param");
-/// math::median!(scores_param);
-/// ```
-=> "median"
-);
-
-create_test_for_fn_with_single_array_arg!(
-/// The math::mode function returns the mode of a set of numbers.
-/// This function is aliased as `math_mode!`.
-/// math::mode(number) -> number
-/// The following example shows this function, and its output, when used in a select statement:
-/// SELECT * FROM math::mode([26.164, 13.746189, 23, 16.4, 41.42]);
-/// 26.164
-///
-/// # Arguments
-/// * `number` - The number from which to calculate the mode. Can be an array of numbers or field or parameter
-/// representing an array of numbers.
-///
-/// # Example
-/// ```rust
-/// # use umbriel::{*, functions::math};
-///
-/// math::mode!(vec![1, 2, 3, 4, 5]);
-/// math::mode!(arr![1, 2, 3, 4, 5]);
-/// let scores_field = Field::new("scores_field");
-/// math::mode!(scores_field);
-/// let scores_param = Param::new("scores_param");
-/// math::mode!(scores_param);
-/// ```
-=> "mode"
-);
-
-create_test_for_fn_with_single_array_arg!(
-/// The math::min function returns the minimum number in a set of numbers.
-/// This function is aliased as `math_min!`.
-/// math::min(array) -> number
-/// The following example shows this function, and its output, when used in a select statement:
-/// SELECT * FROM math::min([26.164, 13.746189, 23, 16.4, 41.42]);
-/// 13.746189
-///
-/// # Arguments
-/// * `array` - The array of numbers from which to calculate the minimum. Can be an array of numbers or field or parameter
-/// representing an array of numbers.
-///
-/// # Example
-/// ```rust
-/// # use umbriel::{*, functions::math};
-///
-/// math::min!(vec![1, 2, 3, 4, 5]);
-/// math::min!(arr![1, 2, 3, 4, 5]);
-/// let scores_field = Field::new("scores_field");
-/// math::min!(scores_field);
-/// let scores_param = Param::new("scores_param");
-/// math::min!(scores_param);
-/// ```
-=> "min"
-);
-
-create_test_for_fn_with_single_array_arg!(
-/// The math::max function returns the minimum number in a set of numbers.
-/// This function is aliased as `math_max!`.
-/// math::max(array) -> number
-/// The following example shows this function, and its output, when used in a select statement:
-/// SELECT * FROM math::max([26.164, 13.746189, 23, 16.4, 41.42]);
-/// 13.746189
-///
-/// # Arguments
-/// * `array` - The array of numbers from which to calculate the maximum. Can be an array of numbers or field or parameter
-/// representing an array of numbers.
-///
-/// # Example
-/// ```rust
-/// # use umbriel::{*, functions::math};
-///
-/// math::max!(vec![1, 2, 3, 4, 5]);
-/// math::max!(arr![1, 2, 3, 4, 5]);
-/// let scores_field = Field::new("scores_field");
-/// math::max!(scores_field);
-/// let scores_param = Param::new("scores_param");
-/// math::max!(scores_param);
-/// ```
-=> "max"
-);
-
-create_test_for_fn_with_single_array_arg!(
-/// The math::product function returns the product of a set of numbers.
-/// This function is aliased as `math_product!`.
-/// math::product(array) -> number
-/// The following example shows this function, and its output, when used in a select statement:
-/// SELECT * FROM math::product([26.164, 13.746189, 23, 16.4, 41.42]);
-/// 5619119.004884841504
-///
-/// # Arguments
-/// * `array` - The array of numbers from which to calculate the product. Can be an array of numbers or field or parameter
-/// representing an array of numbers.
-///
-/// # Example
-/// ```rust
-/// # use umbriel::{*, functions::math};
-///
-/// math::product!(vec![1, 2, 3, 4, 5]);
-/// math::product!(arr![1, 2, 3, 4, 5]);
-/// let scores_field = Field::new("scores_field");
-/// math::product!(scores_field);
-/// let scores_param = Param::new("scores_param");
-/// math::product!(scores_param);
-/// ```
-=> "product"
-);
-
-// The math::sum function returns the total sum of a set of numbers.
-//
-// math::sum(array) -> number
-// The following example shows this function, and its output, when used in a select statement:
-//
-// SELECT * FROM math::sum([26.164, 13.746189, 23, 16.4, 41.42]);
-// 120.730189
-create_test_for_fn_with_single_array_arg!(
-/// The math::sum function returns the total sum of a set of numbers.
-/// This function is aliased as `math_sum!`.
-/// math::sum(array) -> number
-/// The following example shows this function, and its output, when used in a select statement:
-/// SELECT * FROM math::sum([26.164, 13.746189, 23, 16.4, 41.42]);
-/// 120.730189
-///
-/// # Arguments
-/// * `array` - The array of numbers from which to calculate the sum. Can be an array of numbers or field or parameter
-/// representing an array of numbers.
-///
-/// # Example
-/// ```rust
-/// # use umbriel::{*, functions::math};
-///
-/// math::sum!(vec![1, 2, 3, 4, 5]);
-/// math::sum!(arr![1, 2, 3, 4, 5]);
-/// let scores_field = Field::new("scores_field");
-/// math::sum!(scores_field);
-/// let scores_param = Param::new("scores_param");
-/// math::sum!(scores_param);
-/// ```
-=> "sum"
-);

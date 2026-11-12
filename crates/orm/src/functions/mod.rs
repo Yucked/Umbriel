@@ -1,65 +1,98 @@
-//! SurrealDB comes with a large number of in-built functions for checking, manipulating, and
-//! working with many different types of data. These functions are grouped into a number of
-//! different packages, which can be seen below.
+//! SurrealDB's built-in functions, grouped by namespace as SurrealQL groups them.
 //!
-//! Inspect each module to dive deeper into the examples and documentation for each function.
+//! Each function `ns::name` has three forms, all rendering the same call:
+//! - `ns::name!(args)`, a macro that also takes its optional arguments left out;
+//! - `ns::name_fn(args)`, the function the macro calls;
+//! - where SurrealDB 3.3.4 dispatches the function as a method, `receiver.name(args)` on the
+//!   receiver's typed expression, e.g. `StrandLike::from(name).len()` renders `name.len()`.
 //!
-//! [See the SurrealDB documentation for more information](https://surrealdb.com/docs/functions/)
-//! about the different types of functions that are available.
+//! Every call is a [`Function<K>`](crate::Function) typed by its documented result kind (see
+//! [`kinds`](crate::kinds)). The namespaces `api`, `file`, `search`, `sequence` and `vector`
+//! belong to other work; `search` and `vector` keep their earlier wrappers.
+//!
+//! [See the SurrealDB documentation](https://surrealdb.com/docs/surrealql/functions/database)
+//! for what each function does.
 
-/// This module contains the different types of functions for working with arrays.
+#[macro_use]
+mod catalogue;
+
+/// Array functions.
 pub mod array;
 
-// includes the count function
+/// Bytes functions.
+pub mod bytes;
+
+// `count()`, re-exported here.
 mod count;
 pub use count::*;
 
-/// This module contains the different types of functions for cryptographical encryption and
-/// decryption.
+/// Hashing, password hashing and comparison functions.
 pub mod crypto;
 
-/// This module contains the different types of functions for working with geo data.
+/// Duration functions and the `duration::MAX` constant.
+pub mod duration;
+
+/// Encoding and decoding functions.
+pub mod encoding;
+
+/// `eval::*` functions.
+pub mod eval;
+
+/// Geospatial functions.
 pub mod geo;
 
-/// This module contains the different types of functions for working with HTTP requests.
+/// HTTP request functions.
 pub mod http;
 
-/// This module contains the different types of functions for working with mathematical
-/// operations.
+/// Math functions and constants.
 pub mod math;
 
-/// This module contains the different types of functions for parsing data.
+/// SurrealML model calls, `ml::name<version>(…)`.
+pub mod ml;
+
+/// Surrealism module calls, `mod::name(…)`.
+pub mod module;
+
+/// Object functions.
+pub mod object;
+
+/// Parsing functions.
 pub mod parse;
 
-/// This module contains the different types of functions for generating random data.
+/// Random value functions.
 pub mod rand;
 pub use self::rand::rand;
 
-/// This module contains the scrypting functions.
+/// Embedded JavaScript functions.
 mod script;
 pub use script::*;
 
-/// This module contains the different types of functions for working with session data.
+/// Session functions.
 pub mod session;
 
-/// This module contains the different types of functions for working with sleep operations.
+/// Set functions.
+pub mod set;
+
+/// `sleep()`.
 pub mod sleep;
 
-/// This module contains the different types of functions for working with string data.
+/// String functions.
 pub mod string;
 
-/// This module contains the different types of functions for working with time data.
+/// Time functions and constants.
 pub mod time;
 
-/// This module contains the different types of functions for type conversion.
+/// Type checking and conversion functions.
 pub mod type_;
 
-/// This module contains the different types of functions for deriving metadata from
-/// surrealdb record id.
+/// Record id functions.
 pub mod record;
 
-/// This module contains the different types of functions for working with vectors.
+/// Value functions.
+pub mod value;
+
+/// Vector functions.
 pub mod vector;
 
-/// This module contains the different types of functions for working with search.
+/// Search functions.
 pub mod search;
