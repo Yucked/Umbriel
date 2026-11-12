@@ -71,6 +71,7 @@ impl FieldTypeParser {
             Kind::Record(_) => quote!(#crate_name::RecordIdLike),
             Kind::Array(..) => quote!(#crate_name::ArrayLike),
             Kind::Set(..) => quote!(#crate_name::SetLike),
+            Kind::Bytes => quote!(#crate_name::BytesLike),
             Kind::Geometry(_) => quote!(#crate_name::GeometryLike),
             Kind::Table(_) => quote!(#crate_name::TableLike),
             _ => quote!(#crate_name::ValueLike),
