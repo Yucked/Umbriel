@@ -26,6 +26,7 @@ use surrealdb::{
 use crate::{
     Aliasable, All, Conditional, DatetimeLike, DurationLike, Field, Filter, Function, Model,
     NumberLike, Projections, RecordId, RecordRange, Render, Renderer, Result, ValueLike,
+    kinds::KindOf,
     traits::statements::{fetch_projections, link_projections},
 };
 
@@ -364,8 +365,8 @@ impl<T: Into<Subquery>> From<T> for TargettablesForSelect {
     }
 }
 
-impl From<Function> for TargettablesForSelect {
-    fn from(value: Function) -> Self {
+impl<K: KindOf> From<Function<K>> for TargettablesForSelect {
+    fn from(value: Function<K>) -> Self {
         Self::one(value)
     }
 }
@@ -498,14 +499,14 @@ impl From<Vec<Field>> for Selectables {
     }
 }
 
-impl From<Function> for Selectables {
-    fn from(value: Function) -> Self {
+impl<K: KindOf> From<Function<K>> for Selectables {
+    fn from(value: Function<K>) -> Self {
         Self(vec![value.into()])
     }
 }
 
-impl From<&Function> for Selectables {
-    fn from(value: &Function) -> Self {
+impl<K: KindOf> From<&Function<K>> for Selectables {
+    fn from(value: &Function<K>) -> Self {
         Self(vec![value.clone().into()])
     }
 }

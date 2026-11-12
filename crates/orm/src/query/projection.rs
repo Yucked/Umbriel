@@ -1,4 +1,4 @@
-use crate::{Alias, Field, Function, Param, Render, Renderer, ValueLike};
+use crate::{Alias, Field, Function, Param, Render, Renderer, ValueLike, kinds::KindOf};
 
 /// Used to represent a list of projections to access fields of a table or
 /// those of foreign tables and can even include filters.
@@ -62,7 +62,25 @@ macro_rules! projections_from {
     };
 }
 
-projections_from!(Field, Alias, Function, Param);
+projections_from!(Field, Alias, Param);
+
+impl<K: KindOf> From<Function<K>> for Projections {
+    fn from(value: Function<K>) -> Self {
+        Self(vec![value.into()])
+    }
+}
+
+impl<K: KindOf> From<Vec<Function<K>>> for Projections {
+    fn from(value: Vec<Function<K>>) -> Self {
+        Self(value.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<K: KindOf> From<&[Function<K>]> for Projections {
+    fn from(value: &[Function<K>]) -> Self {
+        Self(value.iter().cloned().map(Into::into).collect())
+    }
+}
 
 impl From<&Field> for Projections {
     fn from(value: &Field) -> Self {

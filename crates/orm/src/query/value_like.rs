@@ -3,6 +3,7 @@ use surrealdb::types::{SurrealValue, Table, Value};
 use crate::{
     Alias, All, E, Edge, Field, Filter, Fragment, Function, Model, NONE, NULL, Node, Operation,
     Param, Render, Renderer, Setter,
+    kinds::KindOf,
     statements::{
         Cardinality, CreateStatement, DeleteStatement, IfElseStatement, InsertStatement,
         LetStatement, RelateOrUpdateStatement, RelateStatement, ReturnMode, SelectStatement,
@@ -61,6 +62,23 @@ impl ValueLike {
             out.push_str("(").push(operation).push_str(")");
         } else {
             self.render(out);
+        }
+    }
+
+    /// Writes the value as the receiver of a method call, `receiver.method()`: a field or
+    /// parameter as it is, anything else parenthesized, since a literal, a prefix operator or a
+    /// cast would otherwise take the method call as its own operand (`-5.abs()` is `-(5.abs())`).
+    pub(crate) fn render_receiver(&self, out: &mut Renderer) {
+        match &self.0 {
+            Expr::Field(field) => {
+                out.push(field);
+            }
+            Expr::Param(param) => {
+                out.push(param);
+            }
+            _ => {
+                out.push_str("(").push(self).push_str(")");
+            }
         }
     }
 }
@@ -134,7 +152,13 @@ macro_rules! value_like_from_node {
     };
 }
 
-value_like_from_node!(Alias, Filter, Function);
+value_like_from_node!(Alias, Filter);
+
+impl<K: KindOf> From<Function<K>> for ValueLike {
+    fn from(value: Function<K>) -> Self {
+        Self::new(value)
+    }
+}
 
 impl From<Subquery> for ValueLike {
     fn from(value: Subquery) -> Self {
