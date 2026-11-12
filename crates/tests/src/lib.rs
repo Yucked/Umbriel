@@ -12,7 +12,70 @@ use surrealdb::{
     engine::local::{Db, Mem},
     types::{SurrealValue, Value},
 };
-use umbriel::{Model, Raw, Render, Runnable};
+use umbriel::{Function, Model, Raw, Render, Runnable, kinds::KindOf};
+
+/// Asserts a call's SurrealQL and that SurrealDB's parser accepts it.
+#[track_caller]
+pub fn call<K: KindOf>(function: &Function<K>, expected: &str) {
+    pretty_assertions::assert_eq!(function.to_debug_sql(), expected);
+    assert_parses(&format!("RETURN {expected};"));
+}
+
+/// Asserts that SurrealDB evaluates the call to a value equal to the SurrealQL `expected`.
+pub async fn holds<K: KindOf>(db: &Surreal<Db>, function: &Function<K>, expected: &str) {
+    let call = function.to_debug_sql();
+    let equal: bool = read(db, &format!("RETURN {call} = {expected};")).await;
+    if !equal {
+        let actual: Value = read(db, &format!("RETURN {call};")).await;
+        panic!("`{call}` returned {actual:?}, expected {expected}");
+    }
+}
+
+/// Asserts that SurrealDB evaluates the call to a value of the given type, e.g. `float`.
+pub async fn is_a<K: KindOf>(db: &Surreal<Db>, function: &Function<K>, kind: &str) {
+    let call = function.to_debug_sql();
+    let matches: bool = read(db, &format!("RETURN type::is_{kind}({call});")).await;
+    assert!(matches, "`{call}` is not a {kind}");
+}
+
+/// The error SurrealDB gives for the call, as text. Panics when it succeeds.
+pub async fn call_failure<K: KindOf>(db: &Surreal<Db>, function: &Function<K>) -> String {
+    failure(db, &format!("RETURN {};", function.to_debug_sql())).await
+}
+
+/// Runs the call with its values bound, through [`Function::run`], and decodes the result.
+pub async fn bound<T: SurrealValue, K: KindOf>(db: &Surreal<Db>, function: &Function<K>) -> Option<T> {
+    function.run(db.clone()).await.expect("ran")
+}
+
+/// 2021-11-01T08:30:17Z, a Monday.
+pub fn datetime() -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::from_timestamp(1_635_755_417, 0).expect("valid timestamp")
+}
+
+/// `holds` for each `(call, expected)` pair, which may be calls of different kinds.
+#[macro_export]
+macro_rules! holds_all {
+    ($db:expr, [$(($function:expr, $expected:expr $(,)?)),* $(,)?]) => {{
+        $($crate::holds($db, &$function, $expected).await;)*
+    }};
+}
+
+/// `is_a` for each `(call, kind)` pair, which may be calls of different kinds.
+#[macro_export]
+macro_rules! is_each {
+    ($db:expr, [$(($function:expr, $kind:expr $(,)?)),* $(,)?]) => {{
+        $($crate::is_a($db, &$function, $kind).await;)*
+    }};
+}
+
+/// `call` for each `(call, expected)` pair, which may be calls of different kinds.
+#[macro_export]
+macro_rules! calls {
+    ($(($function:expr, $expected:expr $(,)?)),* $(,)?) => {{
+        $($crate::call(&$function, $expected);)*
+    }};
+}
 
 /// Definitions joined one per line.
 pub fn joined(definitions: &[Raw]) -> String {
