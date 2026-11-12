@@ -9,10 +9,11 @@
 mod errors;
 mod execution;
 
-/// Contains math constants and all the casting functions.
+/// Casts and SurrealQL constants.
 mod data_model;
 pub mod functions;
 mod helpers;
+pub mod kinds;
 mod operators_macros;
 mod query;
 mod render;
@@ -25,6 +26,7 @@ pub mod validators;
 
 pub use data_model::*;
 pub use errors::*;
+pub use functions::count;
 pub use helpers::*;
 pub use query::*;
 pub use render::{Fragment, GENERATED_PARAM_PREFIX, Query, Render, Renderer};
