@@ -1,9 +1,11 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use surrealdb::types::{self, SurrealValue};
 
 use crate::{
-    Edge, Field, Function, Model, Node, Operation, Param, RecordId, Render, Renderer, ValueLike,
+    Cast, Closure, Constant, Edge, Field, Function, Model, Node, Operation, Param, RecordId,
+    Render, Renderer, ValueLike,
+    kinds::Enters,
     statements::{
         Cardinality, CreateStatement, DeleteStatement, IfElseStatement, InsertStatement,
         LetStatement, RelateOrUpdateStatement, RelateStatement, ReturnMode, SelectStatement,
@@ -35,8 +37,9 @@ impl Render for NONE {
 }
 
 /// Defines an expression type restricted to one kind of value: the listed Rust types bind as
-/// values, and fields, parameters, operations, functions and subqueries stand for a value of
-/// that kind.
+/// values, and fields, parameters, operations and subqueries stand for a value of that kind. A
+/// function call, cast or constant enters it only when its kind marker does (see
+/// [`kinds`](crate::kinds)).
 macro_rules! typed_expression {
     ($(#[$attr:meta])* $name:ident: $($value:ty),* $(,)?) => {
         $(#[$attr])*
@@ -64,7 +67,25 @@ macro_rules! typed_expression {
         )*
 
         typed_expression!(@expressions $name: Field, &Field, Param, &Param, LetStatement, &LetStatement,
-            Operation, Function, Subquery, IfElseStatement);
+            Operation, Subquery, IfElseStatement);
+
+        impl<K: Enters<$name>> From<Function<K>> for $name {
+            fn from(value: Function<K>) -> Self {
+                Self(value.into())
+            }
+        }
+
+        impl<K: Enters<$name>> From<Cast<K>> for $name {
+            fn from(value: Cast<K>) -> Self {
+                Self(value.into())
+            }
+        }
+
+        impl<K: Enters<$name>> From<Constant<K>> for $name {
+            fn from(value: Constant<K>) -> Self {
+                Self(value.into())
+            }
+        }
 
         impl<O: 'static, C: Cardinality> From<SelectStatement<O, C>> for $name {
             fn from(statement: SelectStatement<O, C>) -> Self {
@@ -144,8 +165,26 @@ typed_expression!(
 );
 
 typed_expression!(
-    /// An array, or an expression standing for one.
+    /// An array, or an expression standing for one. Sets are not arrays: see [`SetLike`].
     ArrayLike: types::Array
+);
+
+typed_expression!(
+    /// A set, or an expression standing for one. `HashSet` and `BTreeSet` bind as sets, not as
+    /// the arrays the SDK writes them as; arrays and `Vec`s are not sets.
+    SetLike: types::Set
+);
+
+typed_expression!(
+    /// Bytes, or an expression standing for them. `Vec<u8>` and `&[u8]` bind as bytes here, where
+    /// they would otherwise be `array<int>`.
+    BytesLike: types::Bytes
+);
+
+typed_expression!(
+    /// A closure, or an expression standing for one: a parameter holding it, or a call whose
+    /// result is untyped.
+    ClosureLike:
 );
 
 impl From<geo::Geometry<f64>> for GeometryLike {
@@ -211,58 +250,38 @@ impl Render for ArrayLiteral {
     }
 }
 
-/// Represents the surrealdb Set value, or field, param which can all be used
-pub type SetLike = ArrayLike;
+/// The set of `values`, converted element by element.
+fn set_of<T: SurrealValue>(values: impl IntoIterator<Item = T>) -> SetLike {
+    let values: Vec<types::Value> = values.into_iter().map(SurrealValue::into_value).collect();
+    SetLike(ValueLike::value(types::Set::from(values)))
+}
 
-/// A comma-separated list of function arguments.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ArgsList(Vec<ValueLike>);
-
-impl Render for ArgsList {
-    fn render(&self, out: &mut Renderer) {
-        out.push(&self.0);
+impl<T: SurrealValue> From<HashSet<T>> for SetLike {
+    fn from(values: HashSet<T>) -> Self {
+        set_of(values)
     }
 }
 
-/// The arguments are written in place, as a function's trailing arguments.
-impl From<ArgsList> for ValueLike {
-    fn from(args: ArgsList) -> Self {
-        ValueLike::new(args)
+impl<T: SurrealValue> From<BTreeSet<T>> for SetLike {
+    fn from(values: BTreeSet<T>) -> Self {
+        set_of(values)
     }
 }
 
-impl<T: SurrealValue> From<Vec<T>> for ArgsList {
-    fn from(values: Vec<T>) -> Self {
-        Self(values.into_iter().map(ValueLike::value).collect())
+impl From<Vec<u8>> for BytesLike {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(ValueLike::value(types::Bytes::from(bytes)))
     }
 }
 
-impl<const N: usize, T: SurrealValue + Clone> From<&[T; N]> for ArgsList {
-    fn from(values: &[T; N]) -> Self {
-        values.to_vec().into()
+impl From<&[u8]> for BytesLike {
+    fn from(bytes: &[u8]) -> Self {
+        Self(ValueLike::value(types::Bytes::from(bytes.to_vec())))
     }
 }
 
-impl From<Vec<ValueLike>> for ArgsList {
-    fn from(values: Vec<ValueLike>) -> Self {
-        Self(values)
-    }
-}
-
-impl From<Field> for ArgsList {
-    fn from(value: Field) -> Self {
-        Self(vec![value.into()])
-    }
-}
-
-impl From<&Field> for ArgsList {
-    fn from(value: &Field) -> Self {
-        Self(vec![value.into()])
-    }
-}
-
-impl From<Param> for ArgsList {
-    fn from(value: Param) -> Self {
-        Self(vec![value.into()])
+impl From<Closure> for ClosureLike {
+    fn from(closure: Closure) -> Self {
+        Self(closure.into())
     }
 }
