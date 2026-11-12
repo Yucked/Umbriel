@@ -232,3 +232,40 @@ async fn runtime_type_failures() {
     let error = call_failure(&db, &time::set_month!(datetime(), 13)).await;
     assert!(error.contains("month 13"), "{error}");
 }
+
+/// Every mapped method runs on a datetime and evaluates like its function form.
+#[tokio::test]
+async fn methods_run() {
+    let db = db().await;
+    let at = datetime();
+    let d = || DatetimeLike::from(datetime());
+    let hour = || Duration::from_secs(3600);
+    same_all!(&db, [
+        (d().ceil(hour()), time::ceil!(at, hour())),
+        (d().day(), time::day!(at)),
+        (d().floor(hour()), time::floor!(at, hour())),
+        (d().format("%Y-%m-%d"), time::format_!(at, "%Y-%m-%d")),
+        (d().group("month"), time::group!(at, "month")),
+        (d().hour(), time::hour!(at)),
+        (d().is_leap_year(), time::is_leap_year!(at)),
+        (d().micros(), time::micros!(at)),
+        (d().millis(), time::millis!(at)),
+        (d().minute(), time::minute!(at)),
+        (d().month(), time::month!(at)),
+        (d().nano(), time::nano!(at)),
+        (d().round(hour()), time::round!(at, hour())),
+        (d().second(), time::second!(at)),
+        (d().set_day(2), time::set_day!(at, 2)),
+        (d().set_hour(9), time::set_hour!(at, 9)),
+        (d().set_minute(0), time::set_minute!(at, 0)),
+        (d().set_month(1), time::set_month!(at, 1)),
+        (d().set_nanosecond(5), time::set_nanosecond!(at, 5)),
+        (d().set_second(0), time::set_second!(at, 0)),
+        (d().set_year(2020), time::set_year!(at, 2020)),
+        (d().unix(), time::unix!(at)),
+        (d().wday(), time::wday!(at)),
+        (d().week(), time::week!(at)),
+        (d().yday(), time::yday!(at)),
+        (d().year(), time::year!(at)),
+    ]);
+}

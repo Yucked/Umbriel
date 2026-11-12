@@ -173,3 +173,40 @@ async fn runtime_type_failures() {
     let error = failure(&db, "RETURN set::len('text');").await;
     assert!(error.contains("set::len"), "{error}");
 }
+
+/// Every mapped method runs on a set and evaluates like its function form.
+#[tokio::test]
+async fn methods_run() {
+    let db = db().await;
+    let s = || SetLike::from(numbers());
+    let other = || BTreeSet::from([3, 4]);
+    let sum = || closure(["a", "b"], |[a, b]| a.add(b));
+    let big = || closure(["v"], |[v]| v.gt(1));
+    let double = || closure(["v"], |[v]| v.multiply(2));
+    same_all!(&db, [
+        (s().add(4), set::add!(numbers(), 4)),
+        (s().all(None::<i64>), set::all!(numbers())),
+        (s().any(Some(2)), set::any!(numbers(), 2)),
+        (s().at(1), set::at!(numbers(), 1)),
+        (s().complement(other()), set::complement!(numbers(), other())),
+        (s().contains(2), set::contains!(numbers(), 2)),
+        (s().difference(other()), set::difference!(numbers(), other())),
+        (s().filter(big()), set::filter!(numbers(), big())),
+        (s().find(big()), set::find!(numbers(), big())),
+        (s().first(), set::first!(numbers())),
+        (s().flatten(), set::flatten!(numbers())),
+        (s().fold(10, sum()), set::fold!(numbers(), 10, sum())),
+        (s().intersect(other()), set::intersect!(numbers(), other())),
+        (s().is_empty(), set::is_empty!(numbers())),
+        (s().join("-"), set::join!(numbers(), "-")),
+        (s().last(), set::last!(numbers())),
+        (s().len(), set::len!(numbers())),
+        (s().map(double()), set::map!(numbers(), double())),
+        (s().max(), set::max!(numbers())),
+        (s().min(), set::min!(numbers())),
+        (s().reduce(sum()), set::reduce!(numbers(), sum())),
+        (s().remove(2), set::remove!(numbers(), 2)),
+        (s().slice(Some(1), Some(3)), set::slice!(numbers(), 1, 3)),
+        (s().union(other()), set::union!(numbers(), other())),
+    ]);
+}

@@ -172,3 +172,31 @@ async fn runtime_type_failures() {
     .await;
     assert!(error.contains("math::abs"), "{error}");
 }
+
+/// Every mapped method runs on a number and evaluates like its function form.
+#[tokio::test]
+async fn methods_run() {
+    let db = db().await;
+    let x = || NumberLike::from(0.5);
+    same_all!(&db, [
+        (NumberLike::from(-5).abs(), math::abs!(-5)),
+        (x().acos(), math::acos!(0.5)),
+        (NumberLike::from(2).acot(), math::acot!(2)),
+        (x().asin(), math::asin!(0.5)),
+        (x().atan(), math::atan!(0.5)),
+        (NumberLike::from(1.2).ceil(), math::ceil!(1.2)),
+        (x().cos(), math::cos!(0.5)),
+        (x().cot(), math::cot!(0.5)),
+        (NumberLike::from(180).deg2rad(), math::deg2rad!(180)),
+        (NumberLike::from(1.8).floor(), math::floor!(1.8)),
+        (NumberLike::from(2).ln(), math::ln!(2)),
+        (NumberLike::from(8).log(2), math::log!(8, 2)),
+        (NumberLike::from(100).log10(), math::log10!(100)),
+        (NumberLike::from(8).log2(), math::log2!(8)),
+        (NumberLike::from(1).rad2deg(), math::rad2deg!(1)),
+        (NumberLike::from(1.5).round(), math::round!(1.5)),
+        (NumberLike::from(-3).sign(), math::sign!(-3)),
+        (x().sin(), math::sin!(0.5)),
+        (x().tan(), math::tan!(0.5)),
+    ]);
+}

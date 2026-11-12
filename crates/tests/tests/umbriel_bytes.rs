@@ -97,3 +97,15 @@ async fn runtime_type_failures() {
     let error = call_failure(&db, &encoding::base64::decode!("not base64!")).await;
     assert!(!error.is_empty());
 }
+
+/// The mapped method runs on bytes and evaluates like its function form.
+#[tokio::test]
+async fn methods_run() {
+    let db = db().await;
+    same(
+        &db,
+        &BytesLike::from(vec![1u8, 2, 3]).len(),
+        &bytes::len!(vec![1u8, 2, 3]),
+    )
+    .await;
+}

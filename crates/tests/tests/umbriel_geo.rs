@@ -110,3 +110,24 @@ async fn runtime_type_failures() {
     )
     .await;
 }
+
+/// Every mapped method runs on a geometry and evaluates like its function form.
+#[tokio::test]
+async fn methods_run() {
+    let db = db().await;
+    let london = geo::Point::new(-0.118092, 51.509865);
+    let paris = geo::Point::new(2.352222, 48.856614);
+    let g = || GeometryLike::from(square());
+    let p = || GeometryLike::from(london);
+    same_all!(&db, [
+        (g().area(), geo_fn::area!(square())),
+        (p().bearing(paris), geo_fn::bearing!(london, paris)),
+        (g().centroid(), geo_fn::centroid!(square())),
+        (p().distance(paris), geo_fn::distance!(london, paris)),
+        (g().is_valid(), geo_fn::is_valid!(square())),
+        (p().hash_encode(Some(5)), geo_fn::hash::encode!(london, 5)),
+    ]);
+    // `geo::hash::decode` takes a geohash, so its function form has no geometry argument to
+    // compare with; on a geometry the method is `NONE` (`runtime_type_failures`).
+    holds(&db, &p().hash_decode(), "NONE").await;
+}

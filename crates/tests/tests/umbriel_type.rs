@@ -270,3 +270,62 @@ async fn runtime_type_failures() {
         "{error}"
     );
 }
+
+/// Every mapped method runs on a value and evaluates like its function form. Checks run on a
+/// number: on a string, SurrealDB dispatches `.is_datetime()`, `.is_uuid()` and `.is_record()` to
+/// the `string::is_*` functions (`string_receivers_dispatch_to_string_checks`).
+#[tokio::test]
+async fn methods_run() {
+    let db = db().await;
+    let v = |value: ValueLike| value;
+    let one = || ValueLike::from(1);
+    let set = || Field::raw("(<set> [2, 1])");
+    let range = || Field::raw("(1..3)");
+    let uuid = "018a6680-bef9-701b-9025-e1754f296a0f";
+    let point = geo::Point::new(1.0, 2.0);
+    same_all!(&db, [
+        (v(set().into()).to_array(), type_::array!(set())),
+        (v("true".into()).to_bool(), type_::bool!("true")),
+        (v("hi".into()).to_bytes(), type_::bytes!("hi")),
+        (v("2021-11-01T08:30:17Z".into()).to_datetime(), type_::datetime!("2021-11-01T08:30:17Z")),
+        (v("1.5".into()).to_decimal(), type_::decimal!("1.5")),
+        (v("1h".into()).to_duration(), type_::duration!("1h")),
+        (v("1.5".into()).to_float(), type_::float!("1.5")),
+        (v(point.into()).to_geometry(), type_::geometry!(point)),
+        (v("5".into()).to_int(), type_::int!("5")),
+        (v("5".into()).to_number(), type_::number!("5")),
+        (v(1.5.into()).type_of(), type_::of!(1.5)),
+        (v(vec![1, 2].into()).to_point(), type_::point!(vec![1, 2])),
+        (v(range().into()).to_range(), type_::range!(range())),
+        (v("user".into()).to_record(Some("alice")), type_::record!("user", "alice")),
+        (v(vec![1, 1].into()).to_set(), type_::set!(vec![1, 1])),
+        (one().to_string_value(), type_::string!(1)),
+        (v(type_::bytes!("hi").into()).to_string_lossy(), type_::string_lossy!(type_::bytes!("hi"))),
+        (v(uuid.into()).to_uuid(), type_::uuid!(uuid)),
+        (one().is_array(), type_::is_array!(1)),
+        (one().is_bool(), type_::is_bool!(1)),
+        (one().is_bytes(), type_::is_bytes!(1)),
+        (one().is_collection(), type_::is_collection!(1)),
+        (one().is_datetime(), type_::is_datetime!(1)),
+        (one().is_decimal(), type_::is_decimal!(1)),
+        (one().is_duration(), type_::is_duration!(1)),
+        (one().is_float(), type_::is_float!(1)),
+        (one().is_geometry(), type_::is_geometry!(1)),
+        (one().is_int(), type_::is_int!(1)),
+        (one().is_line(), type_::is_line!(1)),
+        (one().is_multiline(), type_::is_multiline!(1)),
+        (one().is_multipoint(), type_::is_multipoint!(1)),
+        (one().is_multipolygon(), type_::is_multipolygon!(1)),
+        (one().is_none(), type_::is_none!(1)),
+        (one().is_null(), type_::is_null!(1)),
+        (one().is_number(), type_::is_number!(1)),
+        (one().is_object(), type_::is_object!(1)),
+        (one().is_point(), type_::is_point!(1)),
+        (one().is_polygon(), type_::is_polygon!(1)),
+        (one().is_range(), type_::is_range!(1)),
+        (one().is_record(None::<&str>), type_::is_record!(1)),
+        (one().is_set(), type_::is_set!(1)),
+        (one().is_string(), type_::is_string!(1)),
+        (one().is_uuid(), type_::is_uuid!(1)),
+    ]);
+}

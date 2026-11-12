@@ -110,3 +110,22 @@ async fn runtime_type_failures() {
     .await;
     assert!(error.contains("duration::days"), "{error}");
 }
+
+/// Every mapped method runs on a duration and evaluates like its function form.
+#[tokio::test]
+async fn methods_run() {
+    let db = db().await;
+    let long = Duration::from_secs(400 * 86_400 + 3_661);
+    let d = || DurationLike::from(long);
+    same_all!(&db, [
+        (d().days(), duration::days!(long)),
+        (d().hours(), duration::hours!(long)),
+        (d().micros(), duration::micros!(long)),
+        (d().millis(), duration::millis!(long)),
+        (d().mins(), duration::mins!(long)),
+        (d().nanos(), duration::nanos!(long)),
+        (d().secs(), duration::secs!(long)),
+        (d().weeks(), duration::weeks!(long)),
+        (d().years(), duration::years!(long)),
+    ]);
+}

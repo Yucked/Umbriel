@@ -70,3 +70,18 @@ async fn runtime_type_failures() {
     let error = failure(&db, "RETURN record::tb('user');").await;
     assert!(error.contains("record::tb"), "{error}");
 }
+
+/// Every mapped method runs on a record id and evaluates like its function form.
+#[tokio::test]
+async fn methods_run() {
+    let db = db().await;
+    assert!(succeeds(&db, "CREATE user:alice;").await);
+    let r = || RecordIdLike::from(User::id("alice"));
+    same_all!(&db, [
+        (r().exists(), record::exists!(User::id("alice"))),
+        (r().id(), record::id!(User::id("alice"))),
+        (r().is_edge(), record::is_edge!(User::id("alice"))),
+        (r().table(), record::table!(User::id("alice"))),
+        (r().tb(), record::tb!(User::id("alice"))),
+    ]);
+}

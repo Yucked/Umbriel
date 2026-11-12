@@ -38,6 +38,26 @@ pub async fn is_a<K: KindOf>(db: &Surreal<Db>, function: &Function<K>, kind: &st
     assert!(matches, "`{call}` is not a {kind}");
 }
 
+/// Asserts that SurrealDB runs the method form and that it evaluates like the function form,
+/// so the method is dispatched on that receiver to that function.
+pub async fn same<K: KindOf, L: KindOf>(db: &Surreal<Db>, method: &Function<K>, function: &Function<L>) {
+    let (method, function) = (method.to_debug_sql(), function.to_debug_sql());
+    let equal: bool = read(db, &format!("RETURN {method} = {function};")).await;
+    if !equal {
+        let actual: Value = read(db, &format!("RETURN {method};")).await;
+        let expected: Value = read(db, &format!("RETURN {function};")).await;
+        panic!("`{method}` returned {actual:?}, `{function}` {expected:?}");
+    }
+}
+
+/// `same` for each `(method, function)` pair, which may be calls of different kinds.
+#[macro_export]
+macro_rules! same_all {
+    ($db:expr, [$(($method:expr, $function:expr $(,)?)),* $(,)?]) => {{
+        $($crate::same($db, &$method, &$function).await;)*
+    }};
+}
+
 /// The error SurrealDB gives for the call, as text. Panics when it succeeds.
 pub async fn call_failure<K: KindOf>(db: &Surreal<Db>, function: &Function<K>) -> String {
     failure(db, &format!("RETURN {};", function.to_debug_sql())).await

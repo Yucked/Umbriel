@@ -397,3 +397,79 @@ async fn runtime_type_failures() {
     let error = call_failure(&db, &string::semver::major!("not a version")).await;
     assert!(error.contains("string::semver::major"), "{error}");
 }
+
+/// Every mapped method runs on a string and evaluates like its function form.
+#[tokio::test]
+async fn methods_run() {
+    let db = db().await;
+    let s = |text: &'static str| StrandLike::from(text);
+    same_all!(&db, [
+        (s("alice smith").capitalize(), string::capitalize!("alice smith")),
+        (s("a").concat(["b", "c"]), string::concat!("a", "b", "c")),
+        (s("Alice").contains("lic"), string::contains!("Alice", "lic")),
+        (s("Alice").ends_with("ce"), string::ends_with!("Alice", "ce")),
+        (s(", ").join(["a", "b"]), string::join!(", ", "a", "b")),
+        (s("Alice").len(), string::len!("Alice")),
+        (s("ABC").lowercase(), string::lowercase!("ABC")),
+        (s("abc").matches("^a"), string::matches!("abc", "^a")),
+        (s("ab").repeat(2), string::repeat!("ab", 2)),
+        (s("Alice").replace("A", "a"), string::replace!("Alice", "A", "a")),
+        (s("abc").reverse(), string::reverse!("abc")),
+        (s("Alice").slice(Some(1), Some(3)), string::slice!("Alice", 1, 3)),
+        (s("Hello World").slug(), string::slug!("Hello World")),
+        (s("a,b").split(","), string::split!("a,b", ",")),
+        (s("Alice").starts_with("Al"), string::starts_with!("Alice", "Al")),
+        (s(" a ").trim(), string::trim!(" a ")),
+        (s("abc").uppercase(), string::uppercase!("abc")),
+        (s("a b").words(), string::words!("a b")),
+        (s("abc").is_alpha(), string::is_alpha!("abc")),
+        (s("ab1").is_alphanum(), string::is_alphanum!("ab1")),
+        (s("abc").is_ascii(), string::is_ascii!("abc")),
+        (s("2021-11-01T08:30:17Z").is_datetime(None::<&str>), string::is_datetime!("2021-11-01T08:30:17Z")),
+        (s("example.com").is_domain(), string::is_domain!("example.com")),
+        (s("alice@example.com").is_email(), string::is_email!("alice@example.com")),
+        (s("ff").is_hexadecimal(), string::is_hexadecimal!("ff")),
+        (s("127.0.0.1").is_ip(), string::is_ip!("127.0.0.1")),
+        (s("127.0.0.1").is_ipv4(), string::is_ipv4!("127.0.0.1")),
+        (s("::1").is_ipv6(), string::is_ipv6!("::1")),
+        (s("51.5").is_latitude(), string::is_latitude!("51.5")),
+        (s("-0.1").is_longitude(), string::is_longitude!("-0.1")),
+        (s("123").is_numeric(), string::is_numeric!("123")),
+        (s("user:alice").is_record(Some("user")), string::is_record!("user:alice", "user")),
+        (s("1.0.0").is_semver(), string::is_semver!("1.0.0")),
+        (s("01ARZ3NDEKTSV4RRFFQ69G5FAV").is_ulid(), string::is_ulid!("01ARZ3NDEKTSV4RRFFQ69G5FAV")),
+        (s("https://example.com").is_url(), string::is_url!("https://example.com")),
+        (
+            s("018a6680-bef9-701b-9025-e1754f296a0f").is_uuid(),
+            string::is_uuid!("018a6680-bef9-701b-9025-e1754f296a0f"),
+        ),
+        (s("ab").distance_damerau_levenshtein("ba"), string::distance::damerau_levenshtein!("ab", "ba")),
+        (s("abc").distance_hamming("abd"), string::distance::hamming!("abc", "abd")),
+        (s("kitten").distance_levenshtein("sitting"), string::distance::levenshtein!("kitten", "sitting")),
+        (
+            s("ab").distance_normalized_damerau_levenshtein("ba"),
+            string::distance::normalized_damerau_levenshtein!("ab", "ba"),
+        ),
+        (
+            s("ab").distance_normalized_levenshtein("ba"),
+            string::distance::normalized_levenshtein!("ab", "ba"),
+        ),
+        (s("<b>").html_encode(), string::html::encode!("<b>")),
+        (s("<b>x</b><script>y</script>").html_sanitize(), string::html::sanitize!("<b>x</b><script>y</script>")),
+        (s("alice").similarity_fuzzy("ali"), string::similarity::fuzzy!("alice", "ali")),
+        (s("alice").similarity_jaro("alicia"), string::similarity::jaro!("alice", "alicia")),
+        (s("alice").similarity_jaro_winkler("alicia"), string::similarity::jaro_winkler!("alice", "alicia")),
+        (s("alice").similarity_smithwaterman("alicia"), string::similarity::smithwaterman!("alice", "alicia")),
+        (s("alice").similarity_sorensen_dice("alicia"), string::similarity::sorensen_dice!("alice", "alicia")),
+        (s("1.0.0").semver_compare("1.1.0"), string::semver::compare!("1.0.0", "1.1.0")),
+        (s("1.2.3").semver_major(), string::semver::major!("1.2.3")),
+        (s("1.2.3").semver_minor(), string::semver::minor!("1.2.3")),
+        (s("1.2.3").semver_patch(), string::semver::patch!("1.2.3")),
+        (s("1.2.3").semver_inc_major(), string::semver::inc::major!("1.2.3")),
+        (s("1.2.3").semver_inc_minor(), string::semver::inc::minor!("1.2.3")),
+        (s("1.2.3").semver_inc_patch(), string::semver::inc::patch!("1.2.3")),
+        (s("1.2.3").semver_set_major(4), string::semver::set::major!("1.2.3", 4)),
+        (s("1.2.3").semver_set_minor(4), string::semver::set::minor!("1.2.3", 4)),
+        (s("1.2.3").semver_set_patch(4), string::semver::set::patch!("1.2.3", 4)),
+    ]);
+}
