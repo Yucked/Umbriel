@@ -16,5 +16,8 @@ fn offline_parse() {
     assert!(matches!(object.get("owner"), Some(Value::RecordId(_))));
     assert!(matches!(object.get("joined"), Some(Value::Datetime(_))));
 
-    assert!(umbriel::parse::value("{ name: ").is_err(), "incomplete text is refused");
+    assert!(
+        umbriel::parse::value("{ name: ").is_err(),
+        "incomplete text is refused"
+    );
 }

@@ -24,7 +24,10 @@ async fn a_table_value_binds_as_a_parameter() {
 
     let source = let_("source").equal_to(types::Table::new("user"));
     let (sql, vars) = source.to_query().expect("renders").into_parts();
-    assert!(!sql.contains("user"), "the table is bound, not written: {sql}");
+    assert!(
+        !sql.contains("user"),
+        "the table is bound, not written: {sql}"
+    );
 
     let ids: Vec<types::RecordId> = db
         .query(format!("{sql} SELECT VALUE id FROM $source;"))
@@ -61,18 +64,33 @@ async fn values_cross_serde() {
 
     // JSON has no set, decimal, table, duration or NONE: each becomes the nearest JSON value, and
     // converting back does not restore the SurrealQL kind.
-    let set = Value::Set(types::Set::from(vec![1_i64.into_value(), 2_i64.into_value()]));
+    let set = Value::Set(types::Set::from(vec![
+        1_i64.into_value(),
+        2_i64.into_value(),
+    ]));
     let json = serde_json::Value::from_value(set).expect("converts");
     assert_eq!(json, serde_json::json!([1, 2]));
     assert!(matches!(json.into_value(), Value::Array(_)));
 
     let lossy = [
-        (Value::Number(types::Number::Decimal(types::Decimal::new(125, 2))), serde_json::json!("1.25")),
-        (Value::Table(types::Table::new("user")), serde_json::json!("user")),
-        (std::time::Duration::from_secs(90).into_value(), serde_json::json!("1m30s")),
+        (
+            Value::Number(types::Number::Decimal(types::Decimal::new(125, 2))),
+            serde_json::json!("1.25"),
+        ),
+        (
+            Value::Table(types::Table::new("user")),
+            serde_json::json!("user"),
+        ),
+        (
+            std::time::Duration::from_secs(90).into_value(),
+            serde_json::json!("1m30s"),
+        ),
         (Value::None, serde_json::Value::Null),
     ];
     for (value, expected) in lossy {
-        assert_eq!(serde_json::Value::from_value(value).expect("converts"), expected);
+        assert_eq!(
+            serde_json::Value::from_value(value).expect("converts"),
+            expected
+        );
     }
 }

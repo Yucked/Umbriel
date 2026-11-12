@@ -25,7 +25,13 @@ fn point() -> geo::Point {
 
 fn square() -> geo::Polygon {
     geo::Polygon::new(
-        geo::LineString::from(vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]),
+        geo::LineString::from(vec![
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+            (0.0, 0.0),
+        ]),
         vec![],
     )
 }
@@ -59,10 +65,7 @@ fn value_kind(key: &str) -> ValueKind {
         line: geo::LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]),
         polygon: square(),
         points: geo::MultiPoint::from(vec![point(), geo::Point::new(3.0, 4.0)]),
-        lines: geo::MultiLineString::new(vec![geo::LineString::from(vec![
-            (0.0, 0.0),
-            (1.0, 1.0),
-        ])]),
+        lines: geo::MultiLineString::new(vec![geo::LineString::from(vec![(0.0, 0.0), (1.0, 1.0)])]),
         polygons: geo::MultiPolygon::new(vec![square()]),
         collection: types::Geometry::Collection(vec![
             types::Geometry::Point(point()),
@@ -211,11 +214,19 @@ async fn assert_accepts_then_refuses(field: &str, accepted: &str, refused: &str)
     apply_definitions::<ValueKind>(&db).await;
     value_kind("alice").create(&db).await.expect("created");
     assert!(
-        succeeds(&db, &format!("UPDATE value_kind:alice SET {field} = {accepted};")).await,
+        succeeds(
+            &db,
+            &format!("UPDATE value_kind:alice SET {field} = {accepted};")
+        )
+        .await,
         "`{field}` accepts {accepted}"
     );
     assert!(
-        !succeeds(&db, &format!("UPDATE value_kind:alice SET {field} = {refused};")).await,
+        !succeeds(
+            &db,
+            &format!("UPDATE value_kind:alice SET {field} = {refused};")
+        )
+        .await,
         "`{field}` refuses {refused}"
     );
 }
@@ -253,8 +264,13 @@ async fn table_fields_refuse_other_tables() {
     apply_definitions::<ValueKind>(&db).await;
     value_kind("alice").create(&db).await.expect("created");
     let sql = "UPDATE value_kind:alice SET source = $source;";
-    with_table(&db, sql, "user").await.expect("`source` accepts `user`");
-    assert!(with_table(&db, sql, "post").await.is_err(), "`source` refuses `post`");
+    with_table(&db, sql, "user")
+        .await
+        .expect("`source` accepts `user`");
+    assert!(
+        with_table(&db, sql, "post").await.is_err(),
+        "`source` refuses `post`"
+    );
 }
 
 /// SurrealDB 3.3.4 coerces a plain `table` field through `string`: it takes a table name written
@@ -263,13 +279,21 @@ async fn table_fields_refuse_other_tables() {
 #[tokio::test]
 async fn a_plain_table_field_refuses_table_values() {
     let db = db().await;
-    assert!(succeeds(&db, "DEFINE TABLE probe; DEFINE FIELD source ON probe TYPE table;").await);
+    assert!(
+        succeeds(
+            &db,
+            "DEFINE TABLE probe; DEFINE FIELD source ON probe TYPE table;"
+        )
+        .await
+    );
     assert!(succeeds(&db, "CREATE probe:a SET source = 'user';").await);
     let error = with_table(&db, "CREATE probe:b SET source = $source;", "user")
         .await
         .expect_err("a table value is refused");
     assert!(
-        error.to_string().contains("Expected `string` but found `user`"),
+        error
+            .to_string()
+            .contains("Expected `string` but found `user`"),
         "refused by the string coercion: {error}"
     );
 }
@@ -290,7 +314,9 @@ async fn every_key_kind_round_trips_in_a_record_field() {
     let owners: [RecordId<User>; 5] = [
         User::id(42),
         User::id("alice"),
-        User::id(uuid::Uuid::from_u128(0x0190_7a2e_4c1d_7b3a_8f00_0000_0000_0002)),
+        User::id(uuid::Uuid::from_u128(
+            0x0190_7a2e_4c1d_7b3a_8f00_0000_0000_0002,
+        )),
         User::id(vec![1i64, 2]),
         User::id(object),
     ];
