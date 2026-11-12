@@ -1,0 +1,79 @@
+error: unexpected end of macro invocation
+ --> tests/ui/fail/function_arity.rs:9:13
+  |
+9 |     let _ = string::len!();
+  |             ^^^^^^^^^^^^^^ missing tokens in macro arguments
+  |
+note: while trying to match meta-variable `$string:expr`
+ --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
+  |
+  |                   ($d $a1:expr $(, $d $arg:expr)* $d(,)?) => {
+  |                    ^^^^^^^^^^^
+  |
+ ::: $WORKSPACE/crates/orm/src/functions/string.rs
+  |
+  | / functions! { $ "string" "::", string, string;
+  | |     /// Capitalises the first letter of every word.
+  | |     capitalize(string: StrandLike) -> kinds::String [StrandLike.capitalize];
+  | |     /// Concatenates the values as strings.
+... |
+  | |     is_uuid(string: StrandLike) -> kinds::Bool [StrandLike.is_uuid];
+  | | }
+  | |_- in this macro invocation
+  = note: this error originates in the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: no rules expected `name`
+  --> tests/ui/fail/function_arity.rs:10:40
+   |
+10 |     let _ = string::len!(name.clone(), name);
+   |                                        ^^^^ no rules expected this token in macro call
+   |
+   = note: while trying to match sequence end
+
+error: unexpected end of macro invocation
+  --> tests/ui/fail/function_arity.rs:11:27
+   |
+11 |     let _ = math::fixed!(1);
+   |                           ^ missing tokens in macro arguments
+   |
+note: while trying to match `,`
+  --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
+   |
+   |                   ($d $a1:expr $(, $d $arg:expr)* $d(,)?) => {
+   |                                  ^
+   |
+  ::: $WORKSPACE/crates/orm/src/functions/math.rs
+   |
+   | / functions! { $ "math" "::", math, math;
+   | |     /// The absolute value.
+   | |     abs(number: NumberLike) -> kinds::Number [NumberLike.abs];
+   | |     /// The arccosine, in radians.
+...  |
+   | |     variance(numbers: ArrayLike) -> kinds::Number;
+   | | }
+   | |_- in this macro invocation
+   = note: this error originates in the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: unexpected end of macro invocation
+  --> tests/ui/fail/function_arity.rs:12:13
+   |
+12 |     let _ = string::join!();
+   |             ^^^^^^^^^^^^^^^ missing tokens in macro arguments
+   |
+note: while trying to match meta-variable `$values:expr`
+  --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
+   |
+   |                   ($d values:expr $d(,)?) => {
+   |                    ^^^^^^^^^^^^^^
+   |
+  ::: $WORKSPACE/crates/orm/src/functions/string.rs
+   |
+   | / functions! { $ "string" "::", string, string;
+   | |     /// Capitalises the first letter of every word.
+   | |     capitalize(string: StrandLike) -> kinds::String [StrandLike.capitalize];
+   | |     /// Concatenates the values as strings.
+...  |
+   | |     is_uuid(string: StrandLike) -> kinds::Bool [StrandLike.is_uuid];
+   | | }
+   | |_- in this macro invocation
+   = note: this error originates in the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -1,0 +1,17 @@
+error[E0599]: no method named `fixed` found for struct `NumberLike` in the current scope
+ --> tests/ui/fail/method_receivers.rs:7:19
+  |
+7 |     let _ = score.fixed(2);
+  |                   ^^^^^ method not found in `NumberLike`
+
+error[E0599]: no method named `uppercase` found for struct `NumberLike` in the current scope
+ --> tests/ui/fail/method_receivers.rs:9:19
+  |
+9 |     let _ = score.uppercase();
+  |                   ^^^^^^^^^ method not found in `NumberLike`
+
+error[E0599]: no method named `abs` found for struct `StrandLike` in the current scope
+  --> tests/ui/fail/method_receivers.rs:11:50
+   |
+11 |     let _ = StrandLike::from(Field::new("name")).abs();
+   |                                                  ^^^ method not found in `StrandLike`

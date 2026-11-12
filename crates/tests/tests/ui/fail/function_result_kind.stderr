@@ -1,0 +1,71 @@
+error[E0277]: the trait bound `umbriel::kinds::Int: Enters<GeometryLike>` is not satisfied
+  --> tests/ui/fail/function_result_kind.rs:11:24
+   |
+11 |     let _ = geo::area!(string::len!(name.clone()));
+   |             -----------^^^^^^^^^^^^^^^^^^^^^^^^^^-
+   |             |          |
+   |             |          the trait `Enters<GeometryLike>` is not implemented for `umbriel::kinds::Int`
+   |             required by a bound introduced by this call
+   |
+help: the trait `Enters<GeometryLike>` is not implemented for `umbriel::kinds::Int`
+      but trait `Enters<NumberLike>` is implemented for it
+  --> $WORKSPACE/crates/orm/src/kinds.rs
+   |
+   |           $($(impl Enters<$target> for $marker {})+)*
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+   | / enters! {
+   | |     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
+   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike;
+   | |     Int => NumberLike;
+...  |
+   | |     Table => TableLike;
+   | | }
+   | |_- in this macro invocation
+   = help: for that trait implementation, expected `NumberLike`, found `GeometryLike`
+   = note: required for `GeometryLike` to implement `From<umbriel::Function<umbriel::kinds::Int>>`
+   = note: required for `umbriel::Function<umbriel::kinds::Int>` to implement `Into<GeometryLike>`
+note: required by a bound in `area_fn`
+  --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
+   |
+   |               pub fn [<$sql _fn>](
+   |                      ------------ required by a bound in this function
+   |                   $a1: impl Into<$crate::$t1>,
+   |                             ^^^^^^^^^^^^^^^^^ required by this bound in `area_fn`
+   |
+  ::: $WORKSPACE/crates/orm/src/functions/geo.rs
+   |
+   | / functions! { $ "geo" "::", geo, geo;
+   | |     /// The area of a geometry, in square metres.
+   | |     area(geometry: GeometryLike) -> kinds::Number [GeometryLike.area];
+   | |     /// The bearing from one point to another, in degrees.
+...  |
+   | |     is_valid(geometry: GeometryLike) -> kinds::Bool [GeometryLike.is_valid];
+   | | }
+   | |_- in this macro invocation
+   = note: this error originates in the macro `string::len` which comes from the expansion of the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `umbriel::kinds::Int: Enters<StrandLike>` is not satisfied
+  --> tests/ui/fail/function_result_kind.rs:13:13
+   |
+13 |     let _ = StrandLike::from(cast::<kinds::Int>(name));
+   |             ^^^^^^^^^^ the trait `Enters<StrandLike>` is not implemented for `umbriel::kinds::Int`
+   |
+help: the trait `Enters<StrandLike>` is not implemented for `umbriel::kinds::Int`
+      but trait `Enters<NumberLike>` is implemented for it
+  --> $WORKSPACE/crates/orm/src/kinds.rs
+   |
+   |           $($(impl Enters<$target> for $marker {})+)*
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+   | / enters! {
+   | |     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
+   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike;
+   | |     Int => NumberLike;
+...  |
+   | |     Table => TableLike;
+   | | }
+   | |_- in this macro invocation
+   = help: for that trait implementation, expected `NumberLike`, found `StrandLike`
+   = note: required for `StrandLike` to implement `From<Cast<umbriel::kinds::Int>>`
+   = note: this error originates in the macro `enters` (in Nightly builds, run with -Z macro-backtrace for more info)
