@@ -12,7 +12,10 @@ use std::ops::Deref;
 
 use surrealdb::types::{Kind, Table, Value};
 
-use crate::{Block, Conditional, Event, Field, Filter, Ident, Name, Param, Renderer, ValueLike};
+use crate::{
+    Block, Conditional, Event, Field, Filter, Ident, Name, Param, Renderer, ValueLike,
+    render::push_path,
+};
 
 use super::{
     Statement, Subquery,
@@ -80,25 +83,9 @@ fn push_head(out: &mut Renderer, kind: &str, if_exists: bool) {
     out.push_str(" ");
 }
 
-/// Writes `fn::<name>`, where `name` is a `::`-separated path of plain identifiers
-/// (`[A-Za-z_][A-Za-z0-9_]*` each). Anything else fails the query and nothing of it is written,
-/// so a name cannot carry SurrealQL of its own.
+/// Writes `fn::<name>`; see [`push_path`].
 fn push_function_path(out: &mut Renderer, name: &str) {
-    let valid_segment = |segment: &str| {
-        let mut bytes = segment.bytes();
-        bytes
-            .next()
-            .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
-            && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-    };
-    if !name.split("::").all(valid_segment) {
-        out.push_error(format!(
-            "invalid function name `{name}`: each `::`-separated part must be an identifier \
-             ([A-Za-z_][A-Za-z0-9_]*)"
-        ));
-        return;
-    }
-    out.push_str("fn::").push_str(name);
+    push_path(out, "fn", name);
 }
 
 /// Writes ` ON TABLE @table` when a table is set.

@@ -339,3 +339,25 @@ pub(crate) fn write_ident(out: &mut String, name: &str) {
     }
     out.push('`');
 }
+
+/// Writes `prefix::path`, where `path` is a `::`-separated path of plain identifiers
+/// (`[A-Za-z_][A-Za-z0-9_]*` each), and returns whether it was written. Anything else fails the
+/// query and nothing of it is written, so a name cannot carry SurrealQL of its own.
+pub(crate) fn push_path(out: &mut Renderer, prefix: &str, path: &str) -> bool {
+    let valid_segment = |segment: &str| {
+        let mut bytes = segment.bytes();
+        bytes
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
+            && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    };
+    if !path.split("::").all(valid_segment) {
+        out.push_error(format!(
+            "invalid function name `{path}`: each `::`-separated part must be an identifier \
+             ([A-Za-z_][A-Za-z0-9_]*)"
+        ));
+        return false;
+    }
+    out.push_str(prefix).push_str("::").push_str(path);
+    true
+}
