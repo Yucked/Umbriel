@@ -19,7 +19,18 @@ use crate::{
 pub struct Function<K: KindOf = kinds::Any> {
     callee: Callee,
     args: Vec<ValueLike>,
+    optionals: Optionals,
     kind: PhantomData<fn() -> K>,
+}
+
+/// The optional arguments of a call. SurrealDB reads arguments by position, so an optional
+/// argument given after one left out would take its place; such a call fails to render.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Optionals {
+    /// The first optional argument left out.
+    left_out: Option<&'static str>,
+    /// An optional argument given after `left_out`, and the one left out before it.
+    misplaced: Option<(&'static str, &'static str)>,
 }
 
 /// What a call names.
@@ -76,6 +87,17 @@ impl<K: KindOf> Function<K> {
         Self {
             callee,
             args: vec![],
+            optionals: Optionals::default(),
+            kind: PhantomData,
+        }
+    }
+
+    /// The same call typed by `T`.
+    fn retyped<T: KindOf>(self) -> Function<T> {
+        Function {
+            callee: self.callee,
+            args: self.args,
+            optionals: self.optionals,
             kind: PhantomData,
         }
     }
@@ -83,6 +105,21 @@ impl<K: KindOf> Function<K> {
     /// Appends an argument.
     pub(crate) fn arg(mut self, arg: impl Into<ValueLike>) -> Self {
         self.args.push(arg.into());
+        self
+    }
+
+    /// Appends the optional argument `name` when it is given. One given after an optional
+    /// argument left out fails the call when rendered, since SurrealDB would read it in the
+    /// earlier argument's place.
+    pub(crate) fn optional(mut self, name: &'static str, arg: Option<ValueLike>) -> Self {
+        match (arg, self.optionals.left_out) {
+            (Some(arg), None) => self.args.push(arg),
+            (Some(_), Some(left_out)) => {
+                self.optionals.misplaced.get_or_insert((name, left_out));
+            }
+            (None, None) => self.optionals.left_out = Some(name),
+            (None, Some(_)) => {}
+        }
         self
     }
 
@@ -96,11 +133,7 @@ impl<K: KindOf> Function<K> {
     /// to keep calls of different kinds in one list.
     #[must_use]
     pub fn untyped(self) -> Function<kinds::Any> {
-        Function {
-            callee: self.callee,
-            args: self.args,
-            kind: PhantomData,
-        }
+        self.retyped()
     }
 
     /// Runs `RETURN <call>` with the call's values bound, through the same execution as
@@ -124,11 +157,7 @@ impl Function<kinds::Any> {
     /// `-> int`. The kind is not checked: it is the caller's statement about the definition.
     #[must_use]
     pub fn typed<T: KindOf>(self) -> Function<T> {
-        Function {
-            callee: self.callee,
-            args: self.args,
-            kind: PhantomData,
-        }
+        self.retyped()
     }
 
     /// A call to the custom function `fn::<name>`; used by the helpers `define_function!`
@@ -154,6 +183,7 @@ impl<K: KindOf> Clone for Function<K> {
         Self {
             callee: self.callee.clone(),
             args: self.args.clone(),
+            optionals: self.optionals,
             kind: PhantomData,
         }
     }
@@ -164,6 +194,7 @@ impl<K: KindOf> fmt::Debug for Function<K> {
         f.debug_struct("Function")
             .field("callee", &self.callee)
             .field("args", &self.args)
+            .field("optionals", &self.optionals)
             .field("kind", &K::kind())
             .finish()
     }
@@ -171,12 +202,21 @@ impl<K: KindOf> fmt::Debug for Function<K> {
 
 impl<K: KindOf> PartialEq for Function<K> {
     fn eq(&self, other: &Self) -> bool {
-        self.callee == other.callee && self.args == other.args
+        self.callee == other.callee
+            && self.args == other.args
+            && self.optionals == other.optionals
     }
 }
 
 impl<K: KindOf> Render for Function<K> {
     fn render(&self, out: &mut Renderer) {
+        if let Some((given, left_out)) = self.optionals.misplaced {
+            out.push_error(format!(
+                "the optional argument `{given}` is given without `{left_out}` before it; \
+                 SurrealDB reads arguments by position, so give `{left_out}` too"
+            ));
+            return;
+        }
         match &self.callee {
             Callee::Name(name) => {
                 out.push_str(name);

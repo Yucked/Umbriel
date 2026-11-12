@@ -27,7 +27,9 @@
 //!
 //! Every argument type is a typed expression re-exported at the crate root (`StrandLike`,
 //! `ValueLike`, …). Optional arguments are `Option<impl Into<T>>` in the function and the
-//! method, and may be left out of the macro.
+//! method, and may be left out of the macro. SurrealDB reads arguments by position, so giving an
+//! optional argument after leaving out an earlier one fails the call when it is rendered. A
+//! both-or-none pair is one `Option<(impl Into<T>, impl Into<U>)>`.
 
 /// See the module documentation.
 macro_rules! functions {
@@ -118,17 +120,14 @@ macro_rules! functions {
                 ::core::stringify!($sql), "(", ::core::stringify!($o1), ", ", ::core::stringify!($o2),
                 ")` when both are given.")]
             pub fn [<$sql _fn>](
-                $o1: Option<impl Into<$crate::$o1t>>,
-                $o2: Option<impl Into<$crate::$o2t>>,
+                [<$o1 _ $o2>]: Option<(impl Into<$crate::$o1t>, impl Into<$crate::$o2t>)>,
             ) -> $crate::Function<$kind> {
                 let function = $crate::Function::new(::core::concat!($ns, $sep, ::core::stringify!($sql)));
-                match ($o1, $o2) {
-                    (Some($o1), Some($o2)) => function
+                match [<$o1 _ $o2>] {
+                    Some(($o1, $o2)) => function
                         .arg(Into::<$crate::$o1t>::into($o1))
                         .arg(Into::<$crate::$o2t>::into($o2)),
-                    (Some($o1), None) => function.arg(Into::<$crate::$o1t>::into($o1)),
-                    (None, Some($o2)) => function.arg(Into::<$crate::$o2t>::into($o2)),
-                    (None, None) => function,
+                    None => function,
                 }
             }
 
@@ -139,12 +138,11 @@ macro_rules! functions {
             macro_rules! [<$prefix _ $sql>] {
                 () => {
                     $crate::functions::$($module::)*[<$sql _fn>](
-                        None::<$crate::$o1t>,
-                        None::<$crate::$o2t>,
+                        None::<($crate::$o1t, $crate::$o2t)>,
                     )
                 };
                 ($d $o1:expr, $d $o2:expr $d(,)?) => {
-                    $crate::functions::$($module::)*[<$sql _fn>](Some($d $o1), Some($d $o2))
+                    $crate::functions::$($module::)*[<$sql _fn>](Some(($d $o1, $d $o2)))
                 };
             }
             pub use [<$prefix _ $sql>] as $name;
@@ -197,15 +195,9 @@ macro_rules! functions {
                 $o1: Option<impl Into<$crate::$o1t>>,
                 $o2: Option<impl Into<$crate::$o2t>>,
             ) -> $crate::Function<$kind> {
-                let function = $crate::Function::new(::core::concat!($ns, $sep, ::core::stringify!($sql)));
-                let function = match $o1 {
-                    Some($o1) => function.arg(Into::<$crate::$o1t>::into($o1)),
-                    None => function,
-                };
-                match $o2 {
-                    Some($o2) => function.arg(Into::<$crate::$o2t>::into($o2)),
-                    None => function,
-                }
+                $crate::Function::new(::core::concat!($ns, $sep, ::core::stringify!($sql)))
+                    .optional(::core::stringify!($o1), $o1.map(|value| $crate::ValueLike::from(Into::<$crate::$o1t>::into(value))))
+                    .optional(::core::stringify!($o2), $o2.map(|value| $crate::ValueLike::from(Into::<$crate::$o2t>::into(value))))
             }
 
             #[doc = ::core::concat!("`", $ns, $sep, ::core::stringify!($sql), "(", ::core::stringify!($o1), ", ",
@@ -295,17 +287,11 @@ macro_rules! functions {
                 $o1: Option<impl Into<$crate::$o1t>>,
                 $o2: Option<impl Into<$crate::$o2t>>,
             ) -> $crate::Function<$kind> {
-                let function = $crate::Function::new(::core::concat!($ns, $sep, ::core::stringify!($sql)))
+                $crate::Function::new(::core::concat!($ns, $sep, ::core::stringify!($sql)))
                     .arg(Into::<$crate::$t1>::into($a1))
-                    $(.arg(Into::<$crate::$ty>::into($arg)))*;
-                let function = match $o1 {
-                    Some($o1) => function.arg(Into::<$crate::$o1t>::into($o1)),
-                    None => function,
-                };
-                match $o2 {
-                    Some($o2) => function.arg(Into::<$crate::$o2t>::into($o2)),
-                    None => function,
-                }
+                    $(.arg(Into::<$crate::$ty>::into($arg)))*
+                    .optional(::core::stringify!($o1), $o1.map(|value| $crate::ValueLike::from(Into::<$crate::$o1t>::into(value))))
+                    .optional(::core::stringify!($o2), $o2.map(|value| $crate::ValueLike::from(Into::<$crate::$o2t>::into(value))))
             }
 
             #[doc = ::core::concat!("`", $ns, $sep, ::core::stringify!($sql), "(", ::core::stringify!($a1),
@@ -382,18 +368,15 @@ macro_rules! functions {
                 $($arg: impl Into<$crate::$ty>,)*
                 $($opt: Option<impl Into<$crate::$optty>>,)*
             ) -> $crate::Function<$kind> {
-                let function = $crate::Function::method(
+                $crate::Function::method(
                     $crate::ValueLike::from(self.clone()),
                     functions!(@str $($msql)? $method),
                 )
-                $(.arg(Into::<$crate::$ty>::into($arg)))*;
-                $(
-                    let function = match $opt {
-                        Some($opt) => function.arg(Into::<$crate::$optty>::into($opt)),
-                        None => function,
-                    };
-                )*
-                function
+                $(.arg(Into::<$crate::$ty>::into($arg)))*
+                $(.optional(
+                    ::core::stringify!($opt),
+                    $opt.map(|value| $crate::ValueLike::from(Into::<$crate::$optty>::into(value))),
+                ))*
             }
         }
         functions!(@methods [$($($more)*)?] $ns $sep $sql [$($arg : $ty),*]
