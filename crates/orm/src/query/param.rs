@@ -1,7 +1,8 @@
 use std::{borrow::Cow, fmt};
 
 use crate::{
-    Clause, Field, GENERATED_PARAM_PREFIX, Index, Operatable, Render, Renderer, SchemaGetter,
+    Clause, Field, Function, GENERATED_PARAM_PREFIX, Index, Operatable, Render, Renderer,
+    SchemaGetter, ValueLike,
 };
 
 /// Why a caller-supplied parameter name was rejected.
@@ -95,6 +96,13 @@ impl Param {
         let mut path = Field::from(self);
         path.push_clause(clause.into());
         T::schema_prefixed(path)
+    }
+
+    /// `$param(args)`: calls the closure the parameter holds, e.g. `$double(3)` after
+    /// `LET $double = |$n| $n * 2`. The result is untyped; [`Function::typed`] gives it the
+    /// closure's result kind.
+    pub fn call<A: Into<ValueLike>>(&self, args: impl IntoIterator<Item = A>) -> Function {
+        Function::param(self.clone()).args(args)
     }
 
     /// Accesses an element of the list the parameter holds.
