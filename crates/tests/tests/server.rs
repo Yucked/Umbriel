@@ -15,7 +15,8 @@
 //! which they remove before and after each test, and run one at a time.
 //!
 //! The `versioned_*` tests also need the server's store to keep versions (SurrealKV started with
-//! `versioned=true`), since the memory engine refuses `SELECT … VERSION`.
+//! `versioned=true`), since the memory engine refuses `SELECT … VERSION`. The `eval_*` tests
+//! need a server started with `--allow-eval-query`, which `--allow-all` does not include.
 
 use std::collections::BTreeMap;
 
@@ -29,6 +30,7 @@ use surrealdb::{
 use umbriel::{
     All, E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate, Runnable, SchemaGetter,
     SurrealCrud, SurrealCrudNode, SurrealRead, model,
+    functions::eval,
     statements::{Returning, info_for, relate, return_, select},
 };
 use umbriel_tests::{read, statement_error};
@@ -486,6 +488,21 @@ mod scenarios {
         assert!(!then.fields.contains_key(&added), "{:?}", then.fields);
         assert!(then.fields.contains_key("name"), "{:?}", then.fields);
     }
+
+    /// `eval::surql` runs a query and returns its result, with bindings. The embedded engine
+    /// cannot allow it in 3.3.4, so this needs a server started with `--allow-eval-query`.
+    pub async fn eval_surql_runs(db: &Surreal<Any>) {
+        let sum: Option<i64> = eval::surql!("RETURN 1 + 2")
+            .run(db.clone())
+            .await
+            .expect("eval::surql runs");
+        assert_eq!(sum, Some(3));
+        let bound: Option<i64> = eval::surql!("RETURN $n * 2", BTreeMap::from([("n".to_owned(), 21)]))
+            .run(db.clone())
+            .await
+            .expect("eval::surql runs with bindings");
+        assert_eq!(bound, Some(42));
+    }
 }
 
 /// One ignored test per scenario and transport, holding the server and starting and ending with
@@ -545,4 +562,11 @@ over_each_transport!(
     versioned_ws;
     versioned_reads,
     versioned_info,
+);
+
+over_each_transport!(
+    "needs a SurrealDB server started with `--allow-eval-query`; see tests/server.rs",
+    eval_http,
+    eval_ws;
+    eval_surql_runs,
 );
