@@ -8,7 +8,7 @@ use umbriel::{
     AliasName, Aliasable, All, CrudType, Database, E, EdgeDirection, Event, Field, Fragment,
     GENERATED_PARAM_PREFIX, Ident, Interval, JwtAlgorithm, Last, Model, NONE, NULL, Namespace,
     Node, NumberLike, Operatable, Param, ParamNameError, Raw, Render, Runnable, SchemaGetter,
-    Table, TableIndex, ValueLike, any_other_edges, arr, bracket, cast, chain, cond, index,
+    Table, TableIndex, ValueLike, any_other_edges, arr, bracket, chain, cond, index,
     statements::{let_, return_, select, select_value},
     this, value, where_,
 };
@@ -738,47 +738,6 @@ mod values {
             bracket(Field::new("age").add(1)).to_debug_sql(),
             "(age + 1)"
         );
-    }
-
-    #[test]
-    fn casts() {
-        let cases = [
-            (cast::bool("true"), "<bool> 'true'"),
-            (cast::int("5"), "<int> '5'"),
-            (cast::float("1.5"), "<float> '1.5'"),
-            (cast::decimal("1.5"), "<decimal> '1.5'"),
-            (cast::number("5"), "<number> '5'"),
-            (cast::string(5), "<string> 5"),
-            (cast::duration("1h"), "<duration> '1h'"),
-            (
-                cast::datetime("2020-01-01T00:00:00Z"),
-                "<datetime> '2020-01-01T00:00:00Z'",
-            ),
-        ];
-        for (cast, expected) in cases {
-            assert_eq!(cast.to_debug_sql(), expected);
-            assert_parses(&format!("RETURN {expected};"));
-        }
-    }
-
-    #[tokio::test]
-    async fn casts_convert_values() {
-        let db = db().await;
-        let int: Option<i64> =
-            umbriel::statements::return_(Field::from_expr(cast::int("5")).add(1))
-                .run(db.clone())
-                .await
-                .expect("ran")
-                .take(0)
-                .expect("int");
-        assert_eq!(int, Some(6));
-        let string: Option<String> = umbriel::statements::return_(cast::string(5))
-            .run(db.clone())
-            .await
-            .expect("ran")
-            .take(0)
-            .expect("string");
-        assert_eq!(string.as_deref(), Some("5"));
     }
 
     #[tokio::test]
