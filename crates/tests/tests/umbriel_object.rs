@@ -99,13 +99,16 @@ async fn methods_run() {
     let db = db().await;
     let o = || ObjectLike::from(alice());
     let other = || BTreeMap::from([("age".to_owned(), 31)]);
-    same_all!(&db, [
-        (o().entries(), object::entries!(alice())),
-        (o().extend(other()), object::extend!(alice(), other())),
-        (o().is_empty(), object::is_empty!(alice())),
-        (o().keys(), object::keys!(alice())),
-        (o().len(), object::len!(alice())),
-        (o().remove("age"), object::remove!(alice(), "age")),
-        (o().values(), object::values!(alice())),
-    ]);
+    same_all!(
+        &db,
+        [
+            (o().entries(), object::entries!(alice())),
+            (o().extend(other()), object::extend!(alice(), other())),
+            (o().is_empty(), object::is_empty!(alice())),
+            (o().keys(), object::keys!(alice())),
+            (o().len(), object::len!(alice())),
+            (o().remove("age"), object::remove!(alice(), "age")),
+            (o().values(), object::values!(alice())),
+        ]
+    );
 }

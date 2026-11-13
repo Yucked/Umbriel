@@ -29,8 +29,9 @@ use surrealdb::{
 };
 use umbriel::{
     All, E, LinkOne, Model, Node, Operatable, Patch, Raw, RecordId, Relate, Runnable, SchemaGetter,
-    SurrealCrud, SurrealCrudNode, SurrealRead, model,
+    SurrealCrud, SurrealCrudNode, SurrealRead,
     functions::eval,
+    model,
     statements::{Returning, info_for, relate, return_, select},
 };
 use umbriel_tests::{read, statement_error};
@@ -462,7 +463,11 @@ mod scenarios {
     /// field again, so a fixed name would be found by later runs and by the other transport.
     pub async fn versioned_info(db: &Surreal<Any>) {
         define_models(db).await;
-        let suffix: String = read(db, "RETURN string::replace(<string> rand::uuid(), '-', '_');").await;
+        let suffix: String = read(
+            db,
+            "RETURN string::replace(<string> rand::uuid(), '-', '_');",
+        )
+        .await;
         let added = format!("added_{suffix}");
         let before: types::Datetime = read(db, "RETURN time::now();").await;
         Raw::new(format!(
@@ -497,10 +502,11 @@ mod scenarios {
             .await
             .expect("eval::surql runs");
         assert_eq!(sum, Some(3));
-        let bound: Option<i64> = eval::surql!("RETURN $n * 2", BTreeMap::from([("n".to_owned(), 21)]))
-            .run(db.clone())
-            .await
-            .expect("eval::surql runs with bindings");
+        let bound: Option<i64> =
+            eval::surql!("RETURN $n * 2", BTreeMap::from([("n".to_owned(), 21)]))
+                .run(db.clone())
+                .await
+                .expect("eval::surql runs with bindings");
         assert_eq!(bound, Some(42));
     }
 }

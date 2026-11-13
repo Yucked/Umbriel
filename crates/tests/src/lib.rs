@@ -40,7 +40,11 @@ pub async fn is_a<K: KindOf>(db: &Surreal<Db>, function: &Function<K>, kind: &st
 
 /// Asserts that SurrealDB runs the method form and that it evaluates like the function form,
 /// so the method is dispatched on that receiver to that function.
-pub async fn same<K: KindOf, L: KindOf>(db: &Surreal<Db>, method: &Function<K>, function: &Function<L>) {
+pub async fn same<K: KindOf, L: KindOf>(
+    db: &Surreal<Db>,
+    method: &Function<K>,
+    function: &Function<L>,
+) {
     let (method, function) = (method.to_debug_sql(), function.to_debug_sql());
     let equal: bool = read(db, &format!("RETURN {method} = {function};")).await;
     if !equal {

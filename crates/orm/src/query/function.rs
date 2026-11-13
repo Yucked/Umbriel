@@ -202,9 +202,7 @@ impl<K: KindOf> fmt::Debug for Function<K> {
 
 impl<K: KindOf> PartialEq for Function<K> {
     fn eq(&self, other: &Self) -> bool {
-        self.callee == other.callee
-            && self.args == other.args
-            && self.optionals == other.optionals
+        self.callee == other.callee && self.args == other.args && self.optionals == other.optionals
     }
 }
 

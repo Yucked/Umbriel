@@ -96,13 +96,25 @@ async fn methods_run() {
     let after = || BTreeMap::from([("name".to_owned(), "Bob")]);
     let triple = || closure(["n"], |[n]| n.multiply(3));
     let positive = || closure(["n"], |[n]| n.gt(0));
-    same_all!(&db, [
-        (ValueLike::from(2).chain(triple()), value::chain!(2, triple())),
-        (ValueLike::from(before()).diff(after()), value::diff!(before(), after())),
-        (ValueLike::from(5).expect(positive(), None::<&str>), value::expect!(5, positive())),
-        (
-            ValueLike::from(before()).patch(value::diff!(before(), after())),
-            value::patch!(before(), value::diff!(before(), after())),
-        ),
-    ]);
+    same_all!(
+        &db,
+        [
+            (
+                ValueLike::from(2).chain(triple()),
+                value::chain!(2, triple())
+            ),
+            (
+                ValueLike::from(before()).diff(after()),
+                value::diff!(before(), after())
+            ),
+            (
+                ValueLike::from(5).expect(positive(), None::<&str>),
+                value::expect!(5, positive())
+            ),
+            (
+                ValueLike::from(before()).patch(value::diff!(before(), after())),
+                value::patch!(before(), value::diff!(before(), after())),
+            ),
+        ]
+    );
 }
