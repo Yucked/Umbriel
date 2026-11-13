@@ -3,6 +3,11 @@
 
 use std::{collections::BTreeSet, time::Duration};
 
+use surrealdb::{
+    Surreal,
+    engine::local::Mem,
+    opt::{Config, capabilities::Capabilities},
+};
 use umbriel::{
     ArrayLike, BytesLike, DatetimeLike, DurationLike, Field, GeometryLike, Model, NumberLike,
     ObjectLike, Operatable, Param, RecordIdLike, Render, Runnable, SetLike, StrandLike, ValueLike,
@@ -27,9 +32,18 @@ async fn a_skipped_optional_argument_is_a_render_error() {
         "the optional argument `max` is given without `length` before it",
     );
     calls!(
-        (string::slice_fn("Alice", Some(1), None::<i64>), "string::slice('Alice', 1)"),
-        (string::slice_fn("Alice", Some(1), Some(3)), "string::slice('Alice', 1, 3)"),
-        (string::slice_fn("Alice", None::<i64>, None::<i64>), "string::slice('Alice')"),
+        (
+            string::slice_fn("Alice", Some(1), None::<i64>),
+            "string::slice('Alice', 1)"
+        ),
+        (
+            string::slice_fn("Alice", Some(1), Some(3)),
+            "string::slice('Alice', 1, 3)"
+        ),
+        (
+            string::slice_fn("Alice", None::<i64>, None::<i64>),
+            "string::slice('Alice')"
+        ),
         (name.slice(Some(1), None::<i64>), "name.slice(1)"),
         (rand::float_fn(Some((1, 2))), "rand::float(1, 2)"),
         (rand::float_fn(None::<(i64, i64)>), "rand::float()"),
@@ -214,5 +228,31 @@ fn script_typed_result() {
     assert_eq!(
         string::len!(StrandLike::from(Field::new("name"))).to_debug_sql(),
         "string::len(name)"
+    );
+}
+
+/// The embedded JavaScript runs with its arguments, and the engine refuses it unless the
+/// scripting capability is on (it is off by default).
+#[tokio::test]
+async fn script_runs() {
+    let config = Config::new().capabilities(Capabilities::new().with_scripting(true));
+    let scripting = Surreal::new::<Mem>(config).await.expect("in-memory engine");
+    scripting
+        .use_ns("test")
+        .use_db("test")
+        .await
+        .expect("namespace and database");
+    let doubled = || function!((21), "{ return arguments[0] * 2; }").typed::<kinds::Int>();
+    holds(&scripting, &doubled(), "42").await;
+    holds(
+        &scripting,
+        &function!(("Alice", "Bob"), "{ return arguments[0] + ' and ' + arguments[1]; }"),
+        "'Alice and Bob'",
+    )
+    .await;
+    let error = call_failure(&db().await, &doubled()).await;
+    assert!(
+        error.contains("Scripting functions are not allowed"),
+        "{error}"
     );
 }

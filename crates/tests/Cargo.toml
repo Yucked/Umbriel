@@ -13,13 +13,15 @@ workspace = true
 doctest = false
 
 [dependencies]
-# The remote transports serve the server-backed tests in `tests/server.rs`.
+# The remote transports serve the server-backed tests in `tests/server.rs`; `scripting` runs the
+# embedded JavaScript functions (`umbriel_function::script_runs`).
 umbriel = { workspace = true, default-features = false, features = [
     "kv-mem",
     "migrations",
     "parse",
     "protocol-http",
     "protocol-ws",
+    "scripting",
     "test-support",
 ] }
 surrealdb = { workspace = true }
