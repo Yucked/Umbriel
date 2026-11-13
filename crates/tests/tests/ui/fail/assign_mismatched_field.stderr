@@ -51,6 +51,7 @@ error[E0277]: the trait bound `std::string::String: From<__4User3ageField>` is n
              From<clap_builder::builder::str::Str>
              From<clap_builder::util::id::Id>
              From<object_store::path::Path>
+             From<relative_path::relative_path_buf::RelativePathBuf>
              From<surrealdb_core::err::Error>
              From<surrealdb_sql::ident::Ident>
              From<surrealdb_sql::table_name::TableName>
