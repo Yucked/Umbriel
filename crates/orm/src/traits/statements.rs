@@ -1,8 +1,8 @@
 use crate::{
-    Error, Field, Model, Projections, Queryable, Render, Result, ValueLike,
-    execution::{execute, take_one},
+    Error, Executor, Field, Model, Projections, Queryable, Render, Result, ValueLike,
+    execution::{execute, execute_with_stats, take_one},
 };
-use surrealdb::{IndexedResults, Surreal, types::SurrealValue};
+use surrealdb::{IndexedResults, method::WithStats, types::SurrealValue};
 
 // The execution methods return `impl Future + Send` (with `Self: Sync` for `&self` receivers) so
 // their futures stay `Send` for multi-threaded runtimes, as they were under `async_trait`.
@@ -17,17 +17,31 @@ pub trait Runnable
 where
     Self: Queryable,
 {
-    /// Runs the query against the database. Succeeds only when every statement succeeded;
-    /// otherwise returns the first failure, classified as [`Error::RecordExists`],
-    /// [`Error::TableNotFound`] or [`Error::Statement`].
-    fn run(
-        &self,
-        db: Surreal<impl surrealdb::Connection>,
-    ) -> impl Future<Output = Result<IndexedResults>> + Send
+    /// Runs the query on a client or an open SDK transaction. Succeeds only when every statement
+    /// succeeded; otherwise returns the first failure, classified as [`Error::RecordExists`],
+    /// [`Error::TableNotFound`], [`Error::Conflict`], [`Error::NotAllowed`],
+    /// [`Error::Connection`] or [`Error::Statement`].
+    fn run(&self, db: &impl Executor) -> impl Future<Output = Result<IndexedResults>> + Send
     where
         Self: Sync,
     {
-        async move { execute(&db, self.to_query()?).await }
+        async move { execute(db, self.to_query()?).await }
+    }
+
+    /// [`run`](Self::run), with the SDK's statistics for each statement (its execution time).
+    /// The response is checked exactly as `run` checks it.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`run`](Self::run).
+    fn run_with_stats(
+        &self,
+        db: &impl Executor,
+    ) -> impl Future<Output = Result<WithStats<IndexedResults>>> + Send
+    where
+        Self: Sync,
+    {
+        async move { execute_with_stats(db, self.to_query()?).await }
     }
 
     /// Runs the query, checks the complete response as [`run`](Self::run) does, and decodes the
@@ -40,10 +54,7 @@ where
     ///
     /// The errors of [`run`](Self::run), or [`Error::Conversion`] when the result does not decode
     /// as `T`, such as a single model asked for from a statement without `ONLY`.
-    fn get_data<T>(
-        &self,
-        db: Surreal<impl surrealdb::Connection>,
-    ) -> impl Future<Output = Result<Option<T>>> + Send
+    fn get_data<T>(&self, db: &impl Executor) -> impl Future<Output = Result<Option<T>>> + Send
     where
         Self: Sync,
         T: SurrealValue,
