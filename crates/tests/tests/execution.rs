@@ -190,13 +190,25 @@ mod select_failure {
                 duration: Duration::from_millis(10),
             },
         );
-        let conflict = SdkError::query("conflict".to_owned(), QueryError::TransactionConflict);
-        for error in [timed_out, conflict, unknown_outcome("unknown")] {
+        for error in [timed_out, unknown_outcome("unknown")] {
             assert_eq!(
                 selected(1, vec![(0, error)]).map(|(index, ..)| index),
                 Some(0)
             );
         }
+        // A conflict is selected too, and classified as its own variant (#29).
+        let conflict = SdkError::query("conflict".to_owned(), QueryError::TransactionConflict);
+        let error = select_failure(1, vec![(0, conflict)]).expect("a failure");
+        assert!(
+            matches!(
+                &error,
+                Error::Conflict {
+                    statement: Some(umbriel::StatementContext { index: 0, .. }),
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
     }
 
     #[test]
@@ -218,7 +230,7 @@ mod execute {
 
     async fn define_person(db: &Surreal<Db>) {
         Raw::new("DEFINE TABLE person SCHEMALESS;")
-            .run(db.clone())
+            .run(db)
             .await
             .expect("table");
     }
@@ -235,7 +247,7 @@ mod execute {
     async fn success_returns_the_results() {
         let db = db().await;
         let mut results = Raw::new("RETURN 1; RETURN 2;")
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("success");
         assert_eq!(results.take::<Option<i64>>(1).expect("value"), Some(2));
@@ -245,7 +257,7 @@ mod execute {
     async fn a_failing_statement_in_a_chain_is_reported_with_its_index() {
         let db = db().await;
         let query = Raw::new("RETURN 1; THROW 'second'; RETURN 3;");
-        let (index, source, _) = statement_error(query.run(db).await);
+        let (index, source, _) = statement_error(query.run(&db).await);
         assert_eq!(index, 1);
         assert!(source.to_string().contains("second"));
     }
@@ -254,7 +266,7 @@ mod execute {
     async fn multiple_failures_report_the_first_and_keep_the_others() {
         let db = db().await;
         let query = Raw::new("THROW 'first'; RETURN 1; THROW 'third';");
-        let (index, source, related) = statement_error(query.run(db).await);
+        let (index, source, related) = statement_error(query.run(&db).await);
         assert_eq!(index, 0);
         assert!(source.to_string().contains("first"));
         assert_eq!(related, 1);
@@ -269,7 +281,7 @@ mod execute {
             "BEGIN TRANSACTION; CREATE person:alice; CREATE person:bob; THROW 'cause'; \
              COMMIT TRANSACTION;",
         );
-        let (_, source, _) = statement_error(query.run(db.clone()).await);
+        let (_, source, _) = statement_error(query.run(&db).await);
         assert!(
             source.to_string().contains("cause"),
             "the cause, not a rollback row: {source}"
@@ -284,7 +296,7 @@ mod execute {
         define_person(&db).await;
 
         Raw::new("BEGIN TRANSACTION; CREATE person:alice; CANCEL TRANSACTION;")
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("an intentional cancel succeeds");
         assert!(people(&db).await.is_empty());
@@ -298,12 +310,12 @@ mod execute {
         let query = Raw::new(
             "BEGIN TRANSACTION; CREATE person:alice; CANCEL TRANSACTION; CREATE person:bob;",
         );
-        query.run(db.clone()).await.expect("success");
+        query.run(&db).await.expect("success");
         assert_eq!(people(&db).await, ["bob"]);
 
         let query =
             Raw::new("BEGIN TRANSACTION; CREATE person:carol; CANCEL TRANSACTION; THROW 'after';");
-        let (_, source, _) = statement_error(query.run(db.clone()).await);
+        let (_, source, _) = statement_error(query.run(&db).await);
         assert!(source.to_string().contains("after"));
     }
 
@@ -311,7 +323,7 @@ mod execute {
     async fn a_statement_timeout_is_a_failure() {
         let db = db().await;
         let query = Raw::new("SELECT * FROM sleep(500ms) TIMEOUT 10ms;");
-        let (_, source, _) = statement_error(query.run(db.clone()).await);
+        let (_, source, _) = statement_error(query.run(&db).await);
         assert!(
             matches!(source.query_details(), Some(QueryError::TimedOut { .. })),
             "expected a timeout, got {source}"
@@ -320,7 +332,7 @@ mod execute {
         let query = Raw::new(
             "BEGIN TRANSACTION; SELECT * FROM sleep(500ms) TIMEOUT 10ms; COMMIT TRANSACTION;",
         );
-        let (_, source, _) = statement_error(query.run(db).await);
+        let (_, source, _) = statement_error(query.run(&db).await);
         assert_ne!(source.query_details(), Some(&QueryError::NotExecuted));
     }
 }
@@ -329,7 +341,7 @@ mod get_data {
     use super::*;
 
     async fn names(db: &Surreal<Db>, sql: &str) -> Option<Vec<String>> {
-        Raw::new(sql).get_data(db.clone()).await.expect("decoded")
+        Raw::new(sql).get_data(db).await.expect("decoded")
     }
 
     #[tokio::test]
@@ -362,11 +374,11 @@ mod get_data {
         .expect("apollo");
         let query = Raw::new("SELECT * FROM space_ship;");
 
-        let single = query.get_data::<SpaceShip>(db.clone()).await;
+        let single = query.get_data::<SpaceShip>(&db).await;
         assert!(matches!(single, Err(Error::Conversion(_))), "{single:?}");
 
         let listed = query
-            .get_data::<Vec<SpaceShip>>(db.clone())
+            .get_data::<Vec<SpaceShip>>(&db)
             .await
             .expect("decoded")
             .expect("a result");
