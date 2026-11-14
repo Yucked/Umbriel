@@ -1,13 +1,10 @@
-use surrealdb::{
-    Connection, Surreal,
-    types::{self, SurrealValue, Table, ToSql},
-};
+use surrealdb::types::{self, SurrealValue, Table, ToSql};
 
 use crate::{
     __private::ModelField,
-    Alias, All, Conditional, Error, Field, IntoNodeClause, ModelMerge, ModelPatch, Raw, RecordId,
-    RecordKey, RecordRange, Render, Result, StoredFields, TableOf,
-    execution::{classify, execute},
+    Alias, All, Conditional, Error, Executor, Field, IntoNodeClause, ModelMerge, ModelPatch, Raw,
+    RecordId, RecordKey, RecordRange, Render, Result, StoredFields, TableOf,
+    execution::execute,
     query::table_of::select_range,
     statements::{DeleteStatement, SelectCount, SelectStatement, select, update::update},
 };
@@ -97,16 +94,19 @@ pub trait Model: Sized + SurrealValue + 'static {
 
 /// Reads of a model's records, run through the SDK's typed methods, plus statement builders for
 /// queries over the model's table. Every model has them, views included.
+///
+/// The record operations here and in [`SurrealCrud`] and [`SurrealCrudNode`] take any
+/// [`Executor`]: a client, or an open SDK transaction they then run inside.
 pub trait SurrealRead: Model + Send {
     /// Fetches a record by id.
     fn get(
-        db: &Surreal<impl Connection>,
+        db: &impl Executor,
         id: &RecordId<Self>,
     ) -> impl Future<Output = Result<Option<Self>>> + Send {
         async move {
             db.select(types::RecordId::from(id))
                 .await
-                .map_err(|error| classify(error, None))
+                .map_err(Error::from)
         }
     }
 
@@ -117,7 +117,7 @@ pub trait SurrealRead: Model + Send {
     ///
     /// [`Error::QueryBuilder`] when the range's bounds name different tables.
     fn get_range(
-        db: &Surreal<impl Connection>,
+        db: &impl Executor,
         range: impl Into<RecordRange<Self>>,
     ) -> impl Future<Output = Result<Vec<Self>>> + Send {
         let parts = range.into().into_parts();
@@ -130,18 +130,14 @@ pub trait SurrealRead: Model + Send {
     /// Fetches the records with the given ids that exist, in one SDK call. Missing ids return
     /// nothing.
     fn get_many(
-        db: &Surreal<impl Connection>,
+        db: &impl Executor,
         ids: &[RecordId<Self>],
     ) -> impl Future<Output = Result<Vec<Self>>> + Send {
         let ids = ids
             .iter()
             .map(|id| types::Value::RecordId(id.into()))
             .collect::<Vec<_>>();
-        async move {
-            db.select::<Vec<Self>>(ids)
-                .await
-                .map_err(|error| classify(error, None))
-        }
+        async move { db.select::<Vec<Self>>(ids).await.map_err(Error::from) }
     }
 
     /// `SELECT * FROM table` over the default table, decoded as the model;
@@ -196,23 +192,20 @@ pub trait Writable: Model {}
 pub trait SurrealCrud: SurrealRead + Writable {
     /// Creates or replaces the record with this model's id (`UPSERT … CONTENT`), returning the
     /// stored record.
-    fn save(self, db: &Surreal<impl Connection>) -> impl Future<Output = Result<Self>> + Send {
+    fn save(self, db: &impl Executor) -> impl Future<Output = Result<Self>> + Send {
         async move {
             let id = types::RecordId::from(self.record_id());
             let what = id.to_sql();
             db.upsert(id)
                 .content(self)
                 .await
-                .map_err(|error| classify(error, None))?
+                .map_err(Error::from)?
                 .ok_or(Error::RecordNotFound(what))
         }
     }
 
     /// Deletes this record, returning it as it was before deletion.
-    fn delete(
-        &self,
-        db: &Surreal<impl Connection>,
-    ) -> impl Future<Output = Result<Option<Self>>> + Send
+    fn delete(&self, db: &impl Executor) -> impl Future<Output = Result<Option<Self>>> + Send
     where
         Self: Sync,
     {
@@ -221,13 +214,13 @@ pub trait SurrealCrud: SurrealRead + Writable {
 
     /// Deletes a record by id, returning it as it was before deletion.
     fn delete_by_id(
-        db: &Surreal<impl Connection>,
+        db: &impl Executor,
         id: &RecordId<Self>,
     ) -> impl Future<Output = Result<Option<Self>>> + Send {
         async move {
             db.delete(types::RecordId::from(id))
                 .await
-                .map_err(|error| classify(error, None))
+                .map_err(Error::from)
         }
     }
 
@@ -239,7 +232,7 @@ pub trait SurrealCrud: SurrealRead + Writable {
     /// update-side effects. `None` means no record was returned: the record does not exist or is
     /// not visible.
     fn patch<P>(
-        db: &Surreal<impl Connection>,
+        db: &impl Executor,
         id: &RecordId<Self>,
         patch: P,
     ) -> impl Future<Output = Result<Option<Self>>> + Send
@@ -266,7 +259,7 @@ pub trait SurrealCrud: SurrealRead + Writable {
     /// so it causes no write or update-side effects; [`update(..).merge(..)`](crate::statements::update)
     /// writes `MERGE {}` as built. `None` means no record was returned.
     fn merge<M>(
-        db: &Surreal<impl Connection>,
+        db: &impl Executor,
         id: &RecordId<Self>,
         merge: M,
     ) -> impl Future<Output = Result<Option<Self>>> + Send
@@ -293,7 +286,7 @@ pub trait SurrealCrud: SurrealRead + Writable {
     /// [`Error::QueryBuilder`] when a record's id names another table, and
     /// [`Error::RecordExists`] when a record's id already exists, with the database error kept.
     fn insert_many(
-        db: &Surreal<impl Connection>,
+        db: &impl Executor,
         records: Vec<Self>,
     ) -> impl Future<Output = Result<Vec<Self>>> + Send {
         async move { TableOf::<Self>::default().insert_many(db, records).await }
@@ -311,14 +304,14 @@ impl<T> SurrealCrud for T where T: Writable + Send {}
 pub trait SurrealCrudNode: Node + Send {
     /// Creates the record with this model's id (`CREATE … CONTENT`), returning the stored
     /// record. Fails if a record with the same id already exists.
-    fn create(self, db: &Surreal<impl Connection>) -> impl Future<Output = Result<Self>> + Send {
+    fn create(self, db: &impl Executor) -> impl Future<Output = Result<Self>> + Send {
         async move {
             let id = types::RecordId::from(self.record_id());
             let what = id.to_sql();
             db.create(id)
                 .content(self)
                 .await
-                .map_err(|error| classify(error, None))?
+                .map_err(Error::from)?
                 .ok_or(Error::RecordNotFound(what))
         }
     }

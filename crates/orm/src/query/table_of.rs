@@ -3,16 +3,12 @@
 
 use std::{fmt, marker::PhantomData};
 
-use surrealdb::{
-    Connection, Surreal,
-    types::{RecordIdKeyRange, SurrealValue, Table},
-};
+use surrealdb::types::{RecordIdKeyRange, SurrealValue, Table};
 
 use crate::{
     __private::ModelField,
-    All, Conditional, Error, Field, Filter, Model, RecordId, RecordKey, RecordRange, Result,
-    Writable, count,
-    execution::classify,
+    All, Conditional, Error, Executor, Field, Filter, Model, RecordId, RecordKey, RecordRange,
+    Result, Writable, count,
     statements::{
         DeleteStatement, SelectCount, SelectStatement, delete::delete, select, select_value,
     },
@@ -178,11 +174,7 @@ impl<T: Model> TableOf<T> {
     /// [`Error::QueryBuilder`] before anything is sent when a record's id names another table,
     /// and [`Error::RecordExists`] when an id already exists. Views are read-only, so it is not
     /// offered for them.
-    pub async fn insert_many(
-        &self,
-        db: &Surreal<impl Connection>,
-        records: Vec<T>,
-    ) -> Result<Vec<T>>
+    pub async fn insert_many(&self, db: &impl Executor, records: Vec<T>) -> Result<Vec<T>>
     where
         T: Writable,
     {
@@ -199,7 +191,7 @@ impl<T: Model> TableOf<T> {
         db.insert::<Vec<T>>(self.table.as_str())
             .content(records)
             .await
-            .map_err(|error| classify(error, None))
+            .map_err(Error::from)
     }
 
     /// Fetches the records of this table whose keys fall in `keys`, in one SDK call.
@@ -209,7 +201,7 @@ impl<T: Model> TableOf<T> {
     /// The database error, classified.
     pub async fn get_range(
         &self,
-        db: &Surreal<impl Connection>,
+        db: &impl Executor,
         keys: impl Into<RecordIdKeyRange>,
     ) -> Result<Vec<T>> {
         select_range(db, &self.table, keys.into()).await
@@ -268,14 +260,14 @@ impl<T: Model> TableOf<T> {
 
 /// Fetches the records of `table` whose keys fall in `keys`, through the SDK's range resource.
 pub(crate) async fn select_range<T: Model>(
-    db: &Surreal<impl Connection>,
+    db: &impl Executor,
     table: &Table,
     keys: RecordIdKeyRange,
 ) -> Result<Vec<T>> {
     db.select::<Vec<T>>(table.as_str())
         .range(keys)
         .await
-        .map_err(|error| classify(error, None))
+        .map_err(Error::from)
 }
 
 /// The default table.
