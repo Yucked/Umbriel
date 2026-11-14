@@ -63,14 +63,14 @@ impl EmbeddedMigrationsOneWay {
     /// transaction (see [`MigrationRunner`](crate::migrations::MigrationRunner)).
     pub async fn run(
         self,
-        db: Surreal<Any>,
+        db: &Surreal<Any>,
         update_strategy: UpdateStrategy,
         mode: Mode,
     ) -> MigrationResult<()> {
         let files_config = MigrationConfig::new().set_mode(mode);
         files_config
             .one_way()
-            .run_embedded_pending_migrations(db.clone(), self, update_strategy)
+            .run_embedded_pending_migrations(db, self, update_strategy)
             .await?;
         Ok(())
     }
@@ -97,7 +97,7 @@ impl EmbeddedMigrationsTwoWay {
     /// transaction (see [`MigrationRunner`](crate::migrations::MigrationRunner)).
     pub async fn run(
         self,
-        db: Surreal<Any>,
+        db: &Surreal<Any>,
         update_strategy: UpdateStrategy,
         mode: Mode,
     ) -> MigrationResult<()> {
@@ -105,7 +105,7 @@ impl EmbeddedMigrationsTwoWay {
 
         let two_way = files_config.two_way();
         two_way
-            .run_up_embedded_pending_migrations(db.clone(), self, update_strategy)
+            .run_up_embedded_pending_migrations(db, self, update_strategy)
             .await?;
         Ok(())
     }

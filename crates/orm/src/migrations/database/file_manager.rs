@@ -262,7 +262,7 @@ impl FileManagerUni {
     /// [`MigrationRunner`]). The migration directory must exist.
     pub async fn run_pending_migrations(
         &self,
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         update_strategy: UpdateStrategy,
     ) -> MigrationResult<()> {
         let migrations = self.get_migrations()?;
@@ -275,7 +275,7 @@ impl FileManagerUni {
     /// [`MigrationRunner`]).
     pub async fn run_embedded_pending_migrations(
         &self,
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         one_way_embedded_migrations: EmbeddedMigrationsOneWay,
         update_strategy: UpdateStrategy,
     ) -> MigrationResult<()> {
@@ -288,7 +288,7 @@ impl FileManagerUni {
     /// List all migrations
     pub async fn list_migrations(
         &self,
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         status: Status,
         mode: Mode,
     ) -> MigrationResult<Vec<MigrationFilename>> {
@@ -298,8 +298,7 @@ impl FileManagerUni {
             .map(|m| m.name().to_owned())
             .collect::<Vec<_>>();
 
-        let migrations =
-            MigrationRunner::list_migrations(db.clone(), migrations, status, mode).await?;
+        let migrations = MigrationRunner::list_migrations(db, migrations, status, mode).await?;
 
         Ok(migrations)
     }
@@ -352,11 +351,11 @@ impl FileManagerBi {
     /// [`MigrationRunner`]). The migration directory must exist.
     pub async fn run_up_pending_migrations(
         &self,
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         update_strategy: UpdateStrategy,
     ) -> MigrationResult<()> {
         let migrations = self.get_migrations()?;
-        MigrationRunner::apply_pending_migrations(db.clone(), migrations, update_strategy).await?;
+        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy).await?;
 
         Ok(())
     }
@@ -365,12 +364,12 @@ impl FileManagerBi {
     /// [`MigrationRunner`]).
     pub async fn run_up_embedded_pending_migrations(
         &self,
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         two_way_embedded_migrations: EmbeddedMigrationsTwoWay,
         update_strategy: UpdateStrategy,
     ) -> MigrationResult<()> {
         let migrations = two_way_embedded_migrations.to_migrations_two_way()?;
-        MigrationRunner::apply_pending_migrations(db.clone(), migrations, update_strategy).await?;
+        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy).await?;
 
         Ok(())
     }
@@ -379,10 +378,10 @@ impl FileManagerBi {
     /// [`MigrationRunner`]).
     pub async fn run_down_migrations(
         &self,
-        db: Surreal<Any>,
+        db: &Surreal<Any>,
         rollback_options: RollbackOptions,
     ) -> MigrationResult<()> {
-        MigrationRunner::rollback_migrations(db.clone(), self, rollback_options).await?;
+        MigrationRunner::rollback_migrations(db, self, rollback_options).await?;
 
         Ok(())
     }
@@ -390,7 +389,7 @@ impl FileManagerBi {
     /// List all migrations
     pub async fn list_migrations(
         &self,
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         status: Status,
         mode: Mode,
     ) -> MigrationResult<Vec<MigrationFilename>> {
@@ -400,8 +399,7 @@ impl FileManagerBi {
             .map(|m| m.up.name)
             .collect::<Vec<_>>();
 
-        let migrations =
-            MigrationRunner::list_migrations(db.clone(), migrations, status, mode).await?;
+        let migrations = MigrationRunner::list_migrations(db, migrations, status, mode).await?;
 
         Ok(migrations)
     }

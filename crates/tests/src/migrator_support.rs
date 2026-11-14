@@ -221,7 +221,7 @@ impl TestConfig {
     }
 
     pub async fn assert_db_resources_state(&mut self) -> DbMigrationSchemaState {
-        let db_info = Schema::inspect(&self.migrator.db())
+        let db_info = Schema::inspect(self.migrator.db())
             .await
             .expect("the schema is inspected");
         let migrations = Migration::get_all_desc(self.migrator.db())
@@ -601,11 +601,11 @@ impl TestConfig {
         let migration_type = MigrationFlag::from(self.reversible.unwrap_or_default());
         let current_file_name = &self.current_function_name.clone();
 
-        let db = self.migrator.db().clone();
-        let db_migrations = Migration::get_all_desc(db.clone())
+        let db = self.migrator.db();
+        let db_migrations = Migration::get_all_desc(db)
             .await
             .expect("the history is read");
-        let latest_migration_basename = Migration::get_latest(db.clone())
+        let latest_migration_basename = Migration::get_latest(db)
             .await
             .expect("the history is read")
             .map(|m| {

@@ -108,12 +108,12 @@ async fn casts_convert_on_the_engine() {
     let db = db().await;
     let int: Option<i64> =
         umbriel::statements::return_(Field::from_expr(cast::<kinds::Int>("5")).add(1))
-            .get_data(db.clone())
+            .get_data(&db)
             .await
             .expect("ran");
     assert_eq!(int, Some(6));
     let string: Option<String> = umbriel::statements::return_(cast::<kinds::String>(5))
-        .get_data(db.clone())
+        .get_data(&db)
         .await
         .expect("ran");
     assert_eq!(string.as_deref(), Some("5"));

@@ -44,8 +44,8 @@ impl MigratorDatabase {
     }
 
     /// The connection to the database.
-    pub fn db(&self) -> Surreal<Db> {
-        self.db.clone()
+    pub fn db(&self) -> &Surreal<Db> {
+        &self.db
     }
 
     /// The schema the database holds. Namespace-level definitions, which migrations do not

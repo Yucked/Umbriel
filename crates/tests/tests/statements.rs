@@ -51,7 +51,7 @@ fn organization(key: &str, name: &str, age: u8) -> Organization {
 }
 
 async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
-    statement.run(db.clone()).await.expect("statement succeeds");
+    statement.run(db).await.expect("statement succeeds");
 }
 
 async fn ships(db: &Surreal<Db>) -> Vec<String> {
@@ -1019,7 +1019,7 @@ mod update {
         )
         .await;
         let failed = Raw::new("UPDATE strict_org:acme SET name = NONE;")
-            .run(db.clone())
+            .run(&db)
             .await;
         assert!(matches!(failed, Err(Error::Statement { .. })), "{failed:?}");
     }
@@ -1671,7 +1671,7 @@ mod relate {
             "RELATE company:acme->like:second->user:alice CONTENT { in: company:globex };",
             "RELATE company:acme->like:third->user:alice CONTENT { out: user:bob };",
         ] {
-            let (_, source, _) = statement_error(Raw::new(sql).run(db.clone()).await);
+            let (_, source, _) = statement_error(Raw::new(sql).run(&db).await);
             assert!(
                 source
                     .to_string()
@@ -2530,7 +2530,7 @@ mod definitions {
         // Without `ALWAYS`, removing the field does not bring the default back, so the `int`
         // field rejects the NONE left behind.
         let error = Raw::new("UPDATE player:carol UNSET score;")
-            .run(db.clone())
+            .run(&db)
             .await
             .expect_err("NONE is not an int");
         let error = format!("{error:?}");
@@ -2596,14 +2596,14 @@ mod definitions {
         run(&db, Raw::new("CREATE person:alice SET name = 'Alice';")).await;
         assert!(
             Raw::new("CREATE person:carol SET name = 'Carol', extra = 1;")
-                .run(db.clone())
+                .run(&db)
                 .await
                 .is_err(),
             "an undefined field is rejected"
         );
         assert!(
             Raw::new("CREATE person:bob SET name = 1;")
-                .run(db.clone())
+                .run(&db)
                 .await
                 .is_err(),
             "a field of the wrong type is rejected"
@@ -2628,7 +2628,7 @@ mod definitions {
         .await;
         assert!(
             Raw::new("CREATE user:bob SET email = 'alice@example.com';")
-                .run(db.clone())
+                .run(&db)
                 .await
                 .is_err()
         );
@@ -2733,12 +2733,7 @@ mod definitions {
         assert_eq!(result, 42);
 
         run(&db, remove_function("fn::add_one")).await;
-        assert!(
-            Raw::new("RETURN fn::add_one(1);")
-                .run(db.clone())
-                .await
-                .is_err()
-        );
+        assert!(Raw::new("RETURN fn::add_one(1);").run(&db).await.is_err());
         run(&db, remove_param("greeting")).await;
     }
 
@@ -2808,7 +2803,7 @@ mod definitions {
 
         let info: Option<BTreeMap<String, Value>> = info_for()
             .database()
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("info")
             .take(0)
@@ -2819,7 +2814,7 @@ mod definitions {
         }
         let table: Option<BTreeMap<String, Value>> = info_for()
             .table(user.clone())
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("info")
             .take(0)
@@ -2907,13 +2902,13 @@ mod info_show_and_utilities {
     #[tokio::test]
     async fn throw_fails_and_sleep_and_return_succeed() {
         let db = db().await;
-        match throw("something went wrong").run(db.clone()).await {
+        match throw("something went wrong").run(&db).await {
             Err(error) => assert!(error.to_string().contains("something went wrong")),
             Ok(_) => panic!("THROW succeeded"),
         }
         run(&db, sleep(Duration::from_millis(1))).await;
         let value: Option<i64> = return_(41)
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("ran")
             .take(0)
@@ -3027,19 +3022,14 @@ mod control_flow {
         let age = Param::new("age");
         let branch = chain(let_("age").equal_to(20))
             .chain(if_(age.gte(18)).then("adult").else_("minor").end());
-        let result: Option<String> = branch
-            .run(db.clone())
-            .await
-            .expect("ran")
-            .take(1)
-            .expect("value");
+        let result: Option<String> = branch.run(&db).await.expect("ran").take(1).expect("value");
         assert_eq!(result.as_deref(), Some("adult"));
 
         let block_value: Option<i64> = return_(block(
             chain(let_("total").equal_to(41))
                 .chain(return_(Field::from(Param::new("total")).add(1))),
         ))
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("ran")
         .take(0)
@@ -3106,7 +3096,7 @@ mod control_flow {
             .query(update::<Account>(&one).set(acc.balance.decrement_by(30.0)))
             .query(throw("insufficient funds"))
             .commit_transaction()
-            .run(db.clone())
+            .run(&db)
             .await;
         assert!(failed.is_err());
         let balances: Vec<f64> = read(&db, "SELECT VALUE balance FROM account ORDER BY id;").await;

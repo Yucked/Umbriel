@@ -80,7 +80,7 @@ impl Migrator {
     /// # Panics
     ///
     /// If the connection has not been set up.
-    pub fn db(&self) -> Surreal<Any> {
+    pub fn db(&self) -> &Surreal<Any> {
         self.db_connection.db().expect("Failed to get db")
     }
 

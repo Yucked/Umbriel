@@ -97,7 +97,7 @@ async fn a_closure_runs_through_a_parameter() {
     assert_eq!(call.to_debug_sql(), "$double(3)");
     let result: Option<i64> = chain(double)
         .chain(return_(call))
-        .run(db)
+        .run(&db)
         .await
         .expect("ran")
         .take(1)

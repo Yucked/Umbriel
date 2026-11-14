@@ -42,7 +42,7 @@ impl List {
     /// Logs the migrations with the requested status.
     pub async fn run(&self, cli: &mut Migrator) {
         cli.setup_db().await;
-        let db = cli.db().clone();
+        let db = cli.db();
         let file_manager = cli.file_manager();
 
         match file_manager.detect_migration_type() {
@@ -51,7 +51,7 @@ impl List {
 
                 let migrations = file_manager
                     .two_way()
-                    .list_migrations(db.clone(), self.status, cli.mode)
+                    .list_migrations(db, self.status, cli.mode)
                     .await;
 
                 match migrations {
@@ -73,7 +73,7 @@ impl List {
                 log::info!("Listing one way migrations");
                 let migrations = file_manager
                     .one_way()
-                    .list_migrations(db.clone(), self.status, cli.mode)
+                    .list_migrations(db, self.status, cli.mode)
                     .await;
 
                 match migrations {

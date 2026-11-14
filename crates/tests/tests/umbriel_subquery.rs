@@ -17,7 +17,7 @@ async fn people() -> Surreal<Db> {
          CREATE person:bob SET name = 'Bob', age = 20; \
          RELATE person:bob->knows->person:alice; RELATE person:alice->knows->person:bob;",
     )
-    .run(db.clone())
+    .run(&db)
     .await
     .expect("seeded");
     db
@@ -79,7 +79,7 @@ async fn an_inline_select_stays_an_array() {
         .from(Table::from("person"))
         .where_(Field::new("age").gt(25));
     let mut results = umbriel::statements::return_(one)
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("ran");
     let names: Vec<String> = results.take(0).expect("an array");

@@ -548,7 +548,7 @@ DEFINE FIELD data ON TABLE planet TYPE int;"
             .await
             .expect("matches the definitions");
         let wrong_type = Raw::new("CREATE weapon:2 SET name = 1, strength = 1.0;")
-            .run(db.clone())
+            .run(&db)
             .await;
         assert!(wrong_type.is_err(), "a field of the wrong type is rejected");
     }
@@ -579,15 +579,15 @@ DEFINE FIELD title ON TABLE ticket TYPE string;"
         apply_definitions::<Ticket>(&db).await;
 
         let blocked = Raw::new("CREATE ticket:blocked SET title = 'Blocked';")
-            .run(db.clone())
+            .run(&db)
             .await;
         assert!(blocked.is_err(), "the assertion rejects the id");
         Raw::new("CREATE ticket:open SET title = 'Open';")
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("an id the assertion accepts");
         Raw::new("CREATE ticket SET title = 'Defaulted';")
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("an id from the default");
 
@@ -622,7 +622,7 @@ DEFINE FIELD celsius ON TABLE reading TYPE float;"
         );
 
         let string_key = Raw::new("CREATE reading:abc SET celsius = 1.0;")
-            .run(db.clone())
+            .run(&db)
             .await;
         assert!(string_key.is_err(), "the key type is enforced");
     }
@@ -1004,7 +1004,7 @@ mod record_ids {
         let db = db().await;
         // A record shaped like a space ship, stored in another table.
         Raw::new("CREATE alien:apollo SET name = 'Apollo', created = d'1970-01-01T00:00:00Z';")
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("created");
         let record: Value = read(&db, "SELECT * FROM ONLY alien:apollo;").await;
@@ -1014,7 +1014,7 @@ mod record_ids {
         Raw::new(
             "CREATE space_ship:apollo SET name = 'Apollo', created = d'1970-01-01T00:00:00Z';",
         )
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("created");
         let record: Value = read(&db, "SELECT * FROM ONLY space_ship:apollo;").await;
@@ -1456,7 +1456,7 @@ mod patches {
                 "DEFINE TABLE profile SCHEMALESS; \
                  DEFINE FIELD nickname ON TABLE profile TYPE option<string> {default};"
             ))
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("defined");
             profile("alice", Some("Al"), None)
@@ -1499,7 +1499,7 @@ mod patches {
         let db = db().await;
         // SurrealDB 3 reports reading a table that does not exist as an error.
         Profile::define_table()
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("table defined");
         let missing = Profile::patch(
@@ -1832,7 +1832,7 @@ mod record_operations {
         let db = db().await;
         // SurrealDB 3 reports reading a table that does not exist as an error.
         Weapon::define_table()
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("table defined");
         let query = Weapon::count_all();
@@ -1860,7 +1860,7 @@ mod record_operations {
         let SpaceShipSchema { name, .. } = SpaceShip::schema();
 
         SpaceShip::delete_where(name.contains("Apollo"))
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("deleted");
 
@@ -2016,7 +2016,7 @@ mod conversions {
         );
 
         let unknown = Raw::new("CREATE plan:globex SET tier = 'gold';")
-            .run(db.clone())
+            .run(&db)
             .await;
         assert!(unknown.is_err(), "the literal type rejects other names");
     }

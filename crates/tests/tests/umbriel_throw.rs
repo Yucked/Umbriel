@@ -23,7 +23,7 @@ async fn a_thrown_object_fails_the_query_with_its_text() {
     let db = db().await;
     let mut error = Object::new();
     error.insert("code".to_owned(), Value::String("E42".to_owned()));
-    let failed = throw(Value::Object(error)).run(db.clone()).await;
+    let failed = throw(Value::Object(error)).run(&db).await;
     match failed {
         Err(Error::Statement { source, .. }) => {
             assert!(source.to_string().contains("E42"), "{source}");

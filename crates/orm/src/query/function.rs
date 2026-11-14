@@ -1,9 +1,9 @@
 use std::{borrow::Cow, fmt, marker::PhantomData, str::FromStr};
 
-use surrealdb::{Surreal, types::SurrealValue};
+use surrealdb::types::SurrealValue;
 
 use crate::{
-    Aliasable, Param, Render, Renderer, Result, Runnable, ValueLike,
+    Aliasable, Executor, Param, Render, Renderer, Result, Runnable, ValueLike,
     kinds::{self, KindOf},
     render::push_path,
     statements::return_,
@@ -145,7 +145,7 @@ impl<K: KindOf> Function<K> {
     /// it, or when the result does not decode as `R`.
     pub fn run<R: SurrealValue>(
         &self,
-        db: Surreal<impl surrealdb::Connection>,
+        db: &impl Executor,
     ) -> impl Future<Output = Result<Option<R>>> + Send {
         let statement = return_(self.clone());
         async move { statement.get_data(db).await }

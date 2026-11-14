@@ -35,12 +35,12 @@ impl LeftDatabase {
 
     /// Applies `migrations` to `db` in order, each in its own transaction.
     pub async fn run_local_dir_oneway_content_migrations<C: Connection>(
-        db: Surreal<C>,
+        db: &Surreal<C>,
         migrations: Vec<MigrationFileOneWay>,
     ) -> MigrationResult<()> {
         for migration in migrations {
             log::info!("Running migration: {}", migration.name());
-            run_transaction(db.clone(), migration.content().to_string()).await?;
+            run_transaction(db, migration.content().to_string()).await?;
         }
         Ok(())
     }

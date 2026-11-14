@@ -8,12 +8,12 @@
 use std::{collections::BTreeMap, fmt};
 
 use surrealdb::{
-    Connection, IndexedResults, Surreal,
+    IndexedResults,
     types::{Object, Table, Value},
 };
 
 use crate::{
-    Chainable, QueryChain, Runnable,
+    Chainable, Executor, QueryChain, Runnable,
     migrations::{MigrationError, MigrationResult},
     statements::{
         DatabaseInfo, InfoOutput, NamespaceInfo, Statements, Structures, TableInfo, info_for,
@@ -187,12 +187,12 @@ impl Schema {
     /// migrations do not manage yet (APIs, buckets, configs, models, modules, sequences, or one
     /// the server adds) fail with [`MigrationError::UnsupportedSchemaResource`] instead of being
     /// ignored.
-    pub async fn inspect(db: &Surreal<impl Connection>) -> MigrationResult<Self> {
+    pub async fn inspect(db: &impl Executor) -> MigrationResult<Self> {
         let mut info = QueryChain::from(vec![
             Chainable::from(info_for().database().structure()),
             Chainable::from(info_for().database()),
         ])
-        .run(db.clone())
+        .run(db)
         .await?;
         let structures = DatabaseInfo::<Structures>::from_info(take_value(&mut info, 0)?)?;
         let statements = DatabaseInfo::<Statements>::from_info(take_value(&mut info, 1)?)?;
@@ -254,7 +254,7 @@ impl Schema {
                 ]
             })
             .collect::<Vec<_>>();
-        let mut info = QueryChain::from(statements).run(db.clone()).await?;
+        let mut info = QueryChain::from(statements).run(db).await?;
         for (index, table) in tables.iter().enumerate() {
             let structures = TableInfo::<Structures>::from_info(take_value(&mut info, 2 * index)?)?;
             let statements =
@@ -279,10 +279,8 @@ impl Schema {
     /// Rejects definitions at the namespace level, which migrations do not manage. Only the
     /// generator's own in-memory databases run it: `INFO FOR NS` needs a root or namespace user,
     /// which [`Schema::inspect`] must not require.
-    pub(crate) async fn reject_namespace_definitions(
-        db: &Surreal<impl Connection>,
-    ) -> MigrationResult<()> {
-        let mut info = info_for().namespace().structure().run(db.clone()).await?;
+    pub(crate) async fn reject_namespace_definitions(db: &impl Executor) -> MigrationResult<()> {
+        let mut info = info_for().namespace().structure().run(db).await?;
         let info = NamespaceInfo::<Structures>::from_info(take_value(&mut info, 0)?)?;
         // `databases` are the namespace's databases themselves, not definitions inside one.
         Self::default().collect(

@@ -339,7 +339,7 @@ pub fn block(input: TokenStream) -> TokenStream {
 ///
 ///     COMMIT TRANSACTION;
 /// }
-/// .run(db.clone())
+/// .run(&db)
 /// .await?;
 /// ```
 #[proc_macro]

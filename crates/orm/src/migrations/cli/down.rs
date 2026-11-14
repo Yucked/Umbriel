@@ -95,7 +95,7 @@ impl Down {
     pub async fn run(&self, cli: &mut Migrator) {
         cli.setup_db().await;
         let file_manager = cli.file_manager();
-        let db = cli.db().clone();
+        let db = cli.db();
 
         if let Ok(MigrationFlag::OneWay) = file_manager.detect_migration_type() {
             let err = "Cannot rollback one way migrations. \
@@ -111,7 +111,7 @@ impl Down {
         let rollback = file_manager
             .two_way()
             .run_down_migrations(
-                db.clone(),
+                db,
                 RollbackOptions {
                     rollback_strategy,
                     mode: cli.mode,

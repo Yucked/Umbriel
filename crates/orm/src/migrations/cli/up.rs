@@ -91,14 +91,14 @@ impl Up {
         cli.setup_db().await;
         let file_manager = cli.file_manager();
         let update_strategy = self.update_strategy();
-        let db = cli.db().clone();
+        let db = cli.db();
 
         match file_manager.detect_migration_type() {
             Ok(MigrationFlag::TwoWay) => {
                 log::info!("Running two way migrations");
                 let run = file_manager
                     .two_way()
-                    .run_up_pending_migrations(db.clone(), update_strategy)
+                    .run_up_pending_migrations(db, update_strategy)
                     .await;
                 if let Err(e) = run {
                     log::error!("Failed to run migrations: {e}");
@@ -109,7 +109,7 @@ impl Up {
                 log::info!("Running one way migrations");
                 let run = file_manager
                     .one_way()
-                    .run_pending_migrations(db.clone(), update_strategy)
+                    .run_pending_migrations(db, update_strategy)
                     .await;
                 if let Err(e) = run {
                     log::error!("Failed to run migrations: {e}");
@@ -126,7 +126,7 @@ impl Up {
         };
 
         log::info!("Successfully ran migrations");
-        match Schema::inspect(&db).await {
+        match Schema::inspect(db).await {
             Ok(schema) => log::info!("Database: {schema:?}"),
             Err(e) => log::error!("Failed to inspect the database schema: {e}"),
         }

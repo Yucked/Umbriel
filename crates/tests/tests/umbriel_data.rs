@@ -56,7 +56,10 @@ fn statements_without_a_data_clause_write_none() {
         &update::<Organization>(Organization::table()),
         "UPDATE organization;",
     );
-    assert_sql(&create::<SpaceShip>(CreateTarget::count(2)), "CREATE |space_ship:2|;");
+    assert_sql(
+        &create::<SpaceShip>(CreateTarget::count(2)),
+        "CREATE |space_ship:2|;",
+    );
     assert_sql(
         &relate::<CompanyLikeUser>(
             Company::with(Company::id("acme"))

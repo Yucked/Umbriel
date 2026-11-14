@@ -13,7 +13,7 @@ use umbriel::{
 use umbriel_tests::*;
 
 async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
-    statement.run(db.clone()).await.expect("ran");
+    statement.run(db).await.expect("ran");
 }
 
 mod rendering {
@@ -303,7 +303,7 @@ mod execution {
     async fn a_plain_definition_of_an_existing_resource_fails() {
         let db = db().await;
         run(&db, define_table("user")).await;
-        assert!(define_table("user").run(db.clone()).await.is_err());
+        assert!(define_table("user").run(&db).await.is_err());
     }
 
     #[tokio::test]

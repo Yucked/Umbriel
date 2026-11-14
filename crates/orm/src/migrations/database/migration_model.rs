@@ -242,7 +242,7 @@ impl Migration {
     }
 
     /// The most recently applied migration, if any.
-    pub async fn get_latest(db: Surreal<impl Connection>) -> MigrationResult<Option<Self>> {
+    pub async fn get_latest(db: &Surreal<impl Connection>) -> MigrationResult<Option<Self>> {
         let MigrationSchema { timestamp, .. } = Self::schema();
 
         history_or_empty(
@@ -251,7 +251,7 @@ impl Migration {
                 .order_by(order(timestamp).desc())
                 .limit(1)
                 .decode::<Self>()
-                .execute(&db)
+                .execute(db)
                 .await
                 .map(|rows| rows.into_iter().next()),
         )
@@ -259,7 +259,7 @@ impl Migration {
 
     /// The applied migration with this file name, if any.
     pub async fn get_by_filename(
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         filename: &MigrationFilename,
     ) -> MigrationResult<Option<Self>> {
         let MigrationSchema { name, .. } = Self::schema();
@@ -269,14 +269,14 @@ impl Migration {
                 .from(Self::table())
                 .where_(name.equal(filename.to_string()))
                 .decode::<Self>()
-                .execute(&db)
+                .execute(db)
                 .await
                 .map(|rows| rows.into_iter().next()),
         )
     }
 
     /// Every applied migration, the most recent first.
-    pub async fn get_all_desc(db: Surreal<impl Connection>) -> MigrationResult<Vec<Self>> {
+    pub async fn get_all_desc(db: &Surreal<impl Connection>) -> MigrationResult<Vec<Self>> {
         let MigrationSchema { timestamp, .. } = Self::schema();
 
         history_or_empty(
@@ -284,7 +284,7 @@ impl Migration {
                 .from(Self::table())
                 .order_by(order(timestamp).desc())
                 .decode::<Self>()
-                .execute(&db)
+                .execute(db)
                 .await,
         )
     }

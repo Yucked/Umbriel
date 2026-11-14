@@ -14,7 +14,7 @@ use umbriel::{
 use umbriel_tests::*;
 
 async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
-    statement.run(db.clone()).await.expect("ran");
+    statement.run(db).await.expect("ran");
 }
 
 mod rendering {
@@ -410,7 +410,7 @@ mod behaviour {
             alter_table("missing")
                 .if_exists()
                 .comment("x")
-                .run(db.clone())
+                .run(&db)
                 .await
                 .is_ok()
         );
@@ -419,7 +419,7 @@ mod behaviour {
                 .on_table("missing")
                 .if_exists()
                 .readonly()
-                .run(db.clone())
+                .run(&db)
                 .await
                 .is_ok()
         );
@@ -427,16 +427,10 @@ mod behaviour {
             alter_param(&Param::new("missing"))
                 .if_exists()
                 .value(1)
-                .run(db.clone())
+                .run(&db)
                 .await
                 .is_ok()
         );
-        assert!(
-            alter_table("missing")
-                .comment("x")
-                .run(db.clone())
-                .await
-                .is_err()
-        );
+        assert!(alter_table("missing").comment("x").run(&db).await.is_err());
     }
 }

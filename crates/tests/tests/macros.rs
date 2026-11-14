@@ -250,7 +250,7 @@ mod chain_macros {
                 create::<SpaceShip>(SpaceShip::table()).set(name.equal_to("Vostok"));
             };
         };
-        query.run(db.clone()).await.expect("ran");
+        query.run(&db).await.expect("ran");
         assert_eq!(ships(&db).await, ["Apollo", "Gemini", "Mercury"]);
     }
 
@@ -278,7 +278,7 @@ mod chain_macros {
 
             COMMIT TRANSACTION;
         };
-        transfer.run(db.clone()).await.expect("committed");
+        transfer.run(&db).await.expect("committed");
 
         let accounts: Vec<Account> = select(All)
             .from(one..=two)
@@ -307,7 +307,7 @@ mod chain_macros {
                 ..Default::default()
             })
             .collect::<Vec<_>>();
-        insert(weapons).run(db.clone()).await.expect("inserted");
+        insert(weapons).run(&db).await.expect("inserted");
 
         let created =
             create::<WeaponStats>(WeaponStats::table()).set(object_partial!(WeaponStats {
@@ -383,9 +383,9 @@ mod definitions {
     #[tokio::test]
     async fn defined_functions_run() {
         let db = db().await;
-        double_statement().run(db.clone()).await.expect("defined");
+        double_statement().run(&db).await.expect("defined");
         let doubled: Option<i64> = return_(double!(21))
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("ran")
             .take(0)

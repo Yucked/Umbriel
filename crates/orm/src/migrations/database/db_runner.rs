@@ -12,7 +12,7 @@ use crate::migrations::*;
 /// own, so a single transaction spanning several migrations that define, change or remove the same
 /// index fails to commit with a write conflict.
 pub(crate) async fn run_transaction(
-    db: Surreal<impl Connection>,
+    db: &Surreal<impl Connection>,
     queries: String,
 ) -> MigrationResult<()> {
     if !queries.trim().is_empty() {
@@ -79,7 +79,7 @@ impl MigrationRunner {
     /// in its own transaction with the removal of its history record. A failure leaves the
     /// migrations rolled back before it rolled back.
     pub async fn rollback_migrations(
-        db: Surreal<Any>,
+        db: &Surreal<Any>,
         fm: &MigrationConfig,
         rollback_options: RollbackOptions,
     ) -> MigrationResult<()> {
@@ -92,7 +92,7 @@ impl MigrationRunner {
 
         let (queries_to_run, _rolledback_file_paths) = match rollback_strategy {
             RollbackStrategy::Previous => {
-                let latest_migration = Self::get_latest_migration(db.clone()).await?;
+                let latest_migration = Self::get_latest_migration(db).await?;
                 match latest_migration {
                     Some(latest_migration) => {
                         let latest_migration_name: MigrationFilename =
@@ -126,7 +126,7 @@ impl MigrationRunner {
                         .order_by(Migration::schema().timestamp.desc())
                         .limit(*count)
                         .decode::<Migration>()
-                        .execute(&db)
+                        .execute(db)
                         .await,
                 )?;
 
@@ -157,10 +157,7 @@ impl MigrationRunner {
                 // more flexibility to use either.
                 let file_cursor = &file_cursor.to_up();
                 let timestamp_value = file_cursor.timestamp().into_inner();
-                if Migration::get_by_filename(db.clone(), file_cursor)
-                    .await?
-                    .is_none()
-                {
+                if Migration::get_by_filename(db, file_cursor).await?.is_none() {
                     return Err(MigrationError::MigrationDoesNotExist {
                         filename: file_cursor.clone(),
                     });
@@ -176,7 +173,7 @@ impl MigrationRunner {
                         )
                         .order_by(timestamp.desc())
                         .decode::<Migration>()
-                        .execute(&db)
+                        .execute(db)
                         .await,
                 )?;
 
@@ -222,7 +219,7 @@ impl MigrationRunner {
         } else {
             let count = queries_to_run.len();
             for queries in queries_to_run {
-                run_transaction(db.clone(), queries).await?;
+                run_transaction(db, queries).await?;
             }
             log::info!("Rolled back {count} migration(s)");
         }
@@ -231,7 +228,7 @@ impl MigrationRunner {
     }
 
     async fn get_latest_migration(
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
     ) -> MigrationResult<Option<Migration>> {
         Migration::get_latest(db).await
     }
@@ -239,9 +236,9 @@ impl MigrationRunner {
     /// The migrations newer than the latest applied one, oldest first.
     pub async fn get_pending_migrations(
         all_migrations: Vec<impl Into<MigrationFile>>,
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
     ) -> MigrationResult<Vec<PendingMigrationFile>> {
-        let latest_migration = Self::get_latest_migration(db.clone()).await?;
+        let latest_migration = Self::get_latest_migration(db).await?;
 
         let mut pending_migrations = all_migrations
             .into_iter()
@@ -263,10 +260,10 @@ impl MigrationRunner {
 
     /// The migration directory's files newer than the latest applied migration.
     pub async fn get_pending_migration_filenames(
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         mig_config: &MigrationConfig,
     ) -> MigrationResult<MigrationFilenames> {
-        let latest_migration = Self::get_latest_migration(db.clone()).await?;
+        let latest_migration = Self::get_latest_migration(db).await?;
 
         let pending_migrations = mig_config
             .get_migrations_filenames(false)?
@@ -284,13 +281,13 @@ impl MigrationRunner {
 
     /// Deletes the migration directory's files newer than the latest applied migration.
     pub async fn delete_unapplied_migration_files(
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         mig_config: &MigrationConfig,
     ) -> MigrationResult<()> {
         let dir = mig_config.get_migration_dir()?;
 
         let pending_migration_filenames =
-            Self::get_pending_migration_filenames(db.clone(), mig_config).await?;
+            Self::get_pending_migration_filenames(db, mig_config).await?;
 
         let pending_migrations_paths = pending_migration_filenames
             .iter()
@@ -397,7 +394,7 @@ impl MigrationRunner {
     }
 
     async fn run_up_pending_migrations(
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         filtered_pending_migrations: Vec<PendingMigrationFile>,
     ) -> MigrationResult<()> {
         if filtered_pending_migrations.is_empty() {
@@ -423,7 +420,7 @@ impl MigrationRunner {
                 }
             };
             // The migration and its history record commit together.
-            run_transaction(db.clone(), format!("{content}\n{record}")).await?;
+            run_transaction(db, format!("{content}\n{record}")).await?;
         }
         log::info!("Applied {count} migration(s)");
 
@@ -433,25 +430,21 @@ impl MigrationRunner {
     /// Applies pending migrations as far as `update_strategy` says, each in its own transaction
     /// with its history record. A failure leaves the migrations applied before it applied.
     pub async fn apply_pending_migrations(
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         all_migrations: Vec<impl Into<MigrationFile> + ::std::fmt::Debug>,
         update_strategy: UpdateStrategy,
     ) -> MigrationResult<()> {
         log::info!("Running pending migrations");
 
         let filtered_pending_migrations = match update_strategy {
-            UpdateStrategy::Latest => {
-                Self::get_pending_migrations(all_migrations, db.clone()).await?
-            }
-            UpdateStrategy::Number(count) => {
-                Self::get_pending_migrations(all_migrations, db.clone())
-                    .await?
-                    .into_iter()
-                    .take(count as usize)
-                    .collect::<Vec<_>>()
-            }
+            UpdateStrategy::Latest => Self::get_pending_migrations(all_migrations, db).await?,
+            UpdateStrategy::Number(count) => Self::get_pending_migrations(all_migrations, db)
+                .await?
+                .into_iter()
+                .take(count as usize)
+                .collect::<Vec<_>>(),
             UpdateStrategy::Till(filecursor) => {
-                let pending_migs = Self::get_pending_migrations(all_migrations, db.clone()).await?;
+                let pending_migs = Self::get_pending_migrations(all_migrations, db).await?;
 
                 let mut migration_found = false;
                 let mut filtered_migs: Vec<PendingMigrationFile> = vec![];
@@ -475,11 +468,11 @@ impl MigrationRunner {
             }
         };
 
-        Self::run_up_pending_migrations(db.clone(), filtered_pending_migrations).await
+        Self::run_up_pending_migrations(db, filtered_pending_migrations).await
     }
 
     pub(crate) async fn list_migrations(
-        db: Surreal<impl Connection>,
+        db: &Surreal<impl Connection>,
         migrations_local_dir: Vec<MigrationFilename>,
         status: Status,
         mode: Mode,
@@ -491,7 +484,7 @@ impl MigrationRunner {
                 migrations.into_iter().collect::<Vec<_>>()
             }
             Status::Pending => {
-                let latest_applied_migration = Self::get_latest_migration(db.clone()).await?;
+                let latest_applied_migration = Self::get_latest_migration(db).await?;
 
                 let mut migrations = migrations_local_dir
                     .into_iter()
@@ -507,7 +500,7 @@ impl MigrationRunner {
                 migrations
             }
             Status::Applied => {
-                let db_migs = Migration::get_all_desc(db.clone()).await?;
+                let db_migs = Migration::get_all_desc(db).await?;
                 Self::_get_db_migrations_meta_from_mig_files(migrations_local_dir, db_migs, mode)?
             }
         };

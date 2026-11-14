@@ -93,7 +93,7 @@ fn names_come_from_parameters() {
 
 /// Runs `statement` and reports whether it succeeded.
 async fn runs(db: &Surreal<Db>, statement: impl Runnable + Sync) -> bool {
-    statement.run(db.clone()).await.is_ok()
+    statement.run(db).await.is_ok()
 }
 
 #[tokio::test]

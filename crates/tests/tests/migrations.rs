@@ -78,6 +78,7 @@ async fn database() -> Surreal<Any> {
         .setup()
         .await
         .db()
+        .cloned()
         .expect("connected")
 }
 
@@ -104,7 +105,7 @@ async fn inspect(db: &Surreal<Any>) -> Schema {
 async fn apply_up(dir: &Path, db: &Surreal<Any>) {
     config(dir)
         .two_way()
-        .run_up_pending_migrations(db.clone(), UpdateStrategy::Latest)
+        .run_up_pending_migrations(db, UpdateStrategy::Latest)
         .await
         .expect("the pending migrations apply");
 }
@@ -112,7 +113,7 @@ async fn apply_up(dir: &Path, db: &Surreal<Any>) {
 async fn roll_back(dir: &Path, db: &Surreal<Any>) {
     config(dir)
         .two_way()
-        .run_down_migrations(db.clone(), RollbackOptions::default())
+        .run_down_migrations(db, RollbackOptions::default())
         .await
         .expect("the latest migration rolls back");
 }
@@ -237,7 +238,7 @@ fn write_numbered(dir: &Path, number: u8, up: &str, down: &str) -> String {
 
 /// The applied migrations' file names, oldest first.
 async fn applied(db: &Surreal<Any>) -> Vec<String> {
-    let mut names = Migration::get_all_desc(db.clone())
+    let mut names = Migration::get_all_desc(db)
         .await
         .expect("the history is read")
         .into_iter()
@@ -481,7 +482,7 @@ mod schema {
              DEFINE FIELD title ON TABLE memo TYPE string;
              DEFINE USER reader ON DATABASE PASSWORD 'example-password' ROLES VIEWER;",
         )
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("defined");
         db.signin(surrealdb::opt::auth::Database {
@@ -496,7 +497,7 @@ mod schema {
         let schema = inspect(&db).await;
         assert!(schema.get(&key(Field, Some("memo"), "title")).is_some());
         assert!(
-            info_for().namespace().run(db.clone()).await.is_err(),
+            info_for().namespace().run(&db).await.is_err(),
             "the database user cannot inspect the namespace"
         );
     }
@@ -509,7 +510,7 @@ mod schema {
         let db = database().await;
         for sql in NEW_CLAUSES_TABLES.iter().chain([&NEW_CLAUSES_PARAM]) {
             Raw::new(*sql)
-                .run(db.clone())
+                .run(&db)
                 .await
                 .unwrap_or_else(|error| panic!("`{sql}` defines: {error}"));
         }
@@ -531,7 +532,7 @@ mod schema {
                 .strip_prefix(&format!("DEFINE {keyword} "))
                 .unwrap_or_else(|| panic!("{key} is a DEFINE {keyword}"));
             Raw::new(format!("DEFINE {keyword} OVERWRITE {rest};"))
-                .run(fresh.clone())
+                .run(&fresh)
                 .await
                 .unwrap_or_else(|error| panic!("{key} redefines: {error}"));
         }
@@ -983,13 +984,13 @@ mod history {
     async fn a_fresh_database_has_no_history() {
         let db = database().await;
         assert!(
-            Migration::get_latest(db.clone())
+            Migration::get_latest(&db)
                 .await
                 .expect("readable")
                 .is_none()
         );
         assert!(
-            Migration::get_all_desc(db.clone())
+            Migration::get_all_desc(&db)
                 .await
                 .expect("readable")
                 .is_empty()
@@ -997,7 +998,7 @@ mod history {
         let filename = MigrationFilename::try_from("20240101000000000_init.up.surql".to_owned())
             .expect("a migration file name");
         assert!(
-            Migration::get_by_filename(db, &filename)
+            Migration::get_by_filename(&db, &filename)
                 .await
                 .expect("readable")
                 .is_none()
@@ -1008,10 +1009,10 @@ mod history {
     async fn an_undecodable_history_fails() {
         let db = database().await;
         Raw::new("DEFINE TABLE migration SCHEMALESS; CREATE migration:broken SET name = 1;")
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("created");
-        assert!(Migration::get_all_desc(db).await.is_err());
+        assert!(Migration::get_all_desc(&db).await.is_err());
     }
 
     /// A failed statement, classified as execution classifies it.
@@ -2805,7 +2806,7 @@ mod up {
 
         let failed = config(&dir)
             .two_way()
-            .run_up_pending_migrations(db.clone(), UpdateStrategy::Latest)
+            .run_up_pending_migrations(&db, UpdateStrategy::Latest)
             .await;
         assert!(failed.is_err(), "{failed:?}");
         assert_eq!(applied(&db).await, std::slice::from_ref(&first));
@@ -2845,7 +2846,7 @@ mod down {
         let failed = config(&dir)
             .two_way()
             .run_down_migrations(
-                db.clone(),
+                &db,
                 RollbackOptions::new().strategy(RollbackStrategy::Number(3)),
             )
             .await;
@@ -2858,7 +2859,7 @@ mod down {
         config(&dir)
             .two_way()
             .run_down_migrations(
-                db.clone(),
+                &db,
                 RollbackOptions::new()
                     .strategy(RollbackStrategy::Number(2))
                     .mode(Mode::Lax),
@@ -2889,7 +2890,7 @@ mod down {
         config(&dir)
             .two_way()
             .run_down_migrations(
-                db.clone(),
+                &db,
                 RollbackOptions::new()
                     .strategy(RollbackStrategy::Number(2))
                     .mode(Mode::Lax),
@@ -3558,9 +3559,9 @@ mod list {
         let migrations = |status| async move {
             async move {
                 if reversible {
-                    fm.two_way().list_migrations(db, status, mode).await
+                    fm.two_way().list_migrations(&db, status, mode).await
                 } else {
-                    fm.one_way().list_migrations(db, status, mode).await
+                    fm.one_way().list_migrations(&db, status, mode).await
                 }
             }
             .await
@@ -4198,11 +4199,11 @@ mod embedded {
         let db = database().await;
 
         MIGRATIONS_ONE_WAY
-            .run(db.clone(), UpdateStrategy::Latest, Mode::Strict)
+            .run(&db, UpdateStrategy::Latest, Mode::Strict)
             .await
             .unwrap();
 
-        let db_migrations_meta = Migration::get_all_desc(db.clone()).await.unwrap();
+        let db_migrations_meta = Migration::get_all_desc(&db).await.unwrap();
         insta::assert_debug_snapshot!(db_migrations_meta);
         assert_eq!(db_migrations_meta.len(), 2);
     }
@@ -4212,11 +4213,11 @@ mod embedded {
         let db = database().await;
 
         MIGRATIONS_TWO_WAY
-            .run(db.clone(), UpdateStrategy::Latest, Mode::Strict)
+            .run(&db, UpdateStrategy::Latest, Mode::Strict)
             .await
             .unwrap();
 
-        let db_migrations_meta = Migration::get_all_desc(db.clone()).await.unwrap();
+        let db_migrations_meta = Migration::get_all_desc(&db).await.unwrap();
         insta::assert_debug_snapshot!(db_migrations_meta);
         assert_eq!(db_migrations_meta.len(), 1);
     }

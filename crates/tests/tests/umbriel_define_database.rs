@@ -6,7 +6,7 @@ use umbriel::{Runnable, statements::define_database};
 use umbriel_tests::*;
 
 async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
-    statement.run(db.clone()).await.expect("ran");
+    statement.run(db).await.expect("ran");
 }
 
 /// Whether `CREATE person` succeeds in the database `name`.

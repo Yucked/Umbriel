@@ -4,12 +4,12 @@
 use std::{fmt, marker::PhantomData};
 
 use surrealdb::{
-    Connection, IndexedResults, Surreal,
+    IndexedResults,
     types::{self, ConversionError, Kind, Object, SurrealNull, SurrealValue, Value},
 };
 
 use crate::{
-    Error, Field, Fragment, Projections, Queryable, Render, Renderer, Result,
+    Error, Executor, Field, Fragment, Projections, Queryable, Render, Renderer, Result,
     execution::{execute, take_one},
 };
 
@@ -612,7 +612,7 @@ pub trait Returning: Queryable + Sync {
     /// result does not decode into the mode's type ([`Error::Conversion`]).
     fn execute(
         &self,
-        db: &Surreal<impl Connection>,
+        db: &impl Executor,
     ) -> impl Future<Output = Result<<Self::Cardinality as Cardinality>::Output<Self::Mode>>> + Send
     {
         async move {
@@ -661,7 +661,7 @@ impl Explained {
     /// # Errors
     ///
     /// Fails as [`Returning::execute`] does.
-    pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<Value> {
+    pub async fn execute(&self, db: &impl Executor) -> Result<Value> {
         let mut results = execute(db, self.to_query()?).await?;
         results.take::<Value>(0).map_err(Error::Conversion)
     }
@@ -789,7 +789,7 @@ impl<F: PlanFormat> ExplainStatement<F> {
     /// # Errors
     ///
     /// Fails as [`Returning::execute`] does.
-    pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<F::Plan> {
+    pub async fn execute(&self, db: &impl Executor) -> Result<F::Plan> {
         // `take` decodes into `Option`, `Vec` or `Value` only, so the plan is decoded from its
         // value.
         let mut results = execute(db, self.to_query()?).await?;

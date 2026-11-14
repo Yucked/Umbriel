@@ -41,7 +41,7 @@ async fn organizations() -> Surreal<Db> {
 }
 
 async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
-    statement.run(db.clone()).await.expect("ran");
+    statement.run(db).await.expect("ran");
 }
 
 mod rendering {
@@ -661,7 +661,7 @@ mod explaining_writes {
     async fn the_prefix_over_a_write_is_refused() {
         let db = organizations().await;
         let refused = Raw::new("EXPLAIN ANALYZE UPDATE organization:acme SET age = 98;")
-            .run(db.clone())
+            .run(&db)
             .await;
         assert!(refused.is_err(), "EXPLAIN ANALYZE UPDATE ran");
         assert_eq!(acme_age(&db).await, 30);
@@ -677,7 +677,7 @@ mod for_update {
         let mut results = umbriel::statements::begin_transaction()
             .query(select(All).from(Organization::id("acme")).for_update())
             .commit_transaction()
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("committed");
         // 3.3.4 gives `BEGIN` its own `NONE` result (`dbs/executor.rs`), so the SELECT is second.
@@ -821,7 +821,7 @@ mod timeout {
                         .from(Organization::table())
                         .timeout(Param::new("limit")),
                 )
-                .run(db.clone())
+                .run(&db)
                 .await
                 .expect("ran");
         let found: Vec<Organization> = results.take(1).expect("records");

@@ -17,7 +17,7 @@ async fn result_shapes_in_a_chain() {
     let mut results = chain(let_("n").equal_to(2))
         .chain(return_(Field::from(Param::new("n")).multiply(3)))
         .chain(return_(vec![1, 2]))
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("ran");
     assert_eq!(results.num_statements(), 3);
@@ -34,7 +34,7 @@ async fn return_fetch_replaces_links() {
         "CREATE user:alice SET name = 'Alice'; \
          CREATE organization:acme SET name = 'Acme Corp', users = [user:alice];",
     )
-    .run(db.clone())
+    .run(&db)
     .await
     .expect("seeded");
     let acme = || Field::from_expr(ValueLike::from(Organization::id("acme"))).all();
@@ -42,7 +42,7 @@ async fn return_fetch_replaces_links() {
 
     let mut results = return_(acme())
         .fetch(Field::new("users"))
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("ran");
     // `take` decodes into `Option`, `Vec` or `Value`, so a single object is taken as an `Option`.
@@ -55,7 +55,7 @@ async fn return_fetch_replaces_links() {
     let org = let_("org").equal_to(select(All).from_only(Organization::id("acme")));
     let mut results = chain(org.clone())
         .chain(return_(org.get_param()).fetch(Field::new("users")))
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("ran");
     let through_let: BTreeMap<String, Value> = results

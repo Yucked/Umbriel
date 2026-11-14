@@ -19,7 +19,7 @@ async fn seeded() -> Surreal<Db> {
              opts = { security: 'high', enabled: true, theme: 'dark' }; \
          CREATE profile:bob SET name = 'Bob';",
     )
-    .run(db.clone())
+    .run(&db)
     .await
     .expect("seeded");
     db

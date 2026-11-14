@@ -155,8 +155,8 @@ impl DatabaseConnection {
     }
 
     /// The connection, once [`setup`](Self::setup) has run.
-    pub fn db(&self) -> Option<Surreal<Any>> {
-        self.db_connection.clone()
+    pub fn db(&self) -> Option<&Surreal<Any>> {
+        self.db_connection.as_ref()
     }
 }
 

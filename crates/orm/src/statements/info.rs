@@ -1,12 +1,10 @@
 use std::marker::PhantomData;
 
-use surrealdb::{
-    Connection, Surreal,
-    types::{Object, Table, Value},
-};
+use surrealdb::types::{Object, Table, Value};
 
 use crate::{
-    DatetimeLike, Error, Name, Render, Renderer, Result, TableIndex, User, execution::execute,
+    DatetimeLike, Error, Executor, Name, Render, Renderer, Result, TableIndex, User,
+    execution::execute,
 };
 
 use super::{
@@ -149,7 +147,7 @@ impl<O: InfoOutput + 'static> InfoStatement<O> {
     ///
     /// The database error, or [`Error::Conversion`] when the result does not have the shape
     /// SurrealDB 3.3.4 gives it.
-    pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<O> {
+    pub async fn execute(&self, db: &impl Executor) -> Result<O> {
         let mut results = execute(db, self.to_query()?).await?;
         O::from_info(results.take::<Value>(0).map_err(Error::Conversion)?)
     }

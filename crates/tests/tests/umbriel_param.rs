@@ -16,23 +16,17 @@ async fn a_let_parameter_lives_for_its_query() {
     let db = db().await;
     let_("greeting")
         .equal_to("hello")
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("set");
-    let mut results = return_(Param::new("greeting"))
-        .run(db.clone())
-        .await
-        .expect("ran");
+    let mut results = return_(Param::new("greeting")).run(&db).await.expect("ran");
     let greeting: Option<String> = results.take(0).expect("a value");
     assert_eq!(greeting, None);
 
     db.set("greeting", "hello")
         .await
         .expect("set on the connection");
-    let mut results = return_(Param::new("greeting"))
-        .run(db.clone())
-        .await
-        .expect("ran");
+    let mut results = return_(Param::new("greeting")).run(&db).await.expect("ran");
     let greeting: Option<String> = results.take(0).expect("a value");
     assert_eq!(greeting.as_deref(), Some("hello"));
 }

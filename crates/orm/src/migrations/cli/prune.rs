@@ -15,11 +15,10 @@ impl Prune {
     pub async fn run(&self, cli: &mut Migrator) {
         cli.setup_db().await;
         let file_manager = cli.file_manager();
-        let db = cli.db().clone();
+        let db = cli.db();
 
         let res =
-            MigrationRunner::delete_unapplied_migration_files(db.clone(), &file_manager.relax())
-                .await;
+            MigrationRunner::delete_unapplied_migration_files(db, &file_manager.relax()).await;
 
         if let Err(ref e) = res {
             log::error!("Failed to prune migrations: {e}");

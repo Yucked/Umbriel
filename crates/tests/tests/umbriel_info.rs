@@ -18,7 +18,7 @@ use umbriel::{
 use umbriel_tests::*;
 
 async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
-    statement.run(db.clone()).await.expect("ran");
+    statement.run(db).await.expect("ran");
 }
 
 mod rendering {

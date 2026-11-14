@@ -72,7 +72,7 @@ pub async fn bound<T: SurrealValue, K: KindOf>(
     db: &Surreal<Db>,
     function: &Function<K>,
 ) -> Option<T> {
-    function.run(db.clone()).await.expect("ran")
+    function.run(db).await.expect("ran")
 }
 
 /// 2021-11-01T08:30:17Z, a Monday.
@@ -117,7 +117,7 @@ pub fn joined(definitions: &[Raw]) -> String {
 pub async fn apply_definitions<M: Model>(db: &Surreal<Db>) {
     for definition in std::iter::once(M::define_table()).chain(M::define_fields()) {
         definition
-            .run(db.clone())
+            .run(db)
             .await
             .unwrap_or_else(|error| panic!("`{definition}` is accepted: {error}"));
     }

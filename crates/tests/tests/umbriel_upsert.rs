@@ -52,11 +52,15 @@ fn every_clause_renders_in_order() {
         (base().return_before().to_debug_sql(), " RETURN BEFORE;"),
         (base().return_after().to_debug_sql(), " RETURN AFTER;"),
         (
-            base().return_value(Organization::schema().age).to_debug_sql(),
+            base()
+                .return_value(Organization::schema().age)
+                .to_debug_sql(),
             " RETURN VALUE age;",
         ),
         (
-            base().return_fields::<Value>(Field::new("age")).to_debug_sql(),
+            base()
+                .return_fields::<Value>(Field::new("age"))
+                .to_debug_sql(),
             " RETURN age;",
         ),
         (base().explain_full().to_debug_sql(), " EXPLAIN FULL;"),
@@ -112,7 +116,7 @@ async fn on_a_table_without_where_it_always_inserts() {
 async fn a_unique_index_match_updates_the_record_holding_the_value() {
     let db = db().await;
     Raw::new("DEFINE INDEX org_name ON organization FIELDS name UNIQUE;")
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("defined");
     let org = Organization::schema();

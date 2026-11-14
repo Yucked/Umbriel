@@ -34,7 +34,7 @@ async fn a_typed_let_accepts_its_type() {
     let db = db().await;
     let mut results = chain(let_("count").typed::<i64>().equal_to(5))
         .chain(return_(umbriel::Param::new("count")))
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("ran");
     let count: Option<i64> = results.take(1).expect("int");
@@ -46,11 +46,7 @@ async fn a_typed_let_accepts_its_type() {
 #[tokio::test]
 async fn a_typed_let_rejects_another_type() {
     let db = db().await;
-    let refused = let_("count")
-        .typed::<i64>()
-        .equal_to("five")
-        .run(db.clone())
-        .await;
+    let refused = let_("count").typed::<i64>().equal_to("five").run(&db).await;
     assert!(refused.is_err(), "{refused:?}");
 }
 
@@ -66,5 +62,5 @@ async fn a_model_typed_let() {
     };
     let statement = let_("org").typed::<Organization>().equal_to(organization);
     assert_parses(&statement.to_debug_sql());
-    statement.run(db.clone()).await.expect("accepted");
+    statement.run(&db).await.expect("accepted");
 }

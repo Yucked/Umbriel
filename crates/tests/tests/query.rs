@@ -96,7 +96,7 @@ mod rendering {
 
         let db = db().await;
         let bound: Value = return_("$_p0")
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("ran")
             .take(0)
@@ -149,11 +149,11 @@ mod rendering {
              CREATE user:bob SET name = 'Bob', age = 40, team = team:globex; \
              CREATE user:carol SET name = 'Carol', age = 12, team = team:acme;",
         )
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("data");
         let names: Vec<String> = statement
-            .run(db.clone())
+            .run(&db)
             .await
             .expect("ran")
             .take(0)
@@ -764,7 +764,7 @@ mod values {
 
             // Taken as a `Value`: an `Option` would read an array result as several rows.
             let bound: Value = umbriel::statements::return_(ValueLike::value(value.clone()))
-                .run(db.clone())
+                .run(&db)
                 .await
                 .expect("ran")
                 .take(0)

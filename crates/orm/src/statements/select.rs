@@ -18,14 +18,11 @@
 // ;
 use std::{fmt, marker::PhantomData};
 
-use surrealdb::{
-    Connection, Surreal,
-    types::{self, SurrealValue, Table, Value},
-};
+use surrealdb::types::{self, SurrealValue, Table, Value};
 
 use crate::{
-    Aliasable, All, Conditional, DatetimeLike, DurationLike, Field, Filter, Function, Model,
-    NumberLike, Projections, RecordId, RecordRange, Render, Renderer, Result, ValueLike,
+    Aliasable, All, Conditional, DatetimeLike, DurationLike, Executor, Field, Filter, Function,
+    Model, NumberLike, Projections, RecordId, RecordRange, Render, Renderer, Result, ValueLike,
     kinds::KindOf,
     traits::statements::{fetch_projections, link_projections},
 };
@@ -1344,7 +1341,7 @@ impl SelectCount {
     /// # Errors
     ///
     /// Fails as [`Returning::execute`] does.
-    pub async fn execute(&self, db: &Surreal<impl Connection>) -> Result<u64> {
+    pub async fn execute(&self, db: &impl Executor) -> Result<u64> {
         Ok(self.0.execute(db).await?.first().copied().unwrap_or(0))
     }
 }

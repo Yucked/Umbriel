@@ -69,29 +69,27 @@ define_function!(greet(name: string) {
 #[tokio::test]
 async fn run_returns_typed_results() {
     let db = db().await;
-    let length: Option<i64> = string::len!("Alice").run(db.clone()).await.expect("ran");
+    let length: Option<i64> = string::len!("Alice").run(&db).await.expect("ran");
     assert_eq!(length, Some(5));
-    let distinct: Option<Vec<i64>> = array::distinct!(vec![1, 1, 2])
-        .run(db.clone())
-        .await
-        .expect("ran");
+    let distinct: Option<Vec<i64>> = array::distinct!(vec![1, 1, 2]).run(&db).await.expect("ran");
     assert_eq!(distinct, Some(vec![1, 2]));
-    let owner: Option<umbriel::RecordId<User>> = type_::record!("user", "alice")
-        .run(db.clone())
+    let owner: Option<umbriel::RecordId<User>> =
+        type_::record!("user", "alice").run(&db).await.expect("ran");
+    assert_eq!(owner, Some(User::id("alice")));
+    let nothing: Option<i64> = array::first!(Vec::<i64>::new())
+        .run(&db)
         .await
         .expect("ran");
-    assert_eq!(owner, Some(User::id("alice")));
-    let nothing: Option<i64> = array::first!(Vec::<i64>::new()).run(db).await.expect("ran");
     assert_eq!(nothing, None, "`NONE` decodes as `None`");
 }
 
 #[tokio::test]
 async fn custom_function_runs() {
     let db = db().await;
-    greet_statement().run(db.clone()).await.expect("defined");
+    greet_statement().run(&db).await.expect("defined");
     let greeting: Option<String> = greet!("Alice")
         .typed::<kinds::String>()
-        .run(db)
+        .run(&db)
         .await
         .expect("ran");
     assert_eq!(greeting.as_deref(), Some("Alice"));
@@ -246,7 +244,10 @@ async fn script_runs() {
     holds(&scripting, &doubled(), "42").await;
     holds(
         &scripting,
-        &function!(("Alice", "Bob"), "{ return arguments[0] + ' and ' + arguments[1]; }"),
+        &function!(
+            ("Alice", "Bob"),
+            "{ return arguments[0] + ' and ' + arguments[1]; }"
+        ),
         "'Alice and Bob'",
     )
     .await;

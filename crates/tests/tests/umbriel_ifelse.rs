@@ -25,7 +25,7 @@ async fn a_branch_reads_a_field_written_earlier_in_the_transaction() {
                 .end(),
         )
         .commit_transaction()
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("committed");
     let name: String = read(&db, "RETURN organization:acme.name;").await;

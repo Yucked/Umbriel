@@ -353,7 +353,7 @@ async fn a_set_object_overwrites_its_declared_fields_and_keeps_others() {
     let db = db().await;
     ann().create(&db).await.expect("ann");
     Raw::new("UPDATE customer:ann SET billing.zip = '12345';")
-        .run(db.clone())
+        .run(&db)
         .await
         .expect("extra field");
     update::<Customer>(Customer::id("ann"))
@@ -407,7 +407,7 @@ async fn null_stores_null_and_none_removes_the_field() {
 /// merge does.
 async fn count_updates(db: &Surreal<Db>) {
     Raw::new("DEFINE FIELD writes ON customer VALUE ($value ?? 0) + 1;")
-        .run(db.clone())
+        .run(db)
         .await
         .expect("field");
 }
