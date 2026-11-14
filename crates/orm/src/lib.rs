@@ -26,6 +26,7 @@ pub mod validators;
 
 pub use data_model::*;
 pub use errors::*;
+pub use execution::Executor;
 pub use functions::count;
 pub use helpers::*;
 pub use query::*;
@@ -39,6 +40,28 @@ pub use traits::*;
 /// conversion trait models derive.
 pub use surrealdb::types;
 pub use surrealdb::types::Table;
+
+/// The SDK's client, connection, engines and options, re-exported so `umbriel` is the only
+/// dependency a consumer needs to connect: `umbriel::engine::any::connect("mem://")`, a
+/// `Surreal<Any>`, `opt::Config`. Engines and transports are enabled through Umbriel's features
+/// of the same names (`kv-mem`, `protocol-ws`, …). Credential types are in `opt::auth`.
+pub use surrealdb::{Connection, IndexedResults, Surreal, engine, opt};
+
+/// An open SDK transaction from [`Surreal::begin`], and the per-statement statistics of
+/// [`Runnable::run_with_stats`].
+///
+/// A [`Transaction`] is an [`Executor`]: statements and model methods run inside it. The SDK's
+/// `begin` takes the client by value, so a transaction from a shared client starts from a
+/// `clone()`, which is a new session. `commit` and `cancel` consume the handle and return the
+/// client. A handle dropped without either commits nothing and reports nothing; its session
+/// ends, and the SDK source releases the open transaction with it, which SDK 3.3.4 gives no way
+/// to observe. Transactions are available on the WebSocket and embedded engines; the HTTP engine
+/// refuses `begin`.
+///
+/// A commit conflict is [`Error::Conflict`] ([`Retry::Safe`]) over WebSocket, but on the
+/// embedded engine the handle's commit error carries no structured kind, so it is
+/// [`Error::Query`] with [`Retry::Uncertain`].
+pub use surrealdb::method::{Stats, Transaction, WithStats};
 
 /// Parses SurrealQL value text without a database: `parse::value("{ name: 'Alice' }")` returns a
 /// [`types::Value`], or an error for text that is not one value.
