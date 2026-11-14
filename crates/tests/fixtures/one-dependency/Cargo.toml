@@ -1,0 +1,14 @@
+# Standalone consumer whose only dependency is `umbriel`: it connects, defines a model, and runs
+# statements, model methods and an SDK transaction through Umbriel's re-exports. Checked by
+# `tests/compile.rs`.
+[package]
+name = "one-dependency-fixture"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Not a member of the Umbriel workspace.
+[workspace]
+
+[dependencies]
+umbriel = { path = "../../../orm", default-features = false, features = ["kv-mem"] }
