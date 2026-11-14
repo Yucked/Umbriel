@@ -39,7 +39,8 @@ pretty_assertions = { workspace = true }
 [dev-dependencies]
 # Parses the migration CLI's arguments in-process (`Migrator` is a `clap::Parser`).
 clap = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt", "sync"] }
+# `time` bounds tests that wait on concurrent work (`umbriel_transaction`).
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 trybuild = { workspace = true }
 uuid = { workspace = true }
 rand = { workspace = true }
