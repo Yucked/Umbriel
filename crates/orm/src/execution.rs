@@ -3,18 +3,97 @@
 
 use surrealdb::{
     Connection, IndexedResults, Surreal,
+    method::{Create, Delete, Insert, Query as SdkQuery, Select, Transaction, Upsert, WithStats},
+    opt::{CreateResource, IntoResource},
     types::{AlreadyExistsError, NotFoundError, QueryError, SurrealValue, Value},
 };
 
 use crate::{Error, Query, Result, StatementContext};
 
+mod sealed {
+    pub trait Sealed {}
+}
+
+impl<C: Connection> sealed::Sealed for Surreal<C> {}
+impl<C: Connection> sealed::Sealed for Transaction<C> {}
+
+/// Where Umbriel runs its queries and record operations: an SDK client ([`Surreal`]) or an open
+/// SDK transaction ([`Transaction`]). Every execution API borrows one, so a shared client, such
+/// as one held in an `Arc` and passed as `arc.as_ref()`, is never cloned.
+///
+/// Through a [`Transaction`], statements and model methods run inside it and persist only when
+/// it commits. The trait is sealed: those two types are its only implementors. Its methods
+/// forward to the SDK methods of the same name.
+pub trait Executor: sealed::Sealed + Sync {
+    /// The SDK connection the handle runs on.
+    type Connection: Connection;
+
+    /// The SDK's `query`, with the text given as a `String`.
+    fn query(&self, sql: String) -> SdkQuery<'_, Self::Connection>;
+
+    /// The SDK's `select`.
+    fn select<O>(&self, resource: impl IntoResource<O>) -> Select<'_, Self::Connection, O>;
+
+    /// The SDK's `create`.
+    fn create<R>(&self, resource: impl CreateResource<R>) -> Create<'_, Self::Connection, R>;
+
+    /// The SDK's `insert`.
+    fn insert<O>(&self, resource: impl IntoResource<O>) -> Insert<'_, Self::Connection, O>;
+
+    /// The SDK's `upsert`.
+    fn upsert<O>(&self, resource: impl IntoResource<O>) -> Upsert<'_, Self::Connection, O>;
+
+    /// The SDK's `delete`.
+    fn delete<O>(&self, resource: impl IntoResource<O>) -> Delete<'_, Self::Connection, O>;
+}
+
+/// Implements [`Executor`] for an SDK handle type by forwarding to its inherent methods.
+macro_rules! impl_executor {
+    ($handle:ident) => {
+        impl<C: Connection> Executor for $handle<C> {
+            type Connection = C;
+
+            fn query(&self, sql: String) -> SdkQuery<'_, C> {
+                $handle::query(self, sql)
+            }
+
+            fn select<O>(&self, resource: impl IntoResource<O>) -> Select<'_, C, O> {
+                $handle::select(self, resource)
+            }
+
+            fn create<R>(&self, resource: impl CreateResource<R>) -> Create<'_, C, R> {
+                $handle::create(self, resource)
+            }
+
+            fn insert<O>(&self, resource: impl IntoResource<O>) -> Insert<'_, C, O> {
+                $handle::insert(self, resource)
+            }
+
+            fn upsert<O>(&self, resource: impl IntoResource<O>) -> Upsert<'_, C, O> {
+                $handle::upsert(self, resource)
+            }
+
+            fn delete<O>(&self, resource: impl IntoResource<O>) -> Delete<'_, C, O> {
+                $handle::delete(self, resource)
+            }
+        }
+    };
+}
+
+impl_executor!(Surreal);
+impl_executor!(Transaction);
+
 /// Turns a database error into Umbriel's error, keeping it as the source.
 ///
 /// Shared by statement execution, which passes the failed statement's context, and the SDK
-/// methods models call directly, which pass none. The classification reads only the error's
+/// methods called directly (record operations, `begin`, `commit`, `cancel`, through
+/// `From<surrealdb::Error>`), which pass none. The classification reads only the error's
 /// structured details, never its message:
 /// - an already-exists error for a record is [`Error::RecordExists`];
 /// - a not-found error for a table is [`Error::TableNotFound`];
+/// - a transaction conflict is [`Error::Conflict`];
+/// - a not-allowed error of any kind is [`Error::NotAllowed`];
+/// - a connection error of any kind is [`Error::Connection`];
 /// - anything else is [`Error::Statement`] with a context, or [`Error::Query`] without one.
 #[doc(hidden)]
 pub fn classify(source: surrealdb::Error, statement: Option<StatementContext>) -> Error {
@@ -34,6 +113,27 @@ pub fn classify(source: surrealdb::Error, statement: Option<StatementContext>) -
             statement,
         };
     }
+    if matches!(
+        source.query_details(),
+        Some(QueryError::TransactionConflict)
+    ) {
+        return Error::Conflict {
+            source: Box::new(source),
+            statement,
+        };
+    }
+    if source.is_not_allowed() {
+        return Error::NotAllowed {
+            source: Box::new(source),
+            statement,
+        };
+    }
+    if source.is_connection() {
+        return Error::Connection {
+            source: Box::new(source),
+            statement,
+        };
+    }
     match statement {
         Some(StatementContext { index, related }) => Error::Statement {
             index,
@@ -45,18 +145,31 @@ pub fn classify(source: surrealdb::Error, statement: Option<StatementContext>) -
 }
 
 /// Runs a rendered query and checks every statement's result.
-pub(crate) async fn execute(db: &Surreal<impl Connection>, query: Query) -> Result<IndexedResults> {
+pub(crate) async fn execute(db: &impl Executor, query: Query) -> Result<IndexedResults> {
     let (sql, vars) = query.into_parts();
-    let mut results = db
-        .query(sql)
-        .bind(vars)
-        .await
-        .map_err(|error| classify(error, None))?;
+    let mut results = db.query(sql).bind(vars).await?;
+    check(&mut results)?;
+    Ok(results)
+}
+
+/// [`execute`], with the SDK's per-statement statistics.
+pub(crate) async fn execute_with_stats(
+    db: &impl Executor,
+    query: Query,
+) -> Result<WithStats<IndexedResults>> {
+    let (sql, vars) = query.into_parts();
+    let mut response = db.query(sql).bind(vars).with_stats().await?;
+    check(&mut response.0)?;
+    Ok(response)
+}
+
+/// Fails with the response's chosen statement failure, if it holds one.
+fn check(results: &mut IndexedResults) -> Result<()> {
     // Counted first: `take_errors` removes the failed statements from the results.
     let statement_count = results.num_statements();
     match select_failure(statement_count, results.take_errors()) {
         Some(error) => Err(error),
-        None => Ok(results),
+        None => Ok(()),
     }
 }
 
