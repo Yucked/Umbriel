@@ -15,6 +15,8 @@ default = ["protocol-ws", "rustls"]
 # SurrealDB SDK passthroughs: transports, TLS, embedded engines and server capabilities.
 protocol-ws = ["surrealdb/protocol-ws"]
 protocol-http = ["surrealdb/protocol-http"]
+# gRPC transport (SurrealDB 3.3.0+, native targets only).
+protocol-grpc = ["surrealdb/protocol-grpc"]
 rustls = ["surrealdb/rustls"]
 native-tls = ["surrealdb/native-tls"]
 kv-mem = ["surrealdb/kv-mem"]
@@ -25,6 +27,10 @@ kv-tikv = ["surrealdb/kv-tikv"]
 scripting = ["surrealdb/scripting"]
 http = ["surrealdb/http"]
 jwks = ["surrealdb/jwks"]
+# SurrealML model execution on embedded engines (`ml::` calls).
+ml = ["surrealdb/ml"]
+# Chinese, Japanese and Korean tokenisation for full-text analyzers, on embedded engines.
+cjk = ["surrealdb/cjk"]
 # Offline SurrealQL value parsing (`umbriel::parse::value`).
 parse = ["surrealdb/parse"]
 
