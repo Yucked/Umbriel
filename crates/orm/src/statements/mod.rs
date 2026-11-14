@@ -255,7 +255,7 @@ pub use throw::{ThrowStatement, throw};
 pub use transaction::{QueryTransaction, TransactionCompletion, begin_transaction};
 pub use update::{TargettablesForUpdate, UpdateStatement, update, update_only};
 pub use upsert::{UpsertStatement, upsert, upsert_only};
-pub use use_::{UseStatement, use_};
+pub use use_::{UseResult, UseStatement, use_};
 
 /// helpers for statements
 pub mod utils {

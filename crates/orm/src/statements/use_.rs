@@ -1,9 +1,28 @@
+use surrealdb::types::SurrealValue;
+
 use crate::{Database, Namespace, Renderer};
 
 use super::{Statement, impl_statement};
 
+/// The selection a `USE` statement ends with, taken from the statement's result in a chain or
+/// transaction: SurrealDB returns the namespace and database after the statement, whether it
+/// changed one or both.
+///
+/// The selection lasts for the rest of that request only. SurrealDB keeps it in the request's
+/// options (`dbs/executor.rs`) and never writes it back to the session, on any engine; switching
+/// a handle's namespace or database is the SDK's `use_ns`/`use_db`.
+#[derive(SurrealValue, Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct UseResult {
+    /// The namespace in use, or `None` when none is selected.
+    pub namespace: Option<String>,
+    /// The database in use, or `None` when none is selected.
+    pub database: Option<String>,
+}
+
 /// Creates a USE statement.
-/// The USE statement specifies a namespace and / or a database to use for the subsequent SurrealQL statements.
+/// The USE statement specifies a namespace and / or a database to use for the subsequent SurrealQL
+/// statements of the same request; it does not switch the handle (see [`UseResult`]).
 ///
 /// Examples
 ///
