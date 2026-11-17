@@ -228,7 +228,8 @@ pub use define_analyzer::{
     AnalyzerFilter, DefineAnalyzerStatement, SnowballLanguage, Tokenizer, define_analyzer,
 };
 pub use define_api::{
-    ApiAction, ApiConfig, ApiMethod, DefineApiStatement, api_action, api_config, define_api,
+    ApiAction, ApiConfig, ApiMethod, BodyStrategy, DefineApiStatement, api_action, api_config,
+    define_api,
 };
 pub use define_bucket::{DefineBucketStatement, define_bucket};
 pub use define_config::{

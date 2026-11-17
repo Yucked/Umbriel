@@ -3,7 +3,7 @@ use std::fmt::{self, Display};
 use surrealdb::types::Value;
 
 use crate::{
-    Conditional, Filter, Render, Renderer, ValueLike,
+    Conditional, DurationLike, Filter, ObjectLike, Render, Renderer, StrandLike, ValueLike,
     render::{is_identifier, push_path},
 };
 
@@ -108,6 +108,50 @@ impl ApiConfig {
         self
     }
 
+    /// `MIDDLEWARE api::timeout(@timeout)`: fails a request that takes longer.
+    pub fn timeout(self, timeout: impl Into<DurationLike>) -> Self {
+        self.middleware("api::timeout", [ValueLike::from(timeout.into())])
+    }
+
+    /// `MIDDLEWARE api::req::body(@strategy)`: parses the request body into `$request.body`.
+    pub fn req_body(self, strategy: BodyStrategy) -> Self {
+        self.middleware("api::req::body", [strategy.value()])
+    }
+
+    /// `MIDDLEWARE api::req::max_body(@bytes)`: refuses a request body larger than `bytes`.
+    pub fn req_max_body(self, bytes: u32) -> Self {
+        self.middleware("api::req::max_body", [ValueLike::value(i64::from(bytes))])
+    }
+
+    /// `MIDDLEWARE api::res::body(@strategy)`: writes the response body in this format.
+    pub fn res_body(self, strategy: BodyStrategy) -> Self {
+        self.middleware("api::res::body", [strategy.value()])
+    }
+
+    /// `MIDDLEWARE api::res::status(@status)`: sets the response status.
+    pub fn res_status(self, status: u16) -> Self {
+        self.middleware("api::res::status", [ValueLike::value(i64::from(status))])
+    }
+
+    /// `MIDDLEWARE api::res::header(@name, @value)`: sets a response header.
+    pub fn res_header(self, name: impl Into<StrandLike>, value: impl Into<StrandLike>) -> Self {
+        self.middleware(
+            "api::res::header",
+            [ValueLike::from(name.into()), ValueLike::from(value.into())],
+        )
+    }
+
+    /// `MIDDLEWARE api::res::header(@name)`: removes a response header.
+    pub fn drop_res_header(self, name: impl Into<StrandLike>) -> Self {
+        self.middleware("api::res::header", [ValueLike::from(name.into())])
+    }
+
+    /// `MIDDLEWARE api::res::headers(@headers)`: sets several response headers; a header whose
+    /// value is `NONE` is removed.
+    pub fn res_headers(self, headers: impl Into<ObjectLike>) -> Self {
+        self.middleware("api::res::headers", [ValueLike::from(headers.into())])
+    }
+
     /// `PERMISSIONS NONE`.
     pub fn permissions_none(mut self) -> Self {
         self.permissions = Some(PermissionValue::None);
@@ -124,6 +168,43 @@ impl ApiConfig {
     pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
         self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
         self
+    }
+}
+
+/// The format `api::req::body` parses a request body from, or `api::res::body` writes a
+/// response body in. `Auto` follows the request's `Content-Type` or `Accept` header.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum BodyStrategy {
+    /// `auto`
+    Auto,
+    /// `json`
+    Json,
+    /// `cbor`
+    Cbor,
+    /// `flatbuffers`
+    Flatbuffers,
+    /// `plain`: UTF-8 text.
+    Plain,
+    /// `bytes`
+    Bytes,
+    /// `native`: SurrealDB's own format.
+    Native,
+}
+
+impl BodyStrategy {
+    /// The name SurrealDB reads, as a string value.
+    fn value(self) -> ValueLike {
+        ValueLike::value(match self {
+            Self::Auto => "auto",
+            Self::Json => "json",
+            Self::Cbor => "cbor",
+            Self::Flatbuffers => "flatbuffers",
+            Self::Plain => "plain",
+            Self::Bytes => "bytes",
+            Self::Native => "native",
+        }
+        .to_owned())
     }
 }
 

@@ -5,7 +5,9 @@ use std::time::Duration;
 
 use umbriel::{
     Runnable,
-    statements::{ApiMethod, alter_api, api_action, api_config, define_api, remove_api},
+    statements::{
+        ApiMethod, BodyStrategy, alter_api, api_action, api_config, define_api, remove_api,
+    },
 };
 use umbriel_tests::*;
 
@@ -32,6 +34,25 @@ fn a_definition_writes_its_config_fallback_and_actions() {
     assert_sql(
         &define_api("/status").fallback("ok"),
         "DEFINE API '/status' FOR ANY THEN 'ok';",
+    );
+}
+
+#[test]
+fn typed_middleware_renders_each_builtin() {
+    assert_sql(
+        &define_api("/upload").for_any(
+            api_config()
+                .timeout(Duration::from_secs(2))
+                .req_body(BodyStrategy::Json)
+                .req_max_body(1024)
+                .res_body(BodyStrategy::Cbor)
+                .res_status(201)
+                .res_header("x-acme", "Acme Corp")
+                .drop_res_header("server"),
+        ),
+        "DEFINE API '/upload' FOR ANY MIDDLEWARE api::timeout(2s), api::req::body('json'), \
+         api::req::max_body(1024), api::res::body('cbor'), api::res::status(201), \
+         api::res::header('x-acme', 'Acme Corp'), api::res::header('server');",
     );
 }
 
