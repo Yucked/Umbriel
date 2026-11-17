@@ -7,14 +7,16 @@
 //!   receiver's typed expression, e.g. `StrandLike::from(name).len()` renders `name.len()`.
 //!
 //! Every call is a [`Function<K>`](crate::Function) typed by its documented result kind (see
-//! [`kinds`](crate::kinds)). The namespaces `api`, `file`, `search`, `sequence` and `vector`
-//! belong to other work; `search` and `vector` keep their earlier wrappers.
+//! [`kinds`](crate::kinds)). `search` and `vector` keep their earlier wrappers.
 //!
 //! [See the SurrealDB documentation](https://surrealdb.com/docs/surrealql/functions/database)
 //! for what each function does.
 
 #[macro_use]
 mod catalogue;
+
+/// `api::invoke`, which calls a defined API.
+pub mod api;
 
 /// Array functions.
 pub mod array;
@@ -37,6 +39,9 @@ pub mod encoding;
 
 /// `eval::*` functions.
 pub mod eval;
+
+/// File functions on the files of a bucket.
+pub mod file;
 
 /// Geospatial functions.
 pub mod geo;
@@ -66,6 +71,9 @@ pub use self::rand::rand;
 /// Embedded JavaScript functions.
 mod script;
 pub use script::*;
+
+/// Sequence functions.
+pub mod sequence;
 
 /// Session functions.
 pub mod session;
