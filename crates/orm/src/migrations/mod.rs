@@ -2,7 +2,7 @@
 pub mod cli;
 pub(crate) mod database;
 mod error;
-mod resources;
+pub(crate) mod resources;
 pub(crate) mod schema;
 
 pub use cli::*;
