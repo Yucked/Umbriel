@@ -10,10 +10,10 @@ use surrealdb::types::Table;
 
 use crate::{
     Access, AccessLevel, Database, Event, Field, Ident, Name, Namespace, Param, Renderer,
-    TableIndex, User,
+    TableIndex, User, render::push_function_path,
 };
 
-use super::{Statement, impl_definition};
+use super::{Statement, define_api::push_api_path, define_module::ModuleName, impl_definition};
 
 /// Adds `if_exists` to a `REMOVE` statement holding an `if_exists` flag.
 macro_rules! impl_if_exists {
@@ -288,37 +288,25 @@ impl Statement for RemoveFieldStatement {
 impl_if_exists!(RemoveFieldStatement);
 impl_definition!(RemoveFieldStatement);
 
-/// A function's full name, e.g. `fn::update_author`, written verbatim.
-pub struct FunctionName(Cow<'static, str>);
-
-impl From<&str> for FunctionName {
-    fn from(name: &str) -> Self {
-        Self(Cow::Owned(name.to_owned()))
-    }
-}
-
-impl From<String> for FunctionName {
-    fn from(name: String) -> Self {
-        Self(Cow::Owned(name))
-    }
-}
-
-/// Creates a REMOVE FUNCTION statement builder. The name is a literal: SurrealDB does not read
-/// function names from parameters.
+/// Creates a REMOVE FUNCTION statement builder. The name is the path after `fn::`, as
+/// [`define_function`](super::define_function()) takes it; each `::`-separated part must be an
+/// identifier, and a name still starting with `fn::` fails, when the query is rendered. The name
+/// is a literal: SurrealDB does not read function names from parameters.
 ///
 /// Examples
 /// ```rust
 /// use umbriel::{*, statements::remove_function};
 /// assert_eq!(
-///     remove_function("fn::update_author").to_debug_sql(),
+///     remove_function("update_author").to_debug_sql(),
 ///     "REMOVE FUNCTION fn::update_author;"
 /// );
 /// assert_eq!(
-///     remove_function("fn::update_author").if_exists().to_debug_sql(),
+///     remove_function("update_author").if_exists().to_debug_sql(),
 ///     "REMOVE FUNCTION IF EXISTS fn::update_author;"
 /// );
+/// assert!(remove_function("fn::update_author").to_query().is_err());
 /// ```
-pub fn remove_function(name: impl Into<FunctionName>) -> RemoveFunctionStatement {
+pub fn remove_function(name: impl Into<String>) -> RemoveFunctionStatement {
     RemoveFunctionStatement {
         name: name.into(),
         if_exists: false,
@@ -327,14 +315,14 @@ pub fn remove_function(name: impl Into<FunctionName>) -> RemoveFunctionStatement
 
 /// Represents the REMOVE FUNCTION statement.
 pub struct RemoveFunctionStatement {
-    name: FunctionName,
+    name: String,
     if_exists: bool,
 }
 
 impl Statement for RemoveFunctionStatement {
     fn render_body(&self, out: &mut Renderer) {
         push_head(out, "FUNCTION", self.if_exists);
-        out.push_str(&self.name.0);
+        push_function_path(out, &self.name);
     }
 }
 
@@ -591,3 +579,174 @@ impl Statement for RemoveUserStatement {
 
 impl_if_exists!(RemoveUserStatement);
 impl_definition!(RemoveUserStatement);
+
+/// Removes a sequence: `REMOVE SEQUENCE [IF EXISTS] @name`.
+///
+/// ```rust
+/// use umbriel::{*, statements::remove_sequence};
+/// assert_eq!(remove_sequence("order_number").to_debug_sql(), "REMOVE SEQUENCE order_number;");
+/// ```
+pub fn remove_sequence(name: impl Into<Name<Ident>>) -> RemoveSequenceStatement {
+    RemoveSequenceStatement {
+        name: name.into(),
+        if_exists: false,
+    }
+}
+
+/// A `REMOVE SEQUENCE` statement.
+pub struct RemoveSequenceStatement {
+    name: Name<Ident>,
+    if_exists: bool,
+}
+
+impl Statement for RemoveSequenceStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "SEQUENCE", self.if_exists);
+        out.push(&self.name);
+    }
+}
+
+impl_if_exists!(RemoveSequenceStatement);
+impl_definition!(RemoveSequenceStatement);
+
+/// Removes a bucket: `REMOVE BUCKET [IF EXISTS] @name`. Buckets need the experimental `files`
+/// feature.
+///
+/// ```rust
+/// use umbriel::{*, statements::remove_bucket};
+/// assert_eq!(remove_bucket("avatars").if_exists().to_debug_sql(), "REMOVE BUCKET IF EXISTS avatars;");
+/// ```
+pub fn remove_bucket(name: impl Into<Name<Ident>>) -> RemoveBucketStatement {
+    RemoveBucketStatement {
+        name: name.into(),
+        if_exists: false,
+    }
+}
+
+/// A `REMOVE BUCKET` statement.
+pub struct RemoveBucketStatement {
+    name: Name<Ident>,
+    if_exists: bool,
+}
+
+impl Statement for RemoveBucketStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "BUCKET", self.if_exists);
+        out.push(&self.name);
+    }
+}
+
+impl_if_exists!(RemoveBucketStatement);
+impl_definition!(RemoveBucketStatement);
+
+/// Removes an API: `REMOVE API [IF EXISTS] @path`.
+///
+/// ```rust
+/// use umbriel::{*, statements::remove_api};
+/// assert_eq!(remove_api("/status").to_debug_sql(), "REMOVE API '/status';");
+/// ```
+pub fn remove_api(path: impl Into<String>) -> RemoveApiStatement {
+    RemoveApiStatement {
+        path: path.into(),
+        if_exists: false,
+    }
+}
+
+/// A `REMOVE API` statement.
+pub struct RemoveApiStatement {
+    path: String,
+    if_exists: bool,
+}
+
+impl Statement for RemoveApiStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "API", self.if_exists);
+        push_api_path(out, &self.path);
+    }
+}
+
+impl_if_exists!(RemoveApiStatement);
+impl_definition!(RemoveApiStatement);
+
+/// Removes a module: `REMOVE MODULE [IF EXISTS] mod::<name> | silo::…`. Modules need the
+/// experimental `surrealism` feature.
+///
+/// ```rust
+/// use umbriel::{*, statements::{ModuleName, remove_module}};
+/// assert_eq!(
+///     remove_module(ModuleName::Module("geo".into())).to_debug_sql(),
+///     "REMOVE MODULE mod::geo;"
+/// );
+/// ```
+pub fn remove_module(name: ModuleName) -> RemoveModuleStatement {
+    RemoveModuleStatement {
+        name,
+        if_exists: false,
+    }
+}
+
+/// A `REMOVE MODULE` statement.
+pub struct RemoveModuleStatement {
+    name: ModuleName,
+    if_exists: bool,
+}
+
+impl Statement for RemoveModuleStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "MODULE", self.if_exists);
+        out.push(&self.name);
+    }
+}
+
+impl_if_exists!(RemoveModuleStatement);
+impl_definition!(RemoveModuleStatement);
+
+/// Removes the database's API configuration: `REMOVE CONFIG [IF EXISTS] API`.
+///
+/// ```rust
+/// use umbriel::{*, statements::{remove_config_api, remove_config_default, remove_config_graphql}};
+/// assert_eq!(remove_config_api().to_debug_sql(), "REMOVE CONFIG API;");
+/// assert_eq!(remove_config_graphql().if_exists().to_debug_sql(), "REMOVE CONFIG IF EXISTS GRAPHQL;");
+/// assert_eq!(remove_config_default().to_debug_sql(), "REMOVE CONFIG DEFAULT;");
+/// ```
+pub fn remove_config_api() -> RemoveConfigStatement {
+    RemoveConfigStatement {
+        kind: "API",
+        if_exists: false,
+    }
+}
+
+/// Removes the database's GraphQL configuration: `REMOVE CONFIG [IF EXISTS] GRAPHQL`.
+pub fn remove_config_graphql() -> RemoveConfigStatement {
+    RemoveConfigStatement {
+        kind: "GRAPHQL",
+        if_exists: false,
+    }
+}
+
+/// Removes the root's default namespace and database: `REMOVE CONFIG [IF EXISTS] DEFAULT`.
+pub fn remove_config_default() -> RemoveConfigStatement {
+    RemoveConfigStatement {
+        kind: "DEFAULT",
+        if_exists: false,
+    }
+}
+
+/// A `REMOVE CONFIG` statement.
+pub struct RemoveConfigStatement {
+    kind: &'static str,
+    if_exists: bool,
+}
+
+impl Statement for RemoveConfigStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        out.push_str("REMOVE CONFIG");
+        if self.if_exists {
+            out.push_str(" IF EXISTS");
+        }
+        out.push_str(" ").push_str(self.kind);
+    }
+}
+
+impl_if_exists!(RemoveConfigStatement);
+impl_definition!(RemoveConfigStatement);
