@@ -39,6 +39,14 @@ impl Reset {
     /// and applies it if asked. The migration is generated before anything is deleted, so one
     /// that cannot be generated, e.g. for a redacted secret, leaves the existing files in place.
     ///
+    /// The first migration is generated from an empty schema and applied to the existing
+    /// database, so it defines every resource again. A sequence is defined without `OVERWRITE`,
+    /// which would reset the values it has issued, so applying the migration to a database that
+    /// already holds the sequence fails. The migration runs in one transaction, so the database
+    /// keeps its definitions and its old history; but the directory has already been replaced,
+    /// and rolling back the database does not restore it. A failed `reset --run` leaves the
+    /// regenerated files beside the unchanged history.
+    ///
     /// # Panics
     ///
     /// If generation fails or the directory cannot be recreated.
