@@ -261,6 +261,43 @@ pub enum MigrationError {
         key: ResourceKey,
     },
 
+    /// A bucket's backend URL would carry credentials into a migration file. SurrealDB does not
+    /// redact it, so the definition is refused instead of being written.
+    #[error(
+        "Cannot write {key} to a migration: its backend URL carries {reason}, which may be a \
+        credential. Give the server its storage credentials through its environment, or manage \
+        the bucket outside generated migrations"
+    )]
+    CredentialInBucketBackend {
+        /// The bucket.
+        key: ResourceKey,
+        /// What in the URL was refused, such as `query parameter secret_key`. Never the value.
+        reason: String,
+    },
+
+    /// A sequence's batch or start changed. Redefining a sequence resets the values it has
+    /// issued, so the change is not written.
+    #[error(
+        "Cannot update {key} in a migration: changing its batch or start means redefining it, \
+        which resets the values it has issued, so they may be issued again. Only its timeout can \
+        change in a generated migration; reset it deliberately in a hand-written migration"
+    )]
+    UnsafeSequenceUpdate {
+        /// The sequence.
+        key: ResourceKey,
+    },
+
+    /// A bucket's definition changed. Redefining a bucket connects a new store, which empties a
+    /// `memory` bucket, so the change is not written.
+    #[error(
+        "Cannot update {key} in a migration: redefining a bucket connects a new store, which \
+        loses the files of a `memory` bucket. Change it deliberately in a hand-written migration"
+    )]
+    UnsafeBucketUpdate {
+        /// The bucket.
+        key: ResourceKey,
+    },
+
     /// A field's `DEFINE FIELD` statement could not be told apart in `INFO` output.
     #[error(
         "Field `{field}` of table `{table}` matches {matches} DEFINE FIELD statements; expected exactly one"
@@ -272,6 +309,16 @@ pub enum MigrationError {
         field: String,
         /// How many statements matched.
         matches: usize,
+    },
+
+    /// A migration statement for a definition could not be rendered, such as the `REMOVE` of a
+    /// function whose name is not a path of identifiers.
+    #[error("Cannot write {key} to a migration: {}", .errors.join("; "))]
+    InvalidStatement {
+        /// The definition.
+        key: ResourceKey,
+        /// Why the statement could not be rendered.
+        errors: Vec<String>,
     },
 
     /// A definition's `DEFINE` statement is not in the server's canonical form.
