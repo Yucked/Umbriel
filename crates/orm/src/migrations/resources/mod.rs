@@ -1,3 +1,4 @@
+pub(crate) mod bucket_backend;
 mod diff;
 mod table_fields;
 
