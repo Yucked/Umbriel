@@ -15,8 +15,8 @@ use std::marker::PhantomData;
 use surrealdb::types::{GeometryKind, Kind, Table as TableName};
 
 use crate::{
-    ArrayLike, BoolLike, BytesLike, ClosureLike, DatetimeLike, DurationLike, GeometryLike, Model,
-    NumberLike, ObjectLike, RecordIdLike, SetLike, StrandLike, TableLike,
+    ArrayLike, BoolLike, BytesLike, ClosureLike, DatetimeLike, DurationLike, FileLike,
+    GeometryLike, Model, NumberLike, ObjectLike, RecordIdLike, SetLike, StrandLike, TableLike,
 };
 
 mod sealed {
@@ -109,6 +109,8 @@ markers! {
     Regex => Kind::Regex;
     /// `range`
     Range => Kind::Range;
+    /// `file`: a pointer to a file in a bucket.
+    File => Kind::File(vec![]);
 }
 
 /// `record<table>` for a model, or `record` for [`AnyRecord`].
@@ -166,7 +168,7 @@ macro_rules! enters {
 
 enters! {
     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
-        GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike;
+        GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike, FileLike;
     Int => NumberLike;
     Float => NumberLike;
     Decimal => NumberLike;
@@ -180,6 +182,7 @@ enters! {
     Duration => DurationLike;
     Object => ObjectLike;
     Table => TableLike;
+    File => FileLike;
 }
 
 impl<T: KindOf> Enters<ArrayLike> for Array<T> {}

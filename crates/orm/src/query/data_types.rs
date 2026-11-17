@@ -187,6 +187,14 @@ typed_expression!(
     ClosureLike:
 );
 
+typed_expression!(
+    /// A file pointer, `f"bucket:/key"`, or an expression standing for one. A
+    /// [`File`](types::File) binds as a value, so its bucket and key are never written into the
+    /// query text. Only inline rendering, such as debug SQL, writes the pointer; there SurrealDB
+    /// 3.3.4 parses a bucket only of letters, digits, `_`, `-` and `.`, and a key also of `/`.
+    FileLike: types::File
+);
+
 impl From<geo::Geometry<f64>> for GeometryLike {
     fn from(value: geo::Geometry<f64>) -> Self {
         Self(ValueLike::value(types::Geometry::from(value)))
