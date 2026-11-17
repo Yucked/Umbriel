@@ -2805,6 +2805,54 @@ mod up {
         assert_eq!(applied(&db).await, [first, second, third]);
         assert_eq!(tables(&db).await, ["first", "migration", "second", "third"]);
     }
+
+    /// One runner's attempt to apply the pending migrations in `dir` to `db`.
+    async fn run_once(dir: &Path, db: &Surreal<Any>) -> MigrationResult<()> {
+        config(dir)
+            .two_way()
+            .run_up_pending_migrations(db, UpdateStrategy::Latest)
+            .await
+    }
+
+    #[tokio::test]
+    async fn concurrent_runners_apply_each_migration_once() {
+        let (_temp, dir) = migration_dir();
+        let db = database().await;
+        let first = write_numbered(&dir, 1, "DEFINE TABLE first;", "REMOVE TABLE first;");
+        // A random record id, so applying the migration twice would leave two records.
+        let second = write_numbered(
+            &dir,
+            2,
+            "DEFINE TABLE second;\nCREATE second SET name = 'Alice';",
+            "REMOVE TABLE second;",
+        );
+
+        let (left, right) = tokio::join!(run_once(&dir, &db), run_once(&dir, &db));
+        assert!(left.is_ok() || right.is_ok(), "{left:?}\n{right:?}");
+        assert_eq!(applied(&db).await, [first.clone(), second.clone()]);
+        let written: i64 =
+            umbriel_tests::read(&db, "RETURN count(SELECT * FROM second);").await;
+        assert_eq!(written, 1, "the second migration committed once");
+
+        // Whichever runner lost, running again finds nothing pending.
+        run_once(&dir, &db).await.expect("nothing is pending");
+        assert_eq!(applied(&db).await, [first, second]);
+    }
+
+    #[tokio::test]
+    async fn connecting_applies_no_schema() {
+        let (_temp, dir) = migration_dir();
+        write_numbered(&dir, 1, "DEFINE TABLE first;", "REMOVE TABLE first;");
+        let db = database().await;
+        assert!(tables(&db).await.is_empty(), "connecting defines nothing");
+        let pending = config(&dir)
+            .two_way()
+            .list_migrations(&db, Status::Pending, Mode::Strict)
+            .await
+            .expect("listed");
+        assert_eq!(pending.len(), 1);
+        assert!(tables(&db).await.is_empty(), "listing defines nothing");
+    }
 }
 
 mod down {
@@ -4298,6 +4346,92 @@ mod cli {
                 .expect("the history is read")
                 .len(),
             1
+        );
+    }
+
+    /// The embedded engine the command line connects to with `args`.
+    async fn cli_db(args: &[&str]) -> Surreal<Any> {
+        let mut cli = migrator(args);
+        cli.setup_db().await;
+        cli.db().clone()
+    }
+
+    const BUCKET: &str = "DEFINE BUCKET avatars BACKEND 'memory';";
+    const MODULE: &str = "DEFINE MODULE mod::geo FROM f\"avatars:/geo.wasm\" UNSIGNED;";
+
+    #[tokio::test]
+    async fn experimental_features_are_off_unless_allowed() {
+        let plain = cli_db(&["up", "--url", "memory"]).await;
+        assert!(!umbriel_tests::succeeds(&plain, BUCKET).await, "files is off");
+
+        let files = cli_db(&["up", "--url", "memory", "--allow-experimental", "files"]).await;
+        assert!(umbriel_tests::succeeds(&files, BUCKET).await, "files is on");
+        assert!(
+            !umbriel_tests::succeeds(&files, MODULE).await,
+            "surrealism is off"
+        );
+
+        let both = cli_db(&[
+            "up",
+            "--url",
+            "memory",
+            "--allow-experimental",
+            "files,surrealism",
+        ])
+        .await;
+        assert!(umbriel_tests::succeeds(&both, BUCKET).await, "files is on");
+        assert!(umbriel_tests::succeeds(&both, MODULE).await, "surrealism is on");
+    }
+
+    #[test]
+    fn an_unknown_experimental_feature_is_refused() {
+        let parsed = Migrator::try_parse_from([
+            "migrator",
+            "up",
+            "--allow-experimental",
+            "graphql",
+        ]);
+        assert!(parsed.is_err(), "{parsed:?}");
+    }
+
+    #[derive(Debug, Clone)]
+    struct Avatars;
+
+    impl DbResources for Avatars {
+        fn buckets(&self) -> Vec<Raw> {
+            vec![Raw::new(BUCKET)]
+        }
+    }
+
+    #[tokio::test]
+    async fn init_applies_a_bucket_when_files_is_allowed() {
+        let temp = tempdir().expect("a temporary directory");
+        let dir = temp.path().join("migrations-tests");
+        let dir = dir.to_str().expect("a UTF-8 path");
+        let mut init = migrator(&[
+            "init",
+            "--name",
+            "avatars",
+            "--dir",
+            dir,
+            "--run",
+            "--url",
+            "memory",
+            "--allow-experimental",
+            "files",
+        ]);
+        init.run_test(Some(Avatars), MockPrompter::default()).await;
+        assert_eq!(
+            Migration::get_all_desc(init.db())
+                .await
+                .expect("the history is read")
+                .len(),
+            1
+        );
+        // A plain `DEFINE` fails only where the bucket already exists.
+        assert!(
+            !umbriel_tests::succeeds(init.db(), BUCKET).await,
+            "the migration defined the bucket"
         );
     }
 }
