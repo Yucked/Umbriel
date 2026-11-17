@@ -21,6 +21,30 @@ mod rendering {
     use super::*;
 
     #[test]
+    fn alter_table_sets_and_drops_the_changefeed() {
+        assert_sql(
+            &alter_table("reading")
+                .changefeed(std::time::Duration::from_secs(3600))
+                .include_original(),
+            "ALTER TABLE reading CHANGEFEED 1h INCLUDE ORIGINAL;",
+        );
+        assert_sql(
+            &alter_table("reading").drop_changefeed(),
+            "ALTER TABLE reading DROP CHANGEFEED;",
+        );
+        assert_render_error(
+            &alter_table("reading")
+                .changefeed(std::time::Duration::from_secs(3600))
+                .drop_changefeed(),
+            "both set and drop CHANGEFEED",
+        );
+        assert_render_error(
+            &alter_table("reading").include_original().drop_changefeed(),
+            "INCLUDE ORIGINAL needs a CHANGEFEED",
+        );
+    }
+
+    #[test]
     fn alter_table_sets_and_drops() {
         assert_sql(
             &alter_table("user")
@@ -238,6 +262,28 @@ mod rendering {
 
 mod behaviour {
     use super::*;
+
+    #[tokio::test]
+    async fn alter_table_replaces_and_drops_the_changefeed() {
+        let db = db().await;
+        run(
+            &db,
+            define_table("reading").changefeed(std::time::Duration::from_secs(3600)),
+        )
+        .await;
+        run(
+            &db,
+            alter_table("reading")
+                .changefeed(std::time::Duration::from_secs(7200))
+                .include_original(),
+        )
+        .await;
+        let table = stored_definition(&db, "INFO FOR DB;", "tables", "reading").await;
+        assert!(table.contains("CHANGEFEED 2h INCLUDE ORIGINAL"), "{table}");
+        run(&db, alter_table("reading").drop_changefeed()).await;
+        let table = stored_definition(&db, "INFO FOR DB;", "tables", "reading").await;
+        assert!(!table.contains("CHANGEFEED"), "{table}");
+    }
 
     #[tokio::test]
     async fn alter_table_changes_only_what_it_names() {
