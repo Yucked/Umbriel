@@ -5,8 +5,9 @@ use surrealdb::{Surreal, engine::local::Db};
 use umbriel::{
     Field, Param, Runnable,
     statements::{
-        remove_access, remove_analyzer, remove_database, remove_event, remove_field,
-        remove_function, remove_index, remove_namespace, remove_param, remove_table, remove_user,
+        ModuleName, remove_access, remove_analyzer, remove_api, remove_bucket, remove_config_api,
+        remove_database, remove_event, remove_field, remove_function, remove_index, remove_module,
+        remove_namespace, remove_param, remove_sequence, remove_table, remove_user,
     },
 };
 use umbriel_tests::*;
@@ -48,7 +49,7 @@ fn every_removal_takes_if_exists() {
         "REMOVE PARAM IF EXISTS $greeting;",
     );
     assert_sql(
-        &remove_function("fn::greet").if_exists(),
+        &remove_function("greet").if_exists(),
         "REMOVE FUNCTION IF EXISTS fn::greet;",
     );
     assert_sql(
@@ -58,6 +59,26 @@ fn every_removal_takes_if_exists() {
     assert_sql(
         &remove_access("api").on_database().if_exists(),
         "REMOVE ACCESS IF EXISTS api ON DATABASE;",
+    );
+    assert_sql(
+        &remove_sequence("order_number").if_exists(),
+        "REMOVE SEQUENCE IF EXISTS order_number;",
+    );
+    assert_sql(
+        &remove_bucket("avatars").if_exists(),
+        "REMOVE BUCKET IF EXISTS avatars;",
+    );
+    assert_sql(
+        &remove_api("/status").if_exists(),
+        "REMOVE API IF EXISTS '/status';",
+    );
+    assert_sql(
+        &remove_module(ModuleName::Module("geo".to_owned())).if_exists(),
+        "REMOVE MODULE IF EXISTS mod::geo;",
+    );
+    assert_sql(
+        &remove_config_api().if_exists(),
+        "REMOVE CONFIG IF EXISTS API;",
     );
 }
 
@@ -120,9 +141,12 @@ async fn if_exists_removes_nothing_without_failing() {
     assert!(runs(&db, remove_event("audit").on_table("user").if_exists()).await);
     assert!(runs(&db, remove_analyzer("simple").if_exists()).await);
     assert!(runs(&db, remove_param("greeting").if_exists()).await);
-    assert!(runs(&db, remove_function("fn::greet").if_exists()).await);
+    assert!(runs(&db, remove_function("greet").if_exists()).await);
     assert!(runs(&db, remove_user("alice").on_database().if_exists()).await);
     assert!(runs(&db, remove_access("api").on_database().if_exists()).await);
+    assert!(runs(&db, remove_sequence("order_number").if_exists()).await);
+    assert!(runs(&db, remove_api("/status").if_exists()).await);
+    assert!(runs(&db, remove_config_api().if_exists()).await);
 }
 
 #[tokio::test]
