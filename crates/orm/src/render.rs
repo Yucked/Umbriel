@@ -340,18 +340,21 @@ pub(crate) fn write_ident(out: &mut String, name: &str) {
     out.push('`');
 }
 
+/// Whether `segment` is a plain identifier, `[A-Za-z_][A-Za-z0-9_]*`, which SurrealQL reads
+/// without quoting in a path such as a function or module name.
+pub(crate) fn is_identifier(segment: &str) -> bool {
+    let mut bytes = segment.bytes();
+    bytes
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
 /// Writes `prefix::path`, where `path` is a `::`-separated path of plain identifiers
 /// (`[A-Za-z_][A-Za-z0-9_]*` each), and returns whether it was written. Anything else fails the
 /// query and nothing of it is written, so a name cannot carry SurrealQL of its own.
 pub(crate) fn push_path(out: &mut Renderer, prefix: &str, path: &str) -> bool {
-    let valid_segment = |segment: &str| {
-        let mut bytes = segment.bytes();
-        bytes
-            .next()
-            .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
-            && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-    };
-    if !path.split("::").all(valid_segment) {
+    if !path.split("::").all(is_identifier) {
         out.push_error(format!(
             "invalid function name `{path}`: each `::`-separated part must be an identifier \
              ([A-Za-z_][A-Za-z0-9_]*)"
@@ -360,4 +363,17 @@ pub(crate) fn push_path(out: &mut Renderer, prefix: &str, path: &str) -> bool {
     }
     out.push_str(prefix).push_str("::").push_str(path);
     true
+}
+
+/// Writes `fn::<name>`, where `name` is the path after `fn::`, checked as [`push_path`] checks it,
+/// and returns whether it was written. A name whose first part is `fn` fails: it would otherwise
+/// write `fn::fn::…`, itself a valid path, for a caller who passed the full name.
+pub(crate) fn push_function_path(out: &mut Renderer, name: &str) -> bool {
+    if name.split("::").next() == Some("fn") {
+        out.push_error(format!(
+            "invalid function name `{name}`: pass the name without `fn::`"
+        ));
+        return false;
+    }
+    push_path(out, "fn", name)
 }

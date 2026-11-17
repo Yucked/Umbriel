@@ -1,6 +1,6 @@
 use surrealdb::types::Kind;
 
-use crate::{Block, Param, Renderer};
+use crate::{Block, Param, Renderer, render::push_function_path};
 
 use super::{DefineOptions, Statement, impl_define_options, impl_definition};
 
@@ -48,7 +48,20 @@ impl DefineFunctionStatement {
     }
 }
 
-/// Create a new function definition statement
+/// Creates a `DEFINE FUNCTION fn::name` statement. The name is the path after `fn::`; each
+/// `::`-separated part must be an identifier (`[A-Za-z_][A-Za-z0-9_]*`), and a name still
+/// starting with `fn::` fails, when the query is rendered.
+///
+/// ```rust
+/// use umbriel::{*, statements::define_function};
+///
+/// assert!(
+///     define_function("math::add_one")
+///         .to_debug_sql()
+///         .starts_with("DEFINE FUNCTION fn::math::add_one(")
+/// );
+/// assert!(define_function("fn::math::add_one").to_query().is_err());
+/// ```
 pub fn define_function(name: impl Into<String>) -> DefineFunctionStatement {
     DefineFunctionStatement {
         name: name.into(),
@@ -72,10 +85,12 @@ pub(crate) fn push_arguments(out: &mut Renderer, args: &[FunctionArgument]) {
 
 impl Statement for DefineFunctionStatement {
     fn render_body(&self, out: &mut Renderer) {
-        // The name is a `::`-separated path, written as given.
         out.push_str("DEFINE FUNCTION");
         self.options.render_kind(out);
-        out.push_str(" fn::").push_str(&self.name);
+        out.push_str(" ");
+        if !push_function_path(out, &self.name) {
+            return;
+        }
         push_arguments(out, &self.args);
         out.push_str(" ");
         if let Some(body) = &self.body {
