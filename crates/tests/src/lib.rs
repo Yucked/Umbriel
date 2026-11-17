@@ -9,7 +9,14 @@ pub use models::*;
 
 use surrealdb::{
     Surreal,
-    engine::local::{Db, Mem},
+    engine::{
+        any::Any,
+        local::{Db, Mem},
+    },
+    opt::{
+        Config,
+        capabilities::{Capabilities, ExperimentalFeature},
+    },
     types::{SurrealValue, Value},
 };
 use umbriel::{Function, Model, Raw, Render, Runnable, kinds::KindOf};
@@ -176,6 +183,25 @@ pub fn statement_error(
 /// A fresh in-memory database, with a namespace and database selected.
 pub async fn db() -> Surreal<Db> {
     let db = Surreal::new::<Mem>(()).await.expect("in-memory engine");
+    db.use_ns("test")
+        .use_db("test")
+        .await
+        .expect("namespace and database");
+    db
+}
+
+/// A fresh in-memory database that allows the experimental `files` and `surrealism` features,
+/// which buckets and modules need, with a namespace and database selected.
+pub async fn experimental_db() -> Surreal<Any> {
+    let capabilities = Capabilities::default()
+        .with_experimental_feature_allowed(ExperimentalFeature::Files)
+        .with_experimental_feature_allowed(ExperimentalFeature::Surrealism);
+    let db = surrealdb::engine::any::connect((
+        "mem://".to_owned(),
+        Config::new().capabilities(capabilities),
+    ))
+    .await
+    .expect("in-memory engine");
     db.use_ns("test")
         .use_db("test")
         .await
