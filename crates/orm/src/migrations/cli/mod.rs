@@ -26,7 +26,7 @@ pub use up::{FastForwardDelta, Up, UpdateStrategy};
 use crate::DbResources;
 use clap::{ArgAction, Parser};
 
-pub use self::config::DatabaseConnection;
+pub use self::config::{DatabaseConnection, Experimental};
 use crate::migrations::{
     MigrationConfig, MockPrompter, Mode, Prompter, RealPrompter, RenameOrDelete,
 };

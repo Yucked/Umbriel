@@ -1,7 +1,10 @@
-use clap::Args;
+use clap::{Args, ValueEnum};
 use std::fmt::Display;
 use std::str::FromStr;
-use surrealdb::opt::{Config, WaitFor, capabilities::Capabilities};
+use surrealdb::opt::{
+    Config, WaitFor,
+    capabilities::{Capabilities, ExperimentalFeature},
+};
 use typed_builder::TypedBuilder;
 
 use surrealdb::engine::any::{Any, connect};
@@ -37,6 +40,25 @@ impl FromStr for UrlDb {
             Ok(UrlDb::Memory)
         } else {
             Ok(UrlDb::Others(s))
+        }
+    }
+}
+
+/// An experimental SurrealDB feature an embedded engine can be started with.
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Experimental {
+    /// `files`: buckets and file pointers.
+    Files,
+    /// `surrealism`: modules.
+    Surrealism,
+}
+
+impl From<Experimental> for ExperimentalFeature {
+    fn from(feature: Experimental) -> Self {
+        match feature {
+            Experimental::Files => ExperimentalFeature::Files,
+            Experimental::Surrealism => ExperimentalFeature::Surrealism,
         }
     }
 }
@@ -101,6 +123,19 @@ pub struct DatabaseConnection {
     #[builder(default = "root".into())]
     pub(crate) pass: String,
 
+    /// Experimental features an embedded engine allows, such as `files` for buckets and
+    /// `surrealism` for modules. None by default. A server keeps its own capabilities, so this
+    /// has no effect on a remote URL.
+    #[arg(
+        global = true,
+        long,
+        value_enum,
+        value_delimiter = ',',
+        help = "Experimental features an embedded engine allows (files, surrealism); none by default"
+    )]
+    #[builder(default)]
+    pub(crate) allow_experimental: Vec<Experimental>,
+
     #[arg(skip)]
     #[builder(default, setter(strip_option))]
     pub(crate) db_connection: Option<Surreal<Any>>,
@@ -119,7 +154,13 @@ impl DatabaseConnection {
             username: self.user.clone(),
             password: self.pass.clone(),
         };
-        let mut config = Config::new().capabilities(Capabilities::all());
+        let capabilities = self
+            .allow_experimental
+            .iter()
+            .fold(Capabilities::all(), |capabilities, &feature| {
+                capabilities.with_experimental_feature_allowed(feature.into())
+            });
+        let mut config = Config::new().capabilities(capabilities);
         if let UrlDb::Memory = self.url {
             config = config.user(root.clone());
         }
