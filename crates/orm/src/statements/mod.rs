@@ -15,13 +15,18 @@ pub(crate) mod create;
 pub(crate) mod data;
 pub(crate) mod define_access;
 pub(crate) mod define_analyzer;
+pub(crate) mod define_api;
+pub(crate) mod define_bucket;
+pub(crate) mod define_config;
 pub(crate) mod define_database;
 pub(crate) mod define_event;
 pub(crate) mod define_field;
 pub(crate) mod define_function;
 pub(crate) mod define_index;
+pub(crate) mod define_module;
 pub(crate) mod define_namespace;
 pub(crate) mod define_param;
+pub(crate) mod define_sequence;
 pub(crate) mod define_table;
 pub(crate) mod define_user;
 pub(crate) mod delete;
@@ -151,9 +156,9 @@ impl DefineOptions {
     }
 }
 
-/// Adds `overwrite`, `if_not_exists` and `comment` to a `DEFINE` statement holding a
-/// `DefineOptions` in its `options` field.
-macro_rules! impl_define_options {
+/// Adds `overwrite` and `if_not_exists` to a `DEFINE` statement holding a `DefineOptions` in its
+/// `options` field. Used alone for the kinds SurrealDB stores no comment for.
+macro_rules! impl_define_kind {
     ($statement:ty) => {
         impl $statement {
             /// `OVERWRITE`: replaces the definition if the resource already exists. Replaces an
@@ -169,7 +174,18 @@ macro_rules! impl_define_options {
                 self.options.kind = $crate::statements::DefineKind::IfNotExists;
                 self
             }
+        }
+    };
+}
+pub(crate) use impl_define_kind;
 
+/// Adds `overwrite`, `if_not_exists` and `comment` to a `DEFINE` statement holding a
+/// `DefineOptions` in its `options` field.
+macro_rules! impl_define_options {
+    ($statement:ty) => {
+        $crate::statements::impl_define_kind!($statement);
+
+        impl $statement {
             /// `COMMENT`: a description stored with the definition and shown by `INFO`.
             pub fn comment(mut self, comment: impl Into<String>) -> Self {
                 self.options.comment = Some(comment.into());
@@ -190,9 +206,11 @@ impl<S: Statement + ?Sized> Render for StatementBody<'_, S> {
 }
 
 pub use alter::{
-    AlterAnalyzerStatement, AlterEventStatement, AlterFieldStatement, AlterFunctionStatement,
-    AlterParamStatement, AlterTableStatement, alter_analyzer, alter_event, alter_field,
-    alter_function, alter_param, alter_table,
+    AlterAnalyzerStatement, AlterApiStatement, AlterBucketStatement, AlterEventStatement,
+    AlterFieldStatement, AlterFunctionStatement, AlterModuleStatement, AlterParamStatement,
+    AlterSequenceStatement, AlterTableStatement, alter_analyzer, alter_api, alter_bucket,
+    alter_event, alter_field, alter_function, alter_module, alter_param, alter_sequence,
+    alter_table,
 };
 pub use any::{
     AnyTarget, CreateAnyStatement, InsertAnyStatement, Models, WritableModels, create_any,
@@ -209,13 +227,25 @@ pub use define_access::{
 pub use define_analyzer::{
     AnalyzerFilter, DefineAnalyzerStatement, SnowballLanguage, Tokenizer, define_analyzer,
 };
+pub use define_api::{
+    ApiAction, ApiConfig, ApiMethod, DefineApiStatement, api_action, api_config, define_api,
+};
+pub use define_bucket::{DefineBucketStatement, define_bucket};
+pub use define_config::{
+    DefineConfigApiStatement, DefineConfigDefaultStatement, DefineConfigGraphqlStatement,
+    define_config_api, define_config_default, define_config_graphql,
+};
 pub use define_database::{DefineDatabaseStatement, define_database};
 pub use define_event::{DefineEventStatement, define_event};
 pub use define_field::{DefineFieldStatement, define_field};
 pub use define_function::{DefineFunctionStatement, FunctionArgument, define_function};
 pub use define_index::{DefineIndexStatement, FullTextAnalyzer, define_index, fulltext_analyzer};
+pub use define_module::{
+    DefineModuleStatement, ModuleName, define_module_file, define_module_silo,
+};
 pub use define_namespace::{DefineNamespaceStatement, define_namespace};
 pub use define_param::{DefineParamStatement, define_param};
+pub use define_sequence::{DefineSequenceStatement, define_sequence};
 pub use define_table::{DefineTableStatement, TableRelation, define_table, table_relation};
 pub use define_user::{DefineUserStatement, UserRole, define_user};
 pub use delete::{DeleteStatement, delete, delete_edges, delete_only};
@@ -232,11 +262,14 @@ pub use let_::{LetStatement, let_};
 pub use live_select::{LiveSelectStatement, live};
 pub use relate::{RelateOrUpdateStatement, RelateStatement, relate, relate_only};
 pub use remove::{
-    RemoveAccessStatement, RemoveAnalyzerStatement, RemoveDatabaseStatement, RemoveEventStatement,
-    RemoveFieldStatement, RemoveFunctionStatement, RemoveIndexStatement, RemoveNamespaceStatement,
-    RemoveParamStatement, RemoveTableStatement, RemoveUserStatement, UserPermissionScope,
-    remove_access, remove_analyzer, remove_database, remove_event, remove_field, remove_function,
-    remove_index, remove_namespace, remove_param, remove_table, remove_user,
+    RemoveAccessStatement, RemoveAnalyzerStatement, RemoveApiStatement, RemoveBucketStatement,
+    RemoveConfigStatement, RemoveDatabaseStatement, RemoveEventStatement, RemoveFieldStatement,
+    RemoveFunctionStatement, RemoveIndexStatement, RemoveModuleStatement, RemoveNamespaceStatement,
+    RemoveParamStatement, RemoveSequenceStatement, RemoveTableStatement, RemoveUserStatement,
+    UserPermissionScope, remove_access, remove_analyzer, remove_api, remove_bucket,
+    remove_config_api, remove_config_default, remove_config_graphql, remove_database, remove_event,
+    remove_field, remove_function, remove_index, remove_module, remove_namespace, remove_param,
+    remove_sequence, remove_table, remove_user,
 };
 pub use return_::{ReturnStatement, return_};
 pub use returning::{
@@ -248,7 +281,10 @@ pub use select::{
     Order, Orderables, SelectCount, SelectStatement, Selectables, Splittables, order, select,
     select_value,
 };
-pub use show::{ChangesSince, ShowChangesStatement, show_changes_for_table};
+pub use show::{
+    ChangeSet, ChangesSince, ShowChangesStatement, TableChange, show_changes_for_database,
+    show_changes_for_table,
+};
 pub use sleep::{SleepStatement, sleep};
 pub use subquery::Subquery;
 pub use throw::{ThrowStatement, throw};
