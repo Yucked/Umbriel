@@ -10,20 +10,22 @@
 
 use std::ops::Deref;
 
-use surrealdb::types::{Kind, Table, Value};
+use surrealdb::types::{Duration, Kind, Table, Value};
 
 use crate::{
     Block, Conditional, Event, Field, Filter, Ident, Name, Param, Renderer, ValueLike,
-    render::push_path,
+    render::push_function_path,
 };
 
 use super::{
     Statement, Subquery,
     define_analyzer::{AnalyzerFilter, Tokenizer, push_list},
+    define_api::{ApiAction, ApiConfig, ApiMethod, push_api_path, push_methods},
     define_event::EventMode,
     define_field::{FieldDefault, kind_contains_object},
     define_function::{FunctionArgument, push_arguments},
-    define_table::{TableKind, TableRelation},
+    define_module::ModuleName,
+    define_table::{TableKind, TableRelation, push_changefeed},
     for_permission::{PermissionValue, Permissions, PermissionsClause},
     impl_definition,
 };
@@ -83,11 +85,6 @@ fn push_head(out: &mut Renderer, kind: &str, if_exists: bool) {
     out.push_str(" ");
 }
 
-/// Writes `fn::<name>`; see [`push_path`].
-fn push_function_path(out: &mut Renderer, name: &str) {
-    push_path(out, "fn", name);
-}
-
 /// Writes ` ON TABLE @table` when a table is set.
 fn push_table(out: &mut Renderer, table: Option<&Name<Table>>) {
     if let Some(table) = table {
@@ -122,8 +119,9 @@ macro_rules! impl_alter_common {
 
 /// Alters a table: `ALTER TABLE [IF EXISTS] @name …`.
 ///
-/// It changes the comment, the kind, `SCHEMAFULL`/`SCHEMALESS` and the permissions; the rest of
-/// the definition is kept. A changefeed and inline edges are altered with their own features.
+/// It changes the comment, the kind, `SCHEMAFULL`/`SCHEMALESS`, the changefeed and the
+/// permissions; the rest of the definition is kept. Inline edges are altered with their own
+/// feature.
 ///
 /// ```rust
 /// use umbriel::{*, statements::alter_table};
@@ -143,6 +141,8 @@ pub fn alter_table(table: impl Into<Name<Table>>) -> AlterTableStatement {
         if_exists: false,
         kind: None,
         schemafull: None,
+        changefeed: Change::default(),
+        include_original: false,
         comment: Change::default(),
         permissions: PermissionsClause::default(),
     }
@@ -154,11 +154,34 @@ pub struct AlterTableStatement {
     if_exists: bool,
     kind: Option<TableKind>,
     schemafull: Option<bool>,
+    changefeed: Change<Duration>,
+    include_original: bool,
     comment: Change<String>,
     permissions: PermissionsClause,
 }
 
 impl AlterTableStatement {
+    /// `CHANGEFEED @expiry`: replaces the table's changefeed. SurrealDB takes the duration only
+    /// as a literal.
+    pub fn changefeed(mut self, expiry: impl Into<Duration>) -> Self {
+        self.changefeed.set = Some(expiry.into());
+        self
+    }
+
+    /// `INCLUDE ORIGINAL`, written with [`changefeed`](Self::changefeed): updates also record the
+    /// patch that reverts them, and deletes the deleted record. Without a changefeed, the query
+    /// fails when it is rendered.
+    pub fn include_original(mut self) -> Self {
+        self.include_original = true;
+        self
+    }
+
+    /// `DROP CHANGEFEED`: the table stops recording its changes.
+    pub fn drop_changefeed(mut self) -> Self {
+        self.changefeed.drop = true;
+        self
+    }
+
     /// `TYPE ANY`.
     pub fn kind_any(mut self) -> Self {
         self.kind = Some(TableKind::Any);
@@ -224,6 +247,12 @@ impl Statement for AlterTableStatement {
             }
             None => {}
         }
+        if self.include_original && self.changefeed.set.is_none() {
+            out.push_error("INCLUDE ORIGINAL needs a CHANGEFEED");
+        }
+        self.changefeed.render(out, "CHANGEFEED", |expiry, out| {
+            push_changefeed(out, Some(expiry), self.include_original);
+        });
         render_comment(&self.comment, out);
         out.push(&self.permissions);
     }
@@ -814,3 +843,347 @@ impl Statement for AlterAnalyzerStatement {
 
 impl_alter_common!(AlterAnalyzerStatement);
 impl_definition!(AlterAnalyzerStatement);
+
+/// Alters a sequence's timeout: `ALTER SEQUENCE [IF EXISTS] @name TIMEOUT @duration | NONE`.
+///
+/// It is the only change SurrealDB 3.3.4 makes to a sequence without redefining it, and it keeps
+/// the values the sequence has issued. A sequence has no comment.
+///
+/// ```rust
+/// use std::time::Duration;
+/// use umbriel::{*, statements::alter_sequence};
+///
+/// assert_eq!(
+///     alter_sequence("order_number").timeout(Duration::from_secs(5)).to_debug_sql(),
+///     "ALTER SEQUENCE order_number TIMEOUT 5s;"
+/// );
+/// assert_eq!(
+///     alter_sequence("order_number").if_exists().drop_timeout().to_debug_sql(),
+///     "ALTER SEQUENCE IF EXISTS order_number TIMEOUT NONE;"
+/// );
+/// ```
+pub fn alter_sequence(name: impl Into<Name<Ident>>) -> AlterSequenceStatement {
+    AlterSequenceStatement {
+        name: name.into(),
+        if_exists: false,
+        timeout: Change::default(),
+    }
+}
+
+/// An `ALTER SEQUENCE` statement.
+pub struct AlterSequenceStatement {
+    name: Name<Ident>,
+    if_exists: bool,
+    timeout: Change<Duration>,
+}
+
+impl AlterSequenceStatement {
+    /// `IF EXISTS`: altering a sequence that does not exist succeeds instead of failing.
+    pub fn if_exists(mut self) -> Self {
+        self.if_exists = true;
+        self
+    }
+
+    /// `TIMEOUT @duration`: how long `sequence::nextval` waits to reserve a batch.
+    pub fn timeout(mut self, timeout: impl Into<Duration>) -> Self {
+        self.timeout.set = Some(timeout.into());
+        self
+    }
+
+    /// `TIMEOUT NONE`: removes the timeout. SurrealDB has no `DROP TIMEOUT`.
+    pub fn drop_timeout(mut self) -> Self {
+        self.timeout.drop = true;
+        self
+    }
+}
+
+impl Statement for AlterSequenceStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "SEQUENCE", self.if_exists);
+        out.push(&self.name);
+        match (&self.timeout.set, self.timeout.drop) {
+            (Some(_), true) => {
+                out.push_error("ALTER cannot both set and drop TIMEOUT");
+            }
+            (Some(timeout), false) => {
+                out.push_str(" TIMEOUT ").push_syntax(timeout);
+            }
+            (None, true) => {
+                out.push_str(" TIMEOUT NONE");
+            }
+            (None, false) => {}
+        }
+    }
+}
+
+impl_definition!(AlterSequenceStatement);
+
+/// Alters a bucket: `ALTER BUCKET [IF EXISTS] @name …`. Buckets need the experimental `files`
+/// feature.
+///
+/// ```rust
+/// use umbriel::{*, statements::alter_bucket};
+///
+/// let statement = alter_bucket("avatars").drop_readonly().backend("memory").permissions_none();
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "ALTER BUCKET avatars DROP READONLY BACKEND 'memory' PERMISSIONS NONE;"
+/// );
+/// ```
+pub fn alter_bucket(name: impl Into<Name<Ident>>) -> AlterBucketStatement {
+    AlterBucketStatement {
+        name: name.into(),
+        if_exists: false,
+        readonly: Change::default(),
+        backend: Change::default(),
+        permissions: None,
+        comment: Change::default(),
+    }
+}
+
+/// An `ALTER BUCKET` statement.
+pub struct AlterBucketStatement {
+    name: Name<Ident>,
+    if_exists: bool,
+    readonly: Change<()>,
+    backend: Change<String>,
+    permissions: Option<PermissionValue>,
+    comment: Change<String>,
+}
+
+impl AlterBucketStatement {
+    /// `READONLY`.
+    pub fn readonly(mut self) -> Self {
+        self.readonly.set = Some(());
+        self
+    }
+
+    /// `DROP READONLY`.
+    pub fn drop_readonly(mut self) -> Self {
+        self.readonly.drop = true;
+        self
+    }
+
+    /// `BACKEND @url`, a string literal.
+    pub fn backend(mut self, url: impl Into<String>) -> Self {
+        self.backend.set = Some(url.into());
+        self
+    }
+
+    /// `DROP BACKEND`: the bucket uses the server's global bucket.
+    pub fn drop_backend(mut self) -> Self {
+        self.backend.drop = true;
+        self
+    }
+
+    /// `PERMISSIONS NONE`.
+    pub fn permissions_none(mut self) -> Self {
+        self.permissions = Some(PermissionValue::None);
+        self
+    }
+
+    /// `PERMISSIONS FULL`.
+    pub fn permissions_full(mut self) -> Self {
+        self.permissions = Some(PermissionValue::Full);
+        self
+    }
+
+    /// `PERMISSIONS WHERE @condition`.
+    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
+        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
+        self
+    }
+}
+
+impl Statement for AlterBucketStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "BUCKET", self.if_exists);
+        out.push(&self.name);
+        self.readonly.render(out, "READONLY", |(), out| {
+            out.push_str(" READONLY");
+        });
+        self.backend.render(out, "BACKEND", |url, out| {
+            out.push_str(" BACKEND ")
+                .push_value(&Value::String(url.clone()));
+        });
+        if let Some(permissions) = &self.permissions {
+            out.push(permissions);
+        }
+        render_comment(&self.comment, out);
+    }
+}
+
+impl_alter_common!(AlterBucketStatement);
+impl_definition!(AlterBucketStatement);
+
+/// Alters an API: `ALTER API [IF EXISTS] @path …`.
+///
+/// [`for_any`](AlterApiStatement::for_any) replaces the middleware and permissions of every
+/// request, [`fallback`](AlterApiStatement::fallback) and
+/// [`drop_fallback`](AlterApiStatement::drop_fallback) replace or remove the answer to methods no
+/// action names, [`action`](AlterApiStatement::action) adds or replaces the action of its methods,
+/// and [`drop_action`](AlterApiStatement::drop_action) removes one. A method both set and dropped
+/// is an error.
+///
+/// ```rust
+/// use umbriel::{*, statements::{ApiMethod, alter_api, api_action}};
+///
+/// let statement = alter_api("/status")
+///     .action(api_action([ApiMethod::Post], "ok"))
+///     .drop_action([ApiMethod::Get])
+///     .drop_fallback();
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "ALTER API '/status' FOR ANY DROP THEN FOR POST THEN 'ok' FOR GET DROP THEN;"
+/// );
+/// ```
+pub fn alter_api(path: impl Into<String>) -> AlterApiStatement {
+    AlterApiStatement {
+        path: path.into(),
+        if_exists: false,
+        any: None,
+        fallback: Change::default(),
+        actions: Vec::new(),
+        dropped: Vec::new(),
+        comment: Change::default(),
+    }
+}
+
+/// An `ALTER API` statement.
+pub struct AlterApiStatement {
+    path: String,
+    if_exists: bool,
+    any: Option<ApiConfig>,
+    fallback: Change<ValueLike>,
+    actions: Vec<ApiAction>,
+    dropped: Vec<Vec<ApiMethod>>,
+    comment: Change<String>,
+}
+
+impl AlterApiStatement {
+    /// `FOR ANY @config`: replaces the middleware and permissions of every request.
+    pub fn for_any(mut self, config: ApiConfig) -> Self {
+        self.any = Some(config);
+        self
+    }
+
+    /// `FOR ANY THEN @fallback`: replaces the answer to methods no action names.
+    pub fn fallback(mut self, fallback: impl Into<ValueLike>) -> Self {
+        self.fallback.set = Some(fallback.into());
+        self
+    }
+
+    /// `FOR ANY DROP THEN`: removes the fallback.
+    pub fn drop_fallback(mut self) -> Self {
+        self.fallback.drop = true;
+        self
+    }
+
+    /// `FOR @methods … THEN @action`: sets the action of its methods.
+    pub fn action(mut self, action: ApiAction) -> Self {
+        self.actions.push(action);
+        self
+    }
+
+    /// `FOR @methods DROP THEN`: removes the action of these methods.
+    pub fn drop_action(mut self, methods: impl IntoIterator<Item = ApiMethod>) -> Self {
+        self.dropped.push(methods.into_iter().collect());
+        self
+    }
+}
+
+impl Statement for AlterApiStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "API", self.if_exists);
+        push_api_path(out, &self.path);
+        let fallback_changes = self.fallback.set.is_some() || self.fallback.drop;
+        if self.any.is_some() || fallback_changes {
+            out.push_str(" FOR ANY").push(&self.any);
+            self.fallback.render(out, "THEN", |fallback, out| {
+                out.push_str(" THEN ").push(fallback);
+            });
+        }
+        // Every set action is written before every dropped one, whatever order the calls came
+        // in, so a method both set and dropped would silently end up dropped.
+        if let Some(method) = self.dropped.iter().flatten().find(|method| {
+            self.actions
+                .iter()
+                .any(|action| action.methods.contains(method))
+        }) {
+            out.push_error(format!(
+                "ALTER cannot both set and drop the action of {method}"
+            ));
+        }
+        for action in &self.actions {
+            out.push(action);
+        }
+        for methods in &self.dropped {
+            push_methods(out, methods);
+            out.push_str(" DROP THEN");
+        }
+        render_comment(&self.comment, out);
+    }
+}
+
+impl_alter_common!(AlterApiStatement);
+impl_definition!(AlterApiStatement);
+
+/// Alters a module: `ALTER MODULE [IF EXISTS] @name …`, which changes its comment and
+/// permissions. Modules need the experimental `surrealism` feature.
+///
+/// ```rust
+/// use umbriel::{*, statements::{ModuleName, alter_module}};
+///
+/// let statement = alter_module(ModuleName::Module("geo".into())).comment("Acme Corp maps");
+/// assert_eq!(statement.to_debug_sql(), "ALTER MODULE mod::geo COMMENT 'Acme Corp maps';");
+/// ```
+pub fn alter_module(name: ModuleName) -> AlterModuleStatement {
+    AlterModuleStatement {
+        name,
+        if_exists: false,
+        permissions: None,
+        comment: Change::default(),
+    }
+}
+
+/// An `ALTER MODULE` statement.
+pub struct AlterModuleStatement {
+    name: ModuleName,
+    if_exists: bool,
+    permissions: Option<PermissionValue>,
+    comment: Change<String>,
+}
+
+impl AlterModuleStatement {
+    /// `PERMISSIONS NONE`.
+    pub fn permissions_none(mut self) -> Self {
+        self.permissions = Some(PermissionValue::None);
+        self
+    }
+
+    /// `PERMISSIONS FULL`.
+    pub fn permissions_full(mut self) -> Self {
+        self.permissions = Some(PermissionValue::Full);
+        self
+    }
+
+    /// `PERMISSIONS WHERE @condition`.
+    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
+        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
+        self
+    }
+}
+
+impl Statement for AlterModuleStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "MODULE", self.if_exists);
+        out.push(&self.name);
+        render_comment(&self.comment, out);
+        if let Some(permissions) = &self.permissions {
+            out.push(permissions);
+        }
+    }
+}
+
+impl_alter_common!(AlterModuleStatement);
+impl_definition!(AlterModuleStatement);
