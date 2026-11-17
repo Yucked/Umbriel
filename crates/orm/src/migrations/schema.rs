@@ -2,14 +2,15 @@
 //!
 //! A database's definitions are read from `INFO FOR … STRUCTURE`, keyed by kind, table and name,
 //! and compared by their structure. Both sides of a migration are rendered by the same server, so
-//! nothing is parsed or trimmed here. The plain `INFO FOR …` output supplies each definition's
-//! `DEFINE` statement, which is used only to write migrations.
+//! nothing is parsed here; only the properties that differ between databases holding the same
+//! schema are removed (see `ResourceKind::normalise`). The plain `INFO FOR …` output supplies each
+//! definition's `DEFINE` statement, which is used only to write migrations.
 
 use std::{collections::BTreeMap, fmt};
 
 use surrealdb::{
     IndexedResults,
-    types::{Object, Table, Value},
+    types::{Object, Table, ToSql, Value},
 };
 
 use crate::{
@@ -26,16 +27,24 @@ use crate::{
 const REDACTED: &str = "[REDACTED]";
 
 /// A kind of definition migrations manage, in creation order: each kind may reference only kinds
-/// before it (an analyzer its function, an index its analyzer, a field its table), so creation
-/// follows this order and removal reverses it.
+/// before it (a module the bucket holding its file, an analyzer its function, a function body a
+/// module or a sequence, an index its analyzer, a field its table, an API or the GraphQL config
+/// its functions and tables), so creation follows this order and removal reverses it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum ResourceKind {
+    /// `DEFINE BUCKET`.
+    Bucket,
+    /// `DEFINE MODULE`.
+    Module,
     /// `DEFINE FUNCTION`.
     Function,
     /// `DEFINE ANALYZER`.
     Analyzer,
     /// `DEFINE PARAM`.
     Param,
+    /// `DEFINE SEQUENCE`.
+    Sequence,
     /// `DEFINE ACCESS … ON DATABASE`.
     Access,
     /// `DEFINE USER … ON DATABASE`.
@@ -48,37 +57,105 @@ pub enum ResourceKind {
     Index,
     /// `DEFINE EVENT`.
     Event,
+    /// `DEFINE API`, keyed by its path.
+    Api,
+    /// `DEFINE CONFIG API` or `DEFINE CONFIG GRAPHQL`, keyed `API` or `GraphQL`.
+    Config,
 }
 
 impl ResourceKind {
     /// The keyword that follows `DEFINE` and `REMOVE`.
     pub fn keyword(self) -> &'static str {
         match self {
+            Self::Bucket => "BUCKET",
+            Self::Module => "MODULE",
             Self::Function => "FUNCTION",
             Self::Analyzer => "ANALYZER",
             Self::Param => "PARAM",
+            Self::Sequence => "SEQUENCE",
             Self::Access => "ACCESS",
             Self::User => "USER",
             Self::Table => "TABLE",
             Self::Field => "FIELD",
             Self::Index => "INDEX",
             Self::Event => "EVENT",
+            Self::Api => "API",
+            Self::Config => "CONFIG",
         }
     }
 
     /// The key listing this kind in `INFO FOR DB` or `INFO FOR TABLE`.
     fn info_key(self) -> &'static str {
         match self {
+            Self::Bucket => "buckets",
+            Self::Module => "modules",
             Self::Function => "functions",
             Self::Analyzer => "analyzers",
             Self::Param => "params",
+            Self::Sequence => "sequences",
             Self::Access => "accesses",
             Self::User => "users",
             Self::Table => "tables",
             Self::Field => "fields",
             Self::Index => "indexes",
             Self::Event => "events",
+            Self::Api => "apis",
+            Self::Config => "configs",
         }
+    }
+
+    /// The name a definition of this kind is keyed by: its `name`, except an API's `path`, a
+    /// module's storage name (`mod::<name>`, or `silo::<org>::<pkg>::<maj.min.patch>` for an
+    /// unnamed silo module) and a config's kind (`API` or `GraphQL`). Each is the key the plain
+    /// `INFO` lists the definition's `DEFINE` statement under.
+    fn key_of(self, entry: &Object) -> Option<String> {
+        let text = |object: &Object, key: &str| match object.get(key) {
+            Some(Value::String(text)) => Some(text.clone()),
+            _ => None,
+        };
+        match self {
+            Self::Api => text(entry, "path"),
+            Self::Module => {
+                if let Some(name) = text(entry, "name") {
+                    return Some(format!("mod::{name}"));
+                }
+                let Some(Value::Object(silo)) = entry.get("executable") else {
+                    return None;
+                };
+                let number = |key: &str| match silo.get(key) {
+                    Some(number @ Value::Number(_)) => Some(number.to_sql()),
+                    _ => None,
+                };
+                Some(format!(
+                    "silo::{}::{}::<{}.{}.{}>",
+                    text(silo, "organisation")?,
+                    text(silo, "package")?,
+                    number("major")?,
+                    number("minor")?,
+                    number("patch")?,
+                ))
+            }
+            Self::Config => match (entry.len(), entry.keys().next().map(String::as_str)) {
+                (1, Some("api")) => Some("API".to_owned()),
+                (1, Some("graphql")) => Some("GraphQL".to_owned()),
+                _ => None,
+            },
+            _ => text(entry, "name"),
+        }
+    }
+
+    /// Removes the properties of `entry` that differ between databases holding the same
+    /// schema: a table's internal `id`, which depends on the order tables were created in; a
+    /// sequence's `resume`, the next value it would issue; and a module's `exports`, read from
+    /// the runtime when the server can load modules.
+    fn normalise(self, entry: &mut Object) {
+        let volatile = match self {
+            Self::Table => "id",
+            Self::Sequence => "resume",
+            Self::Module => "exports",
+            _ => return,
+        };
+        entry.remove(volatile);
     }
 
     /// Whether definitions of this kind belong to a table.
@@ -184,9 +261,9 @@ impl Schema {
     /// in two round trips.
     ///
     /// Only the database is inspected, so a database user can run it. Definitions of a kind
-    /// migrations do not manage yet (APIs, buckets, configs, models, modules, sequences, or one
-    /// the server adds) fail with [`MigrationError::UnsupportedSchemaResource`] instead of being
-    /// ignored.
+    /// migrations do not manage (machine-learning models, or a kind the server adds) fail with
+    /// [`MigrationError::UnsupportedSchemaResource`] instead of being ignored. A database's own
+    /// options, such as its changefeed, are not definitions inside it and are not inspected.
     pub async fn inspect(db: &impl Executor) -> MigrationResult<Self> {
         let mut info = QueryChain::from(vec![
             Chainable::from(info_for().database().structure()),
@@ -194,45 +271,9 @@ impl Schema {
         ])
         .run(db)
         .await?;
-        let structures = DatabaseInfo::<Structures>::from_info(take_value(&mut info, 0)?)?;
-        let statements = DatabaseInfo::<Statements>::from_info(take_value(&mut info, 1)?)?;
-
-        let mut schema = Self::default();
-        let DatabaseInfo {
-            accesses,
-            apis,
-            analyzers,
-            buckets,
-            configs,
-            functions,
-            models,
-            modules,
-            params,
-            sequences,
-            tables,
-            users,
-            other,
-        } = structures;
-        schema.collect(
-            "database",
-            None,
-            [
-                (ResourceKind::Function, functions, statements.functions),
-                (ResourceKind::Analyzer, analyzers, statements.analyzers),
-                (ResourceKind::Param, params, statements.params),
-                (ResourceKind::Access, accesses, statements.accesses),
-                (ResourceKind::User, users, statements.users),
-                (ResourceKind::Table, tables, statements.tables),
-            ],
-            [
-                ("apis", apis),
-                ("buckets", buckets),
-                ("configs", configs),
-                ("models", models),
-                ("modules", modules),
-                ("sequences", sequences),
-            ],
-            other,
+        let mut schema = database_schema(
+            DatabaseInfo::<Structures>::from_info(take_value(&mut info, 0)?)?,
+            DatabaseInfo::<Statements>::from_info(take_value(&mut info, 1)?)?,
         )?;
 
         let tables = schema
@@ -256,21 +297,11 @@ impl Schema {
             .collect::<Vec<_>>();
         let mut info = QueryChain::from(statements).run(db).await?;
         for (index, table) in tables.iter().enumerate() {
-            let structures = TableInfo::<Structures>::from_info(take_value(&mut info, 2 * index)?)?;
-            let statements =
-                TableInfo::<Statements>::from_info(take_value(&mut info, 2 * index + 1)?)?;
-            // `lives` are running queries, not schema; `tables` are the views fed by this table,
-            // which `INFO FOR DB` already lists as tables of their own.
-            schema.collect(
-                &format!("table `{table}`"),
-                Some(table.as_str()),
-                [
-                    (ResourceKind::Field, structures.fields, statements.fields),
-                    (ResourceKind::Index, structures.indexes, statements.indexes),
-                    (ResourceKind::Event, structures.events, statements.events),
-                ],
-                [],
-                structures.other,
+            add_table_info(
+                &mut schema,
+                table,
+                TableInfo::<Structures>::from_info(take_value(&mut info, 2 * index)?)?,
+                TableInfo::<Statements>::from_info(take_value(&mut info, 2 * index + 1)?)?,
             )?;
         }
         Ok(schema)
@@ -323,22 +354,25 @@ impl Schema {
 
         for (kind, entries, statements) in managed {
             for mut entry in entries {
-                let name = name_of(&entry)
-                    .ok_or_else(|| unexpected_shape(level, kind.info_key()))?
-                    .to_owned();
+                let name = kind
+                    .key_of(&entry)
+                    .ok_or_else(|| unexpected_shape(level, kind.info_key()))?;
                 let sql = match kind {
                     ResourceKind::Field => {
                         field_definition(&statements, table.unwrap_or_default(), &name)?
                     }
+                    // The server lists a config as `API …` or `GRAPHQL …`, without its
+                    // `DEFINE CONFIG`.
+                    ResourceKind::Config => statements
+                        .get(&name)
+                        .map(|sql| format!("DEFINE CONFIG {sql}"))
+                        .ok_or_else(|| unexpected_shape(level, kind.info_key()))?,
                     _ => statements
                         .get(&name)
                         .cloned()
                         .ok_or_else(|| unexpected_shape(level, kind.info_key()))?,
                 };
-                if kind == ResourceKind::Table {
-                    // The table's internal id depends on the order tables were created in.
-                    entry.remove("id");
-                }
+                kind.normalise(&mut entry);
                 self.definitions.insert(
                     ResourceKey {
                         kind,
@@ -380,6 +414,86 @@ impl Schema {
     pub fn is_empty(&self) -> bool {
         self.definitions.is_empty()
     }
+}
+
+/// The database level of a schema, from the decoded `INFO FOR DB STRUCTURE` (`structures`) and
+/// `INFO FOR DB` (`statements`): every definition except the tables' own, which
+/// [`add_table_info`] adds. [`Schema::inspect`] parses its results with these two, so a
+/// synthetic `INFO` result goes through the same keying and normalisation as a live one.
+///
+/// # Errors
+///
+/// [`MigrationError::UnsupportedSchemaResource`] for a kind migrations do not manage, and
+/// [`MigrationError::UnexpectedInfoShape`] for an entry without its key or `DEFINE` statement.
+#[doc(hidden)]
+pub fn database_schema(
+    structures: DatabaseInfo<Structures>,
+    statements: DatabaseInfo<Statements>,
+) -> MigrationResult<Schema> {
+    let mut schema = Schema::default();
+    let DatabaseInfo {
+        accesses,
+        apis,
+        analyzers,
+        buckets,
+        configs,
+        functions,
+        models,
+        modules,
+        params,
+        sequences,
+        tables,
+        users,
+        other,
+    } = structures;
+    schema.collect(
+        "database",
+        None,
+        [
+            (ResourceKind::Bucket, buckets, statements.buckets),
+            (ResourceKind::Module, modules, statements.modules),
+            (ResourceKind::Function, functions, statements.functions),
+            (ResourceKind::Analyzer, analyzers, statements.analyzers),
+            (ResourceKind::Param, params, statements.params),
+            (ResourceKind::Sequence, sequences, statements.sequences),
+            (ResourceKind::Access, accesses, statements.accesses),
+            (ResourceKind::User, users, statements.users),
+            (ResourceKind::Table, tables, statements.tables),
+            (ResourceKind::Api, apis, statements.apis),
+            (ResourceKind::Config, configs, statements.configs),
+        ],
+        [("models", models)],
+        other,
+    )?;
+    Ok(schema)
+}
+
+/// Adds the definitions of `table` to `schema`, from the decoded `INFO FOR TABLE … STRUCTURE`
+/// (`structures`) and `INFO FOR TABLE` (`statements`).
+///
+/// # Errors
+///
+/// As [`database_schema`].
+#[doc(hidden)]
+pub fn add_table_info(
+    schema: &mut Schema,
+    table: &str,
+    structures: TableInfo<Structures>,
+    statements: TableInfo<Statements>,
+) -> MigrationResult<()> {
+    // `lives` are running queries, not schema; `tables` are the views fed by this table, which
+    // `INFO FOR DB` already lists as tables of their own.
+    schema.collect(
+        &format!("table `{table}`"),
+        Some(table),
+        [
+            (ResourceKind::Field, structures.fields, statements.fields),
+            (ResourceKind::Index, structures.indexes, statements.indexes),
+            (ResourceKind::Event, structures.events, statements.events),
+        ],
+        [],
+        structures.other,
+    )
 }
 
 /// The `DEFINE FIELD` statement, among a table's `statements`, of the field `name`: its canonical
