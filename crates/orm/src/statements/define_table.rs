@@ -1,4 +1,4 @@
-use surrealdb::types::Table;
+use surrealdb::types::{Duration, Table};
 
 use crate::{Name, Renderer};
 
@@ -37,6 +37,8 @@ pub struct DefineTableStatement {
     drop: bool,
     schema_type: Option<SchemaType>,
     kind: Option<TableKind>,
+    changefeed: Option<Duration>,
+    include_original: bool,
     as_: Option<SelectStatement>,
     permissions: PermissionsClause,
 }
@@ -101,6 +103,8 @@ pub fn define_table(table: impl Into<Name<Table>>) -> DefineTableStatement {
         drop: false,
         schema_type: None,
         kind: None,
+        changefeed: None,
+        include_original: false,
         as_: None,
         permissions: PermissionsClause::default(),
     }
@@ -157,6 +161,36 @@ impl DefineTableStatement {
         self
     }
 
+    /// `CHANGEFEED @expiry`: records every change to the table, kept for `expiry`, for
+    /// [`show_changes_for_table`](super::show_changes_for_table()). SurrealDB takes the duration
+    /// only as a literal. Expired changes are removed by a background task on a wall-clock
+    /// interval, not the moment they expire.
+    ///
+    /// ```rust
+    /// use std::time::Duration;
+    /// use umbriel::{*, statements::define_table};
+    ///
+    /// let statement = define_table("reading")
+    ///     .changefeed(Duration::from_secs(7 * 24 * 60 * 60))
+    ///     .include_original();
+    /// assert_eq!(
+    ///     statement.to_debug_sql(),
+    ///     "DEFINE TABLE reading CHANGEFEED 1w INCLUDE ORIGINAL;"
+    /// );
+    /// ```
+    pub fn changefeed(mut self, expiry: impl Into<Duration>) -> Self {
+        self.changefeed = Some(expiry.into());
+        self
+    }
+
+    /// `INCLUDE ORIGINAL`: each recorded update also holds the patch that reverts it, and each
+    /// delete the deleted record. Without [`changefeed`](Self::changefeed), the query fails when
+    /// it is rendered.
+    pub fn include_original(mut self) -> Self {
+        self.include_original = true;
+        self
+    }
+
     /// Defines the table as a view over a select statement.
     pub fn as_(mut self, select_statement: impl Into<SelectStatement>) -> Self {
         self.as_ = Some(select_statement.into());
@@ -208,6 +242,8 @@ impl Statement for DefineTableStatement {
             kind.render(out);
         }
 
+        push_changefeed(out, self.changefeed.as_ref(), self.include_original);
+
         if let Some(select_statement) = &self.as_ {
             out.push_str(" AS \n\t");
             select_statement.render_body(out);
@@ -220,6 +256,23 @@ impl Statement for DefineTableStatement {
 
 impl_define_options!(DefineTableStatement);
 impl_definition!(DefineTableStatement);
+
+/// Writes ` CHANGEFEED @expiry [INCLUDE ORIGINAL]` when there is an expiry. `INCLUDE ORIGINAL`
+/// without one fails, since it qualifies the changefeed.
+pub(crate) fn push_changefeed(out: &mut Renderer, expiry: Option<&Duration>, original: bool) {
+    match expiry {
+        Some(expiry) => {
+            out.push_str(" CHANGEFEED ").push_syntax(expiry);
+            if original {
+                out.push_str(" INCLUDE ORIGINAL");
+            }
+        }
+        None if original => {
+            out.push_error("INCLUDE ORIGINAL needs a CHANGEFEED");
+        }
+        None => {}
+    }
+}
 
 #[derive(Clone, Copy)]
 enum SchemaType {

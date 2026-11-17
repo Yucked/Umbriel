@@ -33,6 +33,40 @@ fn strict_renders_after_the_name() {
     );
 }
 
+#[test]
+fn a_changefeed_renders_with_its_expiry() {
+    assert_sql(
+        &define_database("acme")
+            .changefeed(std::time::Duration::from_secs(86_400))
+            .include_original(),
+        "DEFINE DATABASE acme CHANGEFEED 1d INCLUDE ORIGINAL;",
+    );
+    assert_render_error(
+        &define_database("acme").include_original(),
+        "INCLUDE ORIGINAL needs a CHANGEFEED",
+    );
+}
+
+#[tokio::test]
+async fn the_database_stores_its_changefeed() {
+    let db = db().await;
+    run(
+        &db,
+        define_database("acme").changefeed(std::time::Duration::from_secs(3600)),
+    )
+    .await;
+    let info: surrealdb::types::Object = read(&db, "INFO FOR NS;").await;
+    let Some(surrealdb::types::Value::Object(databases)) = info.get("databases") else {
+        panic!("`databases` is listed: {info:?}");
+    };
+    match databases.get("acme") {
+        Some(surrealdb::types::Value::String(sql)) => {
+            assert!(sql.contains("CHANGEFEED 1h"), "{sql}");
+        }
+        other => panic!("`acme` is defined: {other:?}"),
+    }
+}
+
 #[tokio::test]
 async fn a_strict_database_refuses_undefined_tables() {
     let db = db().await;

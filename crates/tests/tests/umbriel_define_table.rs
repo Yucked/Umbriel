@@ -62,6 +62,27 @@ mod rendering {
             "DEFINE TABLE user COMMENT 'Acme Corp users' PERMISSIONS NONE;",
         );
     }
+
+    #[test]
+    fn a_changefeed_renders_with_its_expiry() {
+        assert_sql(
+            &define_table("reading").changefeed(std::time::Duration::from_secs(3600)),
+            "DEFINE TABLE reading CHANGEFEED 1h;",
+        );
+        assert_sql(
+            &define_table("reading")
+                .schemafull()
+                .changefeed(std::time::Duration::from_secs(7 * 86_400))
+                .include_original()
+                .comment("Acme Corp readings"),
+            "DEFINE TABLE reading SCHEMAFULL CHANGEFEED 1w INCLUDE ORIGINAL \
+             COMMENT 'Acme Corp readings';",
+        );
+        assert_render_error(
+            &define_table("reading").include_original(),
+            "INCLUDE ORIGINAL needs a CHANGEFEED",
+        );
+    }
 }
 
 mod behaviour {
