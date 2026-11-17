@@ -29,16 +29,22 @@ impl RightDatabase {
         Ok(())
     }
 
-    /// The codebase's definitions in creation order, so each one's prerequisites exist when it
-    /// runs: an analyzer may use a function, and an index an analyzer.
+    /// The codebase's definitions in creation order (see [`ResourceKind`]), so each one's
+    /// prerequisites exist when it runs: a module may load from a bucket, an analyzer may use a
+    /// function, an index an analyzer, and an API a function or table.
     pub fn get_codebase_schema_queries(db_resources: &impl DbResources) -> Vec<Raw> {
         [
+            db_resources.buckets(),
+            db_resources.modules(),
             db_resources.functions(),
             db_resources.analyzers(),
             db_resources.params(),
+            db_resources.sequences(),
             db_resources.accesses(),
             db_resources.users(),
             db_resources.tables(),
+            db_resources.apis(),
+            db_resources.configs(),
         ]
         .into_iter()
         .flatten()

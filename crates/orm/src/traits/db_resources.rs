@@ -41,4 +41,30 @@ pub trait DbResources {
     fn users(&self) -> Vec<Raw> {
         vec![]
     }
+
+    /// Bucket definitions. Buckets need the experimental `files` feature.
+    fn buckets(&self) -> Vec<Raw> {
+        vec![]
+    }
+
+    /// Module definitions. Modules need the experimental `surrealism` feature.
+    fn modules(&self) -> Vec<Raw> {
+        vec![]
+    }
+
+    /// Sequence definitions.
+    fn sequences(&self) -> Vec<Raw> {
+        vec![]
+    }
+
+    /// API definitions.
+    fn apis(&self) -> Vec<Raw> {
+        vec![]
+    }
+
+    /// The database's API and GraphQL configurations (`DEFINE CONFIG API`, `DEFINE CONFIG
+    /// GRAPHQL`). `DEFINE CONFIG DEFAULT` is stored on the root, which migrations do not manage.
+    fn configs(&self) -> Vec<Raw> {
+        vec![]
+    }
 }
