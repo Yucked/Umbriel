@@ -31,6 +31,14 @@ pub(crate) async fn run_transaction(
 /// history record, so a batch is not all-or-nothing: when one migration fails, the ones before
 /// it stay committed and recorded, the failing one and those after it leave nothing behind, and
 /// running the batch again resumes with the failed migration.
+///
+/// An interrupted run recovers the same way: a migration whose transaction did not commit left
+/// neither its changes nor its history record, so the next run applies it again.
+///
+/// Runners on one database may race. A migration's history record is created with the
+/// migration's own record id in the same transaction, so a migration commits at most once: a
+/// runner that applies it second fails, rolls that migration back, and stops. The history then
+/// holds each migration once, and running again applies what is still pending.
 pub struct MigrationRunner {}
 
 /// How a rollback runs.
