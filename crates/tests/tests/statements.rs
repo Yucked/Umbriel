@@ -2426,10 +2426,7 @@ mod definitions {
             &remove_param("endpoint_base"),
             "REMOVE PARAM $endpoint_base;",
         );
-        assert_sql(
-            &remove_function("fn::add_one"),
-            "REMOVE FUNCTION fn::add_one;",
-        );
+        assert_sql(&remove_function("add_one"), "REMOVE FUNCTION fn::add_one;");
         assert_sql(&remove_namespace("acme"), "REMOVE NAMESPACE acme;");
         assert_sql(&remove_database("acme"), "REMOVE DATABASE acme;");
         assert_sql(
@@ -2732,7 +2729,7 @@ mod definitions {
         let result: i64 = read(&db, "RETURN fn::add_one(41);").await;
         assert_eq!(result, 42);
 
-        run(&db, remove_function("fn::add_one")).await;
+        run(&db, remove_function("add_one")).await;
         assert!(Raw::new("RETURN fn::add_one(1);").run(&db).await.is_err());
         run(&db, remove_param("greeting")).await;
     }
