@@ -1,7 +1,7 @@
 mod checksum;
 mod db_left_mig_dir;
 mod db_right_codebase;
-mod db_runner;
+pub(crate) mod db_runner;
 mod embedded_migration;
 mod file_content;
 pub(crate) mod file_generator;
@@ -16,7 +16,7 @@ mod settings;
 pub use checksum::*;
 pub use db_left_mig_dir::*;
 pub use db_right_codebase::*;
-pub use db_runner::*;
+pub use db_runner::{MigrationRunner, RollbackOptions};
 pub use embedded_migration::*;
 pub use file_content::*;
 pub use file_generator::{ComparisonDatabase, MigratorDatabase};

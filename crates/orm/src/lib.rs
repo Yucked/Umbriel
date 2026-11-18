@@ -87,7 +87,10 @@ pub mod test_support {
     pub use crate::execution::{classify, select_failure};
     #[cfg(feature = "migrations")]
     pub use crate::migrations::{
-        database::{file_generator::generate_from_schemas, migration_model::history_or_empty},
+        database::{
+            db_runner::apply_after_reading, file_generator::generate_from_schemas,
+            migration_model::history_or_empty,
+        },
         resources::bucket_backend::credential_in_backend,
         schema::{add_table_info, database_schema, field_definition},
     };
