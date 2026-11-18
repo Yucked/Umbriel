@@ -25,6 +25,19 @@ pub(crate) async fn run_transaction(
     Ok(())
 }
 
+/// Applies the migrations newer than `history`, a reading of the latest applied migration that
+/// may be stale, as a runner that read it before another runner committed does. A test seam,
+/// re-exported from `test_support`.
+#[doc(hidden)]
+pub async fn apply_after_reading(
+    db: &Surreal<impl Connection>,
+    all_migrations: Vec<impl Into<MigrationFile>>,
+    history: Option<&Migration>,
+) -> MigrationResult<()> {
+    let pending = MigrationRunner::pending_after(all_migrations, history);
+    MigrationRunner::run_up_pending_migrations(db, pending, history.map(|m| m.id.clone())).await
+}
+
 /// Applies, rolls back, lists and prunes migrations against a database.
 ///
 /// Each migration is applied, or rolled back, in a transaction of its own together with its
@@ -33,12 +46,18 @@ pub(crate) async fn run_transaction(
 /// running the batch again resumes with the failed migration.
 ///
 /// An interrupted run recovers the same way: a migration whose transaction did not commit left
-/// neither its changes nor its history record, so the next run applies it again.
+/// neither its database changes nor its history record, so the next run applies it again. The
+/// guarantee covers what the transaction rolls back. A side effect outside the database is not
+/// undone: `file::*` writes go straight to the bucket's store, so a migration that writes a file
+/// and then fails leaves the file behind, and applying it again writes it again. Keep such
+/// migrations idempotent.
 ///
-/// Runners on one database may race. A migration's history record is created with the
-/// migration's own record id in the same transaction, so a migration commits at most once: a
-/// runner that applies it second fails, rolls that migration back, and stops. The history then
-/// holds each migration once, and running again applies what is still pending.
+/// Runners on one database may race. Each runner reads the history once, and each migration's
+/// transaction first checks that the history's latest record is still the one that reading
+/// implies. A runner whose reading went stale, because another runner committed a migration
+/// since, applies nothing more and fails with [`MigrationError::HistoryChanged`]; running again
+/// applies what is still pending. The check holds even for a regenerated first migration, which
+/// clears the history before recording itself.
 pub struct MigrationRunner {}
 
 /// How a rollback runs.
@@ -247,7 +266,14 @@ impl MigrationRunner {
         db: &Surreal<impl Connection>,
     ) -> MigrationResult<Vec<PendingMigrationFile>> {
         let latest_migration = Self::get_latest_migration(db).await?;
+        Ok(Self::pending_after(all_migrations, latest_migration.as_ref()))
+    }
 
+    /// The migrations newer than `latest_migration`, oldest first.
+    fn pending_after(
+        all_migrations: Vec<impl Into<MigrationFile>>,
+        latest_migration: Option<&Migration>,
+    ) -> Vec<PendingMigrationFile> {
         let mut pending_migrations = all_migrations
             .into_iter()
             .map(|m| {
@@ -255,7 +281,7 @@ impl MigrationRunner {
                 PendingMigrationFile::from(m)
             })
             .filter(|m| {
-                latest_migration.as_ref().is_none_or(|latest_migration| {
+                latest_migration.is_none_or(|latest_migration| {
                     m.name_forward().timestamp() > latest_migration.timestamp
                 })
             })
@@ -263,7 +289,7 @@ impl MigrationRunner {
 
         pending_migrations.sort_by_key(|m| m.name_forward().timestamp());
 
-        Ok(pending_migrations)
+        pending_migrations
     }
 
     /// The migration directory's files newer than the latest applied migration.
@@ -401,9 +427,14 @@ impl MigrationRunner {
         ))
     }
 
+    /// Applies `filtered_pending_migrations` in order, each in a transaction that first checks
+    /// the history's latest record is still the one the run expects: `latest` for the first,
+    /// then each migration's own. A runner whose reading of the history is stale applies nothing
+    /// and fails with [`MigrationError::HistoryChanged`].
     async fn run_up_pending_migrations(
         db: &Surreal<impl Connection>,
         filtered_pending_migrations: Vec<PendingMigrationFile>,
+        mut latest: Option<surrealdb::types::RecordId>,
     ) -> MigrationResult<()> {
         if filtered_pending_migrations.is_empty() {
             log::info!("No new migrations to apply");
@@ -413,10 +444,10 @@ impl MigrationRunner {
         let count = filtered_pending_migrations.len();
         log::info!("Running {count} migration(s)");
         for mf in filtered_pending_migrations {
-            let (content, record) = match mf.into() {
+            let (name, content, record) = match mf.into() {
                 MigrationFile::OneWay(m) => {
                     let record = Migration::create_raw(m.name(), &m.content().as_checksum()?, None);
-                    (m.content().to_string(), record)
+                    (m.name().clone(), m.content().to_string(), record)
                 }
                 MigrationFile::TwoWay(m) => {
                     let record = Migration::create_raw(
@@ -424,11 +455,24 @@ impl MigrationRunner {
                         &m.up.content.as_checksum()?,
                         Some(&m.down.content.as_checksum()?),
                     );
-                    (m.up.content.to_string(), record)
+                    (m.up.name.clone(), m.up.content.to_string(), record)
                 }
             };
-            // The migration and its history record commit together.
-            run_transaction(db, format!("{content}\n{record}")).await?;
+            let guard = Migration::expect_latest_raw(latest.as_ref());
+            // The check, the migration and its history record commit together.
+            run_transaction(db, format!("{guard}\n{content}\n{record}"))
+                .await
+                .map_err(|error| match error {
+                    MigrationError::ProblemWithQuery(ref inner)
+                        if inner.to_string().contains(Migration::HISTORY_CHANGED) =>
+                    {
+                        MigrationError::HistoryChanged {
+                            migration: name.clone(),
+                        }
+                    }
+                    other => other,
+                })?;
+            latest = Some(Migration::create_id(&name));
         }
         log::info!("Applied {count} migration(s)");
 
@@ -444,15 +488,17 @@ impl MigrationRunner {
     ) -> MigrationResult<()> {
         log::info!("Running pending migrations");
 
+        // One reading of the history decides what is pending and what each transaction checks.
+        let latest = Self::get_latest_migration(db).await?;
+        let pending = Self::pending_after(all_migrations, latest.as_ref());
         let filtered_pending_migrations = match update_strategy {
-            UpdateStrategy::Latest => Self::get_pending_migrations(all_migrations, db).await?,
-            UpdateStrategy::Number(count) => Self::get_pending_migrations(all_migrations, db)
-                .await?
+            UpdateStrategy::Latest => pending,
+            UpdateStrategy::Number(count) => pending
                 .into_iter()
                 .take(count as usize)
                 .collect::<Vec<_>>(),
             UpdateStrategy::Till(filecursor) => {
-                let pending_migs = Self::get_pending_migrations(all_migrations, db).await?;
+                let pending_migs = pending;
 
                 let mut migration_found = false;
                 let mut filtered_migs: Vec<PendingMigrationFile> = vec![];
@@ -476,7 +522,12 @@ impl MigrationRunner {
             }
         };
 
-        Self::run_up_pending_migrations(db, filtered_pending_migrations).await
+        Self::run_up_pending_migrations(
+            db,
+            filtered_pending_migrations,
+            latest.map(|migration| migration.id),
+        )
+        .await
     }
 
     pub(crate) async fn list_migrations(
