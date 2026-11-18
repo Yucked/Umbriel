@@ -12,6 +12,7 @@ use crate::kinds;
 functions! { $ "api" "::", api, api;
     /// Calls the API defined at `path` (starting with `/`) and returns its response object
     /// (`status`, `headers`, `body`). `request` may give `method`, `headers`, `query` and `body`;
-    /// without it, the call is a `GET`.
+    /// without it, the call is a `GET`. A path no API defines answers with status 404; a path
+    /// not starting with `/` fails the call.
     invoke(path: StrandLike; request: ObjectLike) -> kinds::Object;
 }

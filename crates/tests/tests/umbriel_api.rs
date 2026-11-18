@@ -60,9 +60,21 @@ async fn invoke_answers_with_the_action_and_its_middleware() {
     );
 }
 
+/// 3.3.4 answers a path no API defines with a 404 response rather than an error.
 #[tokio::test]
-async fn an_undefined_path_fails() {
+async fn an_undefined_path_answers_404() {
     let db = db().await;
-    let error = call_failure(&db, &api::invoke!("/missing")).await;
-    assert!(!error.is_empty());
+    let response = invoke(&db, "/missing").await;
+    assert_eq!(
+        response.get("status"),
+        Some(&Value::Number(Number::Int(404))),
+        "{response:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_path_without_a_leading_slash_fails() {
+    let db = db().await;
+    let error = call_failure(&db, &api::invoke!("status")).await;
+    assert!(error.contains('/'), "{error}");
 }
