@@ -22,7 +22,8 @@ functions! { $ "file" "::", file, file;
     key(file: FileLike) -> kinds::String [FileLike.key];
     /// Writes `value` (bytes, or a string as its UTF-8 bytes) to `file`, replacing it; `NONE`.
     put(file: FileLike, value: ValueLike) -> kinds::Any [FileLike.put];
-    /// Writes `value` to `file` unless it exists, in which case the call fails; `NONE`.
+    /// Writes `value` to `file` unless it exists, in which case nothing changes; `NONE` either
+    /// way.
     put_if_not_exists(file: FileLike, value: ValueLike) -> kinds::Any
         [FileLike.put_if_not_exists];
     /// The contents of `file`, or `NONE` when it does not exist.
@@ -33,12 +34,14 @@ functions! { $ "file" "::", file, file;
     delete(file: FileLike) -> kinds::Any [FileLike.delete];
     /// Copies `file` to `target`, a key in the same bucket or another file, replacing it; `NONE`.
     copy(file: FileLike, target: ValueLike) -> kinds::Any [FileLike.copy];
-    /// Copies `file` to `target` unless it exists, in which case the call fails; `NONE`.
+    /// Copies `file` to `target` unless it exists, in which case nothing changes; `NONE` either
+    /// way.
     copy_if_not_exists(file: FileLike, target: ValueLike) -> kinds::Any
         [FileLike.copy_if_not_exists];
     /// Renames `file` to the key `target` in its bucket, replacing it; `NONE`.
     rename(file: FileLike, target: StrandLike) -> kinds::Any [FileLike.rename];
-    /// Renames `file` to `target` unless it exists, in which case the call fails; `NONE`.
+    /// Renames `file` to `target` unless it exists, in which case nothing changes and `file`
+    /// keeps its name; `NONE` either way.
     rename_if_not_exists(file: FileLike, target: StrandLike) -> kinds::Any
         [FileLike.rename_if_not_exists];
     /// Whether `file` exists.

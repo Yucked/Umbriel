@@ -133,24 +133,45 @@ async fn a_file_is_written_read_copied_renamed_listed_and_deleted() {
     assert_eq!(run::<bool, _>(&db, file::exists!(bob())).await, Some(true));
 }
 
+/// The contents of `pointer`, which must exist.
+async fn contents(db: &Surreal<Any>, pointer: FileLike) -> Vec<u8> {
+    run::<Bytes, _>(db, file::get!(pointer))
+        .await
+        .expect("the file is read")
+        .into_inner()
+        .to_vec()
+}
+
+/// In 3.3.4 the memory and file stores both treat an existing target as success: the call
+/// changes nothing.
 #[tokio::test]
-async fn the_if_not_exists_forms_fail_on_an_existing_file() {
+async fn the_if_not_exists_forms_leave_an_existing_target_unchanged() {
     let db = avatars().await;
     run::<Value, _>(&db, file::put!(alice(), "Alice")).await;
     run::<Value, _>(&db, file::put!(bob(), "Bob")).await;
-    for refused in [
+    for no_op in [
         file::put_if_not_exists!(alice(), "Alicia"),
         file::copy_if_not_exists!(alice(), "bob.txt"),
         file::rename_if_not_exists!(alice(), "bob.txt"),
     ] {
-        let result: umbriel::Result<Option<Value>> = refused.run(&db).await;
-        assert!(result.is_err(), "{}", refused.to_debug_sql());
+        let result: umbriel::Result<Option<Value>> = no_op.run(&db).await;
+        assert!(result.is_ok(), "{}: {result:?}", no_op.to_debug_sql());
     }
-    let contents = run::<Bytes, _>(&db, file::get!(bob()))
-        .await
-        .expect("the file is read")
-        .into_inner();
-    assert_eq!(contents.as_ref(), b"Bob", "the target is unchanged");
+    assert_eq!(contents(&db, alice()).await, b"Alice", "the source is unchanged");
+    assert_eq!(contents(&db, bob()).await, b"Bob", "the target is unchanged");
+}
+
+#[tokio::test]
+async fn the_if_not_exists_forms_act_on_a_missing_target() {
+    let db = avatars().await;
+    run::<Value, _>(&db, file::put_if_not_exists!(alice(), "Alice")).await;
+    assert_eq!(contents(&db, alice()).await, b"Alice");
+    run::<Value, _>(&db, file::copy_if_not_exists!(alice(), "bob.txt")).await;
+    assert_eq!(contents(&db, bob()).await, b"Alice");
+    run::<Value, _>(&db, file::delete!(bob())).await;
+    run::<Value, _>(&db, file::rename_if_not_exists!(alice(), "bob.txt")).await;
+    assert_eq!(run::<bool, _>(&db, file::exists!(alice())).await, Some(false));
+    assert_eq!(contents(&db, bob()).await, b"Alice");
 }
 
 #[tokio::test]
