@@ -175,6 +175,31 @@ impl Migration {
         Raw::new(create)
     }
 
+    /// The message [`expect_latest_raw`](Self::expect_latest_raw) throws.
+    pub(crate) const HISTORY_CHANGED: &str = "umbriel: the migration history changed";
+
+    /// The statement that throws [`HISTORY_CHANGED`](Self::HISTORY_CHANGED) unless the history's
+    /// latest record is `expected`, or, for `None`, the history is empty or not yet defined. Run
+    /// first in a migration's transaction, it makes a runner whose reading of the history is
+    /// stale apply nothing: the history may have been reset by a regenerated first migration,
+    /// so the migration's own record id cannot tell.
+    pub(crate) fn expect_latest_raw(expected: Option<&RecordId>) -> Raw {
+        let table = Self::table().to_debug_sql();
+        let throw = format!("THROW '{}';", Self::HISTORY_CHANGED);
+        Raw::new(match expected {
+            // Reading an undefined history table fails, so its existence is checked first.
+            None => format!(
+                "IF (INFO FOR DB).tables.{table} != NONE {{ \
+                 IF count(SELECT id FROM {table} LIMIT 1) > 0 {{ {throw} }} }};"
+            ),
+            Some(expected) => format!(
+                "IF (SELECT VALUE id FROM {table} ORDER BY timestamp DESC LIMIT 1)[0] != {} \
+                 {{ {throw} }};",
+                expected.to_sql()
+            ),
+        })
+    }
+
     /// The statement removing a migration from the history.
     pub fn delete_raw(migration_id: &RecordId) -> Raw {
         Raw::new(format!("DELETE {};", migration_id.to_sql()))

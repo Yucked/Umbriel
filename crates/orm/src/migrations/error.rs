@@ -287,6 +287,17 @@ pub enum MigrationError {
         key: ResourceKey,
     },
 
+    /// Another runner changed the migration history after this run read it, so this run
+    /// applied nothing more. Running again applies what is still pending.
+    #[error(
+        "Did not apply `{migration}`: the migration history changed after this run read it, \
+        so another runner has applied migrations. Run again to apply what is still pending"
+    )]
+    HistoryChanged {
+        /// The migration this run was about to apply.
+        migration: MigrationFilename,
+    },
+
     /// A bucket's definition changed. Redefining a bucket connects a new store, which empties a
     /// `memory` bucket, so the change is not written.
     #[error(
