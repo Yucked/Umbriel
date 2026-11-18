@@ -2065,6 +2065,7 @@ mod up {
     use super::*;
     use pretty_assertions::assert_eq;
     use test_case::test_case;
+    use umbriel::test_support::apply_after_reading;
 
     #[test_case(Mode::Strict; "Strict")]
     #[test_case(Mode::Lax; "Lax")]
@@ -2814,8 +2815,86 @@ mod up {
             .await
     }
 
+    #[derive(Debug, Clone)]
+    struct Readings;
+
+    impl DbResources for Readings {
+        fn tables(&self) -> Vec<Raw> {
+            vec![Raw::new("DEFINE TABLE reading;")]
+        }
+    }
+
+    /// Regression: a runner that read the history before another runner applied a generated
+    /// first migration must not apply it again. That migration clears the history before
+    /// recording itself, so its record id alone cannot refuse the second application.
     #[tokio::test]
-    async fn concurrent_runners_apply_each_migration_once() {
+    async fn a_stale_runner_does_not_reapply_a_generated_first_migration() {
+        let (_temp, dir) = migration_dir();
+        let file_manager = config(&dir).set_flag(MigrationFlag::TwoWay);
+        let migration = MigratorDatabase::first_migration(
+            &"readings".into(),
+            &file_manager,
+            Readings,
+            MockPrompter::default(),
+        )
+        .await
+        .expect("the first migration generates");
+        fs::create_dir_all(&dir).expect("the migration directory is created");
+        migration
+            .create_file(&file_manager)
+            .expect("the migration is written");
+        let (up, _) = newest_migration(&dir);
+        assert!(up.contains("DELETE migration;"), "{up}");
+
+        let db = database().await;
+        // The stale runner read the history while it was still empty.
+        let stale: Option<Migration> = None;
+        apply_up(&dir, &db).await;
+        let history = applied(&db).await;
+        assert_eq!(history.len(), 1);
+
+        let migrations = config(&dir)
+            .two_way()
+            .get_migrations()
+            .expect("the migrations are read");
+        let result = apply_after_reading(&db, migrations, stale.as_ref()).await;
+        assert!(
+            matches!(&result, Err(MigrationError::HistoryChanged { .. })),
+            "{result:?}"
+        );
+        assert_eq!(applied(&db).await, history, "the history is unchanged");
+    }
+
+    /// Pins the limit of recovery: bucket writes are not part of the transaction, so a failed
+    /// migration rolls back its database changes but leaves its file.
+    #[tokio::test]
+    async fn a_failed_migration_leaves_its_file_writes() {
+        let (_temp, dir) = migration_dir();
+        let db = umbriel_tests::experimental_db().await;
+        assert!(
+            umbriel_tests::succeeds(&db, "DEFINE BUCKET avatars BACKEND 'memory';").await,
+            "the bucket is defined"
+        );
+        let first = write_numbered(&dir, 1, "DEFINE TABLE first;", "REMOVE TABLE first;");
+        write_numbered(
+            &dir,
+            2,
+            "DEFINE TABLE second;\nfile::put(f\"avatars:/alice.txt\", 'Alice');\n\
+             THROW 'the second migration fails';",
+            "REMOVE TABLE second;",
+        );
+
+        let failed = run_once(&dir, &db).await;
+        assert!(failed.is_err(), "{failed:?}");
+        assert_eq!(applied(&db).await, std::slice::from_ref(&first));
+        assert_eq!(tables(&db).await, ["first", "migration"], "the table is rolled back");
+        let kept: bool =
+            umbriel_tests::read(&db, "RETURN file::exists(f\"avatars:/alice.txt\");").await;
+        assert!(kept, "the file write is not rolled back");
+    }
+
+    #[tokio::test]
+    async fn racing_runners_leave_a_consistent_history() {
         let (_temp, dir) = migration_dir();
         let db = database().await;
         let first = write_numbered(&dir, 1, "DEFINE TABLE first;", "REMOVE TABLE first;");
@@ -2827,6 +2906,8 @@ mod up {
             "REMOVE TABLE second;",
         );
 
+        // Whether the two runs overlap depends on scheduling; the stale-runner test above pins
+        // the refusal deterministically. Either way, the history and data end consistent.
         let (left, right) = tokio::join!(run_once(&dir, &db), run_once(&dir, &db));
         assert!(left.is_ok() || right.is_ok(), "{left:?}\n{right:?}");
         assert_eq!(applied(&db).await, [first.clone(), second.clone()]);
