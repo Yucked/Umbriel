@@ -16,10 +16,10 @@ help: the trait `Enters<GeometryLike>` is not implemented for `umbriel::kinds::I
 ...
    | / enters! {
    | |     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
-   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike;
+   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike, FileLike;
    | |     Int => NumberLike;
 ...  |
-   | |     Table => TableLike;
+   | |     File => FileLike;
    | | }
    | |_- in this macro invocation
    = help: for that trait implementation, expected `NumberLike`, found `GeometryLike`
@@ -60,10 +60,10 @@ help: the trait `Enters<StrandLike>` is not implemented for `umbriel::kinds::Int
 ...
    | / enters! {
    | |     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
-   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike;
+   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike, FileLike;
    | |     Int => NumberLike;
 ...  |
-   | |     Table => TableLike;
+   | |     File => FileLike;
    | | }
    | |_- in this macro invocation
    = help: for that trait implementation, expected `NumberLike`, found `StrandLike`

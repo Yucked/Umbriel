@@ -133,10 +133,10 @@ help: the trait `Enters<StrandLike>` is not implemented for `umbriel::kinds::Byt
 ...
    | / enters! {
    | |     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
-   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike;
+   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike, FileLike;
    | |     Int => NumberLike;
 ...  |
-   | |     Table => TableLike;
+   | |     File => FileLike;
    | | }
    | |_- in this macro invocation
    = help: for that trait implementation, expected `BytesLike`, found `StrandLike`
@@ -158,10 +158,10 @@ help: the trait `Enters<SetLike>` is not implemented for `umbriel::kinds::Int`
 ...
    | / enters! {
    | |     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
-   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike;
+   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike, FileLike;
    | |     Int => NumberLike;
 ...  |
-   | |     Table => TableLike;
+   | |     File => FileLike;
    | | }
    | |_- in this macro invocation
    = help: for that trait implementation, expected `NumberLike`, found `SetLike`
@@ -183,10 +183,10 @@ help: the trait `Enters<SetLike>` is not implemented for `umbriel::kinds::String
 ...
    | / enters! {
    | |     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
-   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike;
+   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike, FileLike;
    | |     Int => NumberLike;
 ...  |
-   | |     Table => TableLike;
+   | |     File => FileLike;
    | | }
    | |_- in this macro invocation
    = help: for that trait implementation, expected `StrandLike`, found `SetLike`
