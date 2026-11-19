@@ -75,10 +75,142 @@ pub mod migrations;
 #[doc = include_str!("docs/model.md")]
 pub use umbriel_macros::model;
 
-pub use umbriel_macros::{
-    Models, Pickable, TableResources, block, chain, define_function, for_, pick, query, query_raw,
-    transaction,
-};
+pub use umbriel_macros::{Models, Pickable, TableResources, pick};
+
+/// # Example
+///
+/// ```
+/// use umbriel::query_raw;
+///
+/// let query = query_raw!("SELECT name, age FROM user WHERE name = $name");
+/// assert_eq!(query, "SELECT name, age FROM user WHERE name = $name");
+/// ```
+pub use umbriel_macros::query_raw;
+
+/// # Examples
+///
+/// ```no_run
+/// # async fn run(db: umbriel::Surreal<umbriel::engine::any::Any>) -> umbriel::Result<()> {
+/// use umbriel::query;
+///
+/// let mut response = query!(db, "RETURN $name", { name: "Alice" }).await?;
+/// let name: Option<String> = response.take(0)?;
+///
+/// // Several queries share one set of bindings.
+/// let mut response = query!(
+///     db,
+///     [
+///         "CREATE user:alice SET name = $name, skills = $skills",
+///         "SELECT VALUE skills FROM ONLY user:alice"
+///     ],
+///     { name: "Alice", skills: vec!["Rust", "SurrealQL"] }
+/// )
+/// .await?;
+/// let skills: Vec<String> = response.take(1)?;
+/// # Ok(())
+/// # }
+/// ```
+pub use umbriel_macros::query;
+
+/// # Examples
+///
+/// ```
+/// use umbriel::{All, Field, Operatable, Render, Table, chain, statements::select};
+///
+/// let user = &Table::from("user");
+/// let query = chain! {
+///     let name = "Alice";
+///     select(All).from(user);
+/// };
+/// assert_eq!(query.to_debug_sql(), "LET $name = 'Alice';\n\nSELECT * FROM user;");
+///
+/// // Branches and loops are written as in Rust.
+/// let age = Field::new("age");
+/// let query = chain! {
+///     if age.gte(18) {
+///         select(All).from(Table::from("adult"));
+///     } else {
+///         select(All).from(Table::from("child"));
+///     };
+/// };
+/// assert_eq!(
+///     query.to_debug_sql(),
+///     "IF age >= 18 \n\t{ SELECT * FROM adult; }\nELSE\n\t{ SELECT * FROM child; };"
+/// );
+/// ```
+pub use umbriel_macros::chain;
+
+/// # Example
+///
+/// ```
+/// use umbriel::{All, Render, Table, block, statements::select};
+///
+/// let user = &Table::from("user");
+/// let query = block! {
+///     let name = "Alice";
+///     select(All).from(user);
+///     return name;
+/// };
+/// assert_eq!(
+///     query.to_debug_sql(),
+///     "{\nLET $name = 'Alice';\n\nSELECT * FROM user;\n\nRETURN $name;\n}"
+/// );
+/// ```
+pub use umbriel_macros::block;
+
+/// # Example
+///
+/// ```
+/// use umbriel::{All, Render, Table, statements::select, transaction};
+///
+/// let user = &Table::from("user");
+/// let query = transaction! {
+///     BEGIN TRANSACTION;
+///     select(All).from(user);
+///     COMMIT TRANSACTION;
+/// };
+/// assert!(query.to_debug_sql().starts_with("BEGIN TRANSACTION;"));
+/// ```
+pub use umbriel_macros::transaction;
+
+/// # Example
+///
+/// Defines `fn::double`: `double_statement()` is its `DEFINE FUNCTION`, and `double!` and
+/// `double_fn` call it.
+///
+/// ```
+/// use umbriel::*;
+///
+/// define_function!(double(amount: int) {
+///     return amount.multiply(2);
+/// });
+///
+/// fn main() {
+///     assert_eq!(
+///         double_statement().to_debug_sql(),
+///         "DEFINE FUNCTION fn::double($amount: int) {\nRETURN $amount * 2;\n};"
+///     );
+///     assert_eq!(double!(21).to_debug_sql(), "fn::double(21)");
+/// }
+/// ```
+pub use umbriel_macros::define_function;
+
+/// # Example
+///
+/// ```
+/// use umbriel::{All, Field, Operatable, Render, Table, for_, statements::select};
+///
+/// let person = &Table::from("person");
+/// let user_name = &Field::new("user_name");
+/// let for_loop = for_!((name in vec!["Alice", "Bob"]) {
+///     select(All).from(person).where_(user_name.equal(&name));
+/// };);
+/// assert_eq!(
+///     for_loop.to_debug_sql(),
+///     "FOR $name IN ['Alice', 'Bob'] {\nSELECT * FROM person WHERE user_name = $name;\n};"
+/// );
+/// ```
+pub use umbriel_macros::for_;
 
 /// Internals exercised directly by `crates/tests`; not part of the public API.
 #[cfg(feature = "test-support")]
