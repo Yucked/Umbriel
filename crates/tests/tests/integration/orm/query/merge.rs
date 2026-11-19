@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use surrealdb::{
     Surreal,
-    engine::local::Db,
+    engine::any::Any,
     types::{Object, SurrealValue, Value},
 };
 use umbriel::{
@@ -67,7 +67,7 @@ fn profile() -> Profile {
     }
 }
 
-async fn merge_profile(db: &Surreal<Db>, merge: ProfileMerge) {
+async fn merge_profile(db: &Surreal<Any>, merge: ProfileMerge) {
     update::<Profile>(Profile::id("p"))
         .merge(merge)
         .return_none()
@@ -80,7 +80,7 @@ async fn merge_profile(db: &Surreal<Db>, merge: ProfileMerge) {
 /// variant of its own.
 #[tokio::test]
 async fn a_partial_map_merges_by_key() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     profile().create(&db).await.expect("p");
     merge_profile(
         &db,
@@ -108,7 +108,7 @@ async fn a_partial_map_merges_by_key() {
 /// `Keep`, `None` and `Null` stay distinct.
 #[tokio::test]
 async fn an_optional_object_merges_by_field_in_every_state() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     profile().create(&db).await.expect("p");
     let city = |city: &str| {
         Merge::Fields(AddressMerge {
@@ -116,7 +116,7 @@ async fn an_optional_object_merges_by_field_in_every_state() {
             ..Default::default()
         })
     };
-    let stored = |db: &Surreal<Db>| {
+    let stored = |db: &Surreal<Any>| {
         let db = db.clone();
         async move { read::<Value>(&db, "RETURN profile:p.shipping;").await }
     };
@@ -184,7 +184,7 @@ async fn an_optional_object_merges_by_field_in_every_state() {
 /// A dynamic `Object` merges recursively at run time; its keys are not known when compiling.
 #[tokio::test]
 async fn a_dynamic_object_merges_at_run_time() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     profile().create(&db).await.expect("p");
     merge_profile(
         &db,
@@ -204,7 +204,7 @@ async fn a_dynamic_object_merges_at_run_time() {
 /// `#[orm(merge = "GeoMerge")]` merges a non-model struct through the caller's own field list.
 #[tokio::test]
 async fn a_caller_defined_merge_merges_by_field() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     profile().create(&db).await.expect("p");
     merge_profile(
         &db,
@@ -258,7 +258,7 @@ fn ann() -> Customer {
     }
 }
 
-async fn stored(db: &Surreal<Db>) -> Customer {
+async fn stored(db: &Surreal<Any>) -> Customer {
     read(db, "SELECT * FROM ONLY customer:ann;").await
 }
 
@@ -309,7 +309,7 @@ fn each_value_renders_as_documented() {
 
 #[tokio::test]
 async fn nested_fields_merge_and_arrays_replace() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     ann().create(&db).await.expect("ann");
     let merged = Customer::merge(
         &db,
@@ -350,7 +350,7 @@ async fn nested_fields_merge_and_arrays_replace() {
 
 #[tokio::test]
 async fn a_set_object_overwrites_its_declared_fields_and_keeps_others() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     ann().create(&db).await.expect("ann");
     Raw::new("UPDATE customer:ann SET billing.zip = '12345';")
         .run(&db)
@@ -375,7 +375,7 @@ async fn a_set_object_overwrites_its_declared_fields_and_keeps_others() {
 
 #[tokio::test]
 async fn null_stores_null_and_none_removes_the_field() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     ann().create(&db).await.expect("ann");
     update::<Customer>(Customer::id("ann"))
         .merge(CustomerMerge {
@@ -405,20 +405,20 @@ async fn null_stores_null_and_none_removes_the_field() {
 /// A field recomputed on every write, to tell a write from a read. An event would not do:
 /// SurrealDB 3.3 runs no event for an update that leaves the document unchanged, as an empty
 /// merge does.
-async fn count_updates(db: &Surreal<Db>) {
+async fn count_updates(db: &Surreal<Any>) {
     Raw::new("DEFINE FIELD writes ON customer VALUE ($value ?? 0) + 1;")
         .run(db)
         .await
         .expect("field");
 }
 
-async fn updates(db: &Surreal<Db>) -> usize {
+async fn updates(db: &Surreal<Any>) -> usize {
     read(db, "RETURN customer:ann.writes ?? 0;").await
 }
 
 #[tokio::test]
 async fn an_empty_merge_through_the_helper_reads_without_writing() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     ann().create(&db).await.expect("ann");
     count_updates(&db).await;
     let read_back = Customer::merge(&db, &Customer::id("ann"), CustomerMerge::default())
@@ -431,7 +431,7 @@ async fn an_empty_merge_through_the_helper_reads_without_writing() {
 
 #[tokio::test]
 async fn an_empty_merge_through_the_builder_is_a_real_write() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     ann().create(&db).await.expect("ann");
     count_updates(&db).await;
     let schema = Customer::schema();

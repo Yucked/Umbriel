@@ -112,7 +112,7 @@ fn ids_keep_their_member_and_decode_only_inside_the_family() {
 
 #[tokio::test]
 async fn a_record_in_another_member_is_rejected_before_it_is_inserted() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let november = Log::table_of("log_2026_11").expect("a member");
     let stray = entry(&november, 1, "Alice signed in");
     assert_render_error(
@@ -158,7 +158,7 @@ fn content_in_another_member_is_rejected_before_it_runs() {
 
 #[tokio::test]
 async fn a_member_supports_every_record_operation() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let table = october();
     let schema = Log::schema();
 
@@ -239,7 +239,7 @@ async fn a_member_supports_every_record_operation() {
 
 #[tokio::test]
 async fn links_and_graph_paths_keep_the_member() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let table = october();
     create_only::<Log>(table.id(1))
         .content(entry(&table, 1, "Alice signed in"))
@@ -292,7 +292,7 @@ async fn links_and_graph_paths_keep_the_member() {
 /// member table.
 #[tokio::test]
 async fn a_member_edge_relates_into_its_member_table() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let edges = wrote_october();
     let log = october().id(1);
     let path: Field = App::with(App::id("acme"))

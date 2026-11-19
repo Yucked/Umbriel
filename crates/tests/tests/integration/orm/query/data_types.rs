@@ -12,7 +12,7 @@ use umbriel_tests::*;
 
 /// Whether the value bound for `expression` is of `kind` on the engine (`type::is_<kind>`).
 async fn binds_as(expression: impl Render, kind: &str) -> bool {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let (sql, vars) = expression.to_query().expect("renders").into_parts();
     db.query(format!("RETURN type::is_{kind}({sql});"))
         .bind(vars)
@@ -33,7 +33,7 @@ async fn sets_and_bytes_bind_as_their_kind() {
     assert!(binds_as(BytesLike::from(&[1u8, 2][..]), "bytes").await);
     assert!(!binds_as(umbriel::ArrayLike::from(vec![1u8, 2]), "bytes").await);
 
-    let db = db().await;
+    let (db, _guard) = db().await;
     let length: Option<i64> = bound(&db, &umbriel::functions::bytes::len!(vec![1u8, 2, 3])).await;
     assert_eq!(length, Some(3));
     let size: Option<i64> = bound(

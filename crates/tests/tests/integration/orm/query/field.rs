@@ -3,15 +3,15 @@
 
 use std::collections::BTreeMap;
 
-use surrealdb::{Surreal, engine::local::Db, types::Value};
+use surrealdb::{Surreal, engine::any::Any, types::Value};
 use umbriel::{
     All, Destructure, Field, Raw, Render, Runnable, Table,
     statements::{Returning, select, select_value},
 };
-use umbriel_tests::*;
+use umbriel_tests::{support::query::*, *};
 
-async fn seeded() -> Surreal<Db> {
-    let db = db().await;
+async fn seeded() -> (Surreal<Any>, TestDb) {
+    let (db, guard) = db().await;
     Raw::new(
         "CREATE profile:alice SET name = 'Alice', address = { city: 'Lisbon', zip: '1000' }, \
              groups = [[1, 2], [3]], \
@@ -22,7 +22,7 @@ async fn seeded() -> Surreal<Db> {
     .run(&db)
     .await
     .expect("seeded");
-    db
+    (db, guard)
 }
 
 mod rendering {
@@ -69,7 +69,7 @@ mod evaluation {
 
     #[tokio::test]
     async fn optional_reads_none_where_the_value_is_missing() {
-        let db = seeded().await;
+        let (db, _guard) = seeded().await;
         let cities: Vec<Option<String>> =
             select_value(Field::new("address").optional().with_field("city"))
                 .from(Table::from("profile"))
@@ -82,7 +82,7 @@ mod evaluation {
 
     #[tokio::test]
     async fn flatten_joins_nested_arrays() {
-        let db = seeded().await;
+        let (db, _guard) = seeded().await;
         let flat: Vec<Vec<i64>> = select_value(Field::new("groups").flatten())
             .from(umbriel::types::RecordId::new("profile", "alice"))
             .decode()
@@ -94,7 +94,7 @@ mod evaluation {
 
     #[tokio::test]
     async fn destructuring_keeps_each_item_with_its_parts() {
-        let db = seeded().await;
+        let (db, _guard) = seeded().await;
         let items: Vec<Vec<BTreeMap<String, Value>>> =
             select_value(Field::new("items").destructure(["name", "qty"]))
                 .from(umbriel::types::RecordId::new("profile", "alice"))
@@ -115,7 +115,7 @@ mod evaluation {
 
     #[tokio::test]
     async fn omitting_destructured_parts_removes_each() {
-        let db = seeded().await;
+        let (db, _guard) = seeded().await;
         let rows: Vec<BTreeMap<String, Value>> = select(All)
             .omit(Field::new("opts").destructure(["security", "enabled"]))
             .from(umbriel::types::RecordId::new("profile", "alice"))
@@ -132,7 +132,7 @@ mod evaluation {
     /// `value/get.rs`).
     #[tokio::test]
     async fn all_fields_of_an_object() {
-        let db = seeded().await;
+        let (db, _guard) = seeded().await;
         let values: Vec<Value> = select_value(Field::new("address").all())
             .from(umbriel::types::RecordId::new("profile", "alice"))
             .execute(&db)
@@ -142,3 +142,114 @@ mod evaluation {
         assert_eq!(values, [expected]);
     }
 }
+
+mod fields {
+    use super::*;
+
+    #[test]
+    fn names_and_paths() {
+        assert_eq!(Field::new("name").to_debug_sql(), "name");
+        assert_eq!(
+            Field::new("address").with_field("city").to_debug_sql(),
+            "address.city"
+        );
+        assert_eq!(Field::new("display-name").to_debug_sql(), "`display-name`");
+        assert_eq!(Field::from("name").to_debug_sql(), "name");
+        assert_eq!(Field::new("tags").all().to_debug_sql(), "tags.*");
+        assert_eq!(
+            Field::from(Param::new("user")).all().to_debug_sql(),
+            "$user.*"
+        );
+        assert_eq!(
+            Field::from_expr(ValueLike::from(User::id("alice"))).to_debug_sql(),
+            "user:alice"
+        );
+        assert!(Field::new("").to_query().is_err());
+    }
+
+    /// T28: a name is always one escaped identifier, whatever it holds, and verbatim idiom text
+    /// is the tracked `Field::raw`.
+    #[test]
+    fn names_are_escaped_and_raw_fields_are_tracked() {
+        assert_eq!(Field::new("select").to_debug_sql(), "`select`");
+        assert_eq!(Field::new("address.city").to_debug_sql(), "`address.city`");
+        assert_eq!(Field::new("time::now()").to_debug_sql(), "`time::now()`");
+        assert_parses(&format!(
+            "SELECT {} FROM user;",
+            Field::new("select").to_debug_sql()
+        ));
+
+        assert_eq!(Field::raw("tags[*]").to_debug_sql(), "tags[*]");
+        let raw_with_value = umbriel::statements::select(Field::raw("tags[*]"))
+            .from(Table::from("user"))
+            .where_(Field::new("name").equal("Alice"));
+        assert!(raw_with_value.to_query().is_err());
+        assert!(
+            umbriel::statements::select(Field::raw("tags[*]"))
+                .from(Table::from("user"))
+                .to_query()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn aliases() {
+        assert_eq!(
+            Field::new("name").__as__("moniker").to_debug_sql(),
+            "name AS moniker"
+        );
+        assert_eq!(
+            Field::new("age")
+                .gt(18)
+                .__as__(AliasName::new("adult"))
+                .to_debug_sql(),
+            "age > 18 AS adult"
+        );
+        assert_eq!(
+            select(All)
+                .from(Table::from("user"))
+                .__as__("everyone")
+                .to_debug_sql(),
+            "(SELECT * FROM user) AS everyone"
+        );
+        assert_eq!(AliasName::new("total").as_str(), "total");
+        let alias = Field::new("name").__as__("moniker");
+        assert_eq!(alias.get_alias_name().to_string(), "moniker");
+    }
+
+    #[test]
+    fn array_elements() {
+        let alien = Alien::schema();
+        assert_eq!(alien.tags(Last).to_debug_sql(), "tags[$]");
+        assert_eq!(alien.tags(All).to_debug_sql(), "tags[*]");
+        assert_eq!(alien.tags(index(0)).to_debug_sql(), "tags[0]");
+        assert_eq!(
+            alien.tags(index(1)).to_query().expect("valid").sql(),
+            "tags[$_p0]"
+        );
+        assert_eq!(
+            alien.tags(index(Field::new("position"))).to_debug_sql(),
+            "tags[position]"
+        );
+        assert_eq!(
+            alien.tags(index(Param::new("position"))).to_debug_sql(),
+            "tags[$position]"
+        );
+        assert_eq!(
+            alien.tags(index(1)).greater_than(1).to_debug_sql(),
+            "tags[1] > 1"
+        );
+        assert_eq!(
+            alien.tags(where_(this().less_than(18))).to_debug_sql(),
+            "tags[WHERE $this < 18]"
+        );
+        assert_eq!(
+            alien
+                .tags(where_(this().less_than(18)))
+                .all()
+                .to_debug_sql(),
+            "tags[WHERE $this < 18].*"
+        );
+    }
+}
+

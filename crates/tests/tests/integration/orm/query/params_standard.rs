@@ -24,7 +24,7 @@ fn every_reserved_parameter_renders_its_name() {
 
 #[tokio::test]
 async fn protected_parameters_cannot_be_set() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     for name in ["access", "auth", "token", "session"] {
         let refused = let_(name).equal_to(1).run(&db).await;
         assert!(refused.is_err(), "${name}: {refused:?}");

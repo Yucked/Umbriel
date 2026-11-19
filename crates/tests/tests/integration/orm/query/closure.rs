@@ -44,7 +44,7 @@ fn closures_render() {
 
 #[tokio::test]
 async fn array_map_filter_fold_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let numbers = vec![1, 2, 3];
     holds_all!(
         &db,
@@ -91,7 +91,7 @@ async fn array_map_filter_fold_run() {
 
 #[tokio::test]
 async fn a_closure_runs_through_a_parameter() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let double = let_("double").equal_to(closure(["n"], |[n]| n.multiply(2)));
     let call = double.get_param().call([3]);
     assert_eq!(call.to_debug_sql(), "$double(3)");
@@ -123,7 +123,7 @@ fn invalid_parameter_names_are_render_errors() {
 
 #[tokio::test]
 async fn closures_cannot_be_stored() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = failure(
         &db,
         &format!(

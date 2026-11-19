@@ -3,11 +3,6 @@
 
 use std::{collections::BTreeSet, time::Duration};
 
-use surrealdb::{
-    Surreal,
-    engine::local::Mem,
-    opt::{Config, capabilities::Capabilities},
-};
 use umbriel::{
     ArrayLike, BytesLike, DatetimeLike, DurationLike, Field, GeometryLike, Model, NumberLike,
     ObjectLike, Operatable, Param, RecordIdLike, Render, Runnable, SetLike, StrandLike, ValueLike,
@@ -48,13 +43,13 @@ async fn a_skipped_optional_argument_is_a_render_error() {
         (rand::float_fn(Some((1, 2))), "rand::float(1, 2)"),
         (rand::float_fn(None::<(i64, i64)>), "rand::float()"),
     );
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds(&db, &string::slice_fn("Alice", Some(1), Some(3)), "'li'").await;
 }
 
 #[tokio::test]
 async fn repeat_dispatches_by_the_receivers_type() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let text = ValueLike::from("ab").repeat(2);
     let array = ValueLike::from(1).repeat(2);
     holds_all!(&db, [(text.clone(), "'abab'"), (array.clone(), "[1, 1]")]);
@@ -68,7 +63,7 @@ define_function!(greet(name: string) {
 
 #[tokio::test]
 async fn run_returns_typed_results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let length: Option<i64> = string::len!("Alice").run(&db).await.expect("ran");
     assert_eq!(length, Some(5));
     let distinct: Option<Vec<i64>> = array::distinct!(vec![1, 1, 2]).run(&db).await.expect("ran");
@@ -85,7 +80,7 @@ async fn run_returns_typed_results() {
 
 #[tokio::test]
 async fn custom_function_runs() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     greet_statement().run(&db).await.expect("defined");
     let greeting: Option<String> = greet!("Alice")
         .typed::<kinds::String>()
@@ -97,7 +92,7 @@ async fn custom_function_runs() {
 
 #[tokio::test]
 async fn method_calls_render_and_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let name = Field::new("name");
     calls!(
         (StrandLike::from(name.clone()).len(), "name.len()"),
@@ -173,7 +168,7 @@ async fn method_calls_render_and_run() {
 
 #[tokio::test]
 async fn method_eligibility_follows_dispatch() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
@@ -193,7 +188,7 @@ async fn method_eligibility_follows_dispatch() {
 
 #[tokio::test]
 async fn an_unmapped_method_is_refused_by_surrealdb() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = failure(&db, "RETURN 1.fixed(2);").await;
     assert!(
         error.contains("no such method found for the int type"),
@@ -203,7 +198,7 @@ async fn an_unmapped_method_is_refused_by_surrealdb() {
 
 #[tokio::test]
 async fn a_method_on_the_wrong_runtime_type_errors() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let call = StrandLike::from(Param::new("x")).uppercase();
     assert_eq!(call.to_debug_sql(), "$x.uppercase()");
     let error = failure(&db, &format!("LET $x = 5; RETURN {};", call.to_debug_sql())).await;
@@ -229,21 +224,17 @@ fn script_typed_result() {
     );
 }
 
-/// The embedded JavaScript runs with its arguments, and the engine refuses it unless the
-/// scripting capability is on (it is off by default).
+fn doubled() -> umbriel::Function<kinds::Int> {
+    function!((21), "{ return arguments[0] * 2; }").typed::<kinds::Int>()
+}
+
+/// The embedded JavaScript runs with its arguments on a server that allows scripting.
 #[tokio::test]
 async fn script_runs() {
-    let config = Config::new().capabilities(Capabilities::new().with_scripting(true));
-    let scripting = Surreal::new::<Mem>(config).await.expect("in-memory engine");
-    scripting
-        .use_ns("test")
-        .use_db("test")
-        .await
-        .expect("namespace and database");
-    let doubled = || function!((21), "{ return arguments[0] * 2; }").typed::<kinds::Int>();
-    holds(&scripting, &doubled(), "42").await;
+    let (db, _guard) = db().await;
+    holds(&db, &doubled(), "42").await;
     holds(
-        &scripting,
+        &db,
         &function!(
             ("Alice", "Bob"),
             "{ return arguments[0] + ' and ' + arguments[1]; }"
@@ -251,7 +242,13 @@ async fn script_runs() {
         "'Alice and Bob'",
     )
     .await;
-    let error = call_failure(&db().await, &doubled()).await;
+}
+
+/// A server refuses scripting unless the capability is on (it is off by default).
+#[tokio::test]
+async fn script_is_refused_without_the_scripting_capability() {
+    let (db, _guard) = restricted_db().await;
+    let error = call_failure(&db, &doubled()).await;
     assert!(
         error.contains("Scripting functions are not allowed"),
         "{error}"
