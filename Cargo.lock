@@ -757,17 +757,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "console"
-version = "0.16.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e96a4956774c13c126a8b5af4daa79384f4d826534c95a02d76afb39e2ab64e3"
-dependencies = [
- "encode_unicode",
- "libc",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1366,12 +1355,6 @@ dependencies = [
  "subtle",
  "zeroize",
 ]
-
-[[package]]
-name = "encode_unicode"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34aa73646ffb006b8f5147f3dc182bd4bcb190227ce861fc4a4844bf8e3cb2c0"
 
 [[package]]
 name = "encoding_rs"
@@ -2407,18 +2390,6 @@ dependencies = [
  "fuzzy-matcher",
  "unicode-segmentation",
  "unicode-width",
-]
-
-[[package]]
-name = "insta"
-version = "1.49.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b67d3d2e287e4b86c10b3f3b641033d1f89b74bdb39d05f34952e2b9a6fe21cd"
-dependencies = [
- "console",
- "once_cell",
- "similar",
- "tempfile",
 ]
 
 [[package]]
@@ -4765,12 +4736,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
-name = "similar"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
-
-[[package]]
 name = "simple_asn1"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5917,39 +5882,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "test-case"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "124953e7f67cb0b2fcfb87e899e4ae5a64fb68e2e160767933cc67b646fb0042"
-dependencies = [
- "test-case-macros",
-]
-
-[[package]]
-name = "test-case-core"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd097615b407247e102046ba34426bb594923ab3554cf0f3cdfed050f1a5a3e8"
-dependencies = [
- "cfg-if",
- "proc-macro2",
- "quote",
- "syn 3.0.7",
-]
-
-[[package]]
-name = "test-case-macros"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4ce35ece947bccac166e1ded639133827a953f69a48ba134d17f91108333082"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.7",
- "test-case-core",
-]
-
-[[package]]
 name = "thiserror"
 version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6451,30 +6383,16 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
- "darling",
  "geo",
- "heck 0.5.0",
- "insta",
- "nom 8.0.0",
- "paste",
  "pretty_assertions",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
  "rand 0.10.3",
  "serde",
  "serde_json",
- "strum",
- "strum_macros",
  "surrealdb",
  "surrealdb-syn",
- "syn 3.0.7",
  "tempfile",
- "test-case",
- "thiserror",
  "tokio",
  "trybuild",
- "typed-builder",
  "umbriel",
  "uuid",
 ]
