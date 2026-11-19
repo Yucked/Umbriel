@@ -4,7 +4,6 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use chrono::{TimeZone, Utc};
 use surrealdb::{
     Surreal,
     engine::any::Any,
@@ -731,24 +730,9 @@ mod for_update {
     }
 }
 
+/// Storage clauses. Reading with `VERSION` is covered in `server.rs` (`versioned_reads`).
 mod storage {
     use super::*;
-
-    #[tokio::test]
-    async fn the_memory_engine_refuses_version() {
-        let (db, _guard) = organizations().await;
-        let at = Utc
-            .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
-            .single()
-            .expect("a time");
-        let refused = select(All)
-            .from(Organization::table())
-            .version(at)
-            .decode::<Organization>()
-            .execute(&db)
-            .await;
-        assert!(refused.is_err(), "{refused:?}");
-    }
 
     /// The 3.3.4 parser reads and discards `VERSION` on `CREATE` and `INSERT`, so even the memory
     /// engine accepts it, and the record is written now.
