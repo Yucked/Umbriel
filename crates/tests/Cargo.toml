@@ -13,24 +13,25 @@ workspace = true
 doctest = false
 
 [dependencies]
-# The remote transports serve the server-backed tests in `tests/server.rs`; `scripting` runs the
-# embedded JavaScript functions (`umbriel_function::script_runs`).
+# Every database test runs on a developer-started server: WebSocket for most, HTTP for the
+# transport scenarios in `server.rs`. No embedded engine is enabled.
 umbriel = { workspace = true, default-features = false, features = [
-    "kv-mem",
     "migrations",
     "parse",
     "protocol-http",
     "protocol-ws",
-    "scripting",
     "test-support",
 ] }
+# The harness bounds every network wait (`time`), removes each test database on a runtime of its
+# own (`rt`), and defines the test namespace once (`sync`).
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+# Test database names (`umbriel_test_<uuid>`).
+uuid = { workspace = true, features = ["v4"] }
 surrealdb = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 geo = { workspace = true }
 chrono = { workspace = true }
-typed-builder = { workspace = true }
-insta = { workspace = true }
 tempfile = { workspace = true }
 # Checks rendered SurrealQL against SurrealDB 3's own parser (`assert_sql`).
 surrealdb-syn = { workspace = true }
@@ -39,21 +40,5 @@ pretty_assertions = { workspace = true }
 [dev-dependencies]
 # Parses the migration CLI's arguments in-process (`Migrator` is a `clap::Parser`).
 clap = { workspace = true }
-# `time` bounds tests that wait on concurrent work (`umbriel_transaction`).
-tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 trybuild = { workspace = true }
-uuid = { workspace = true }
 rand = { workspace = true }
-test-case = { workspace = true }
-# Macro expansion modules compiled into `macros_*` test targets via `#[path]`.
-proc-macro2 = { workspace = true }
-proc-macro-crate = { workspace = true }
-syn = { workspace = true }
-quote = { workspace = true }
-darling = { workspace = true }
-heck = { workspace = true }
-strum = { workspace = true }
-strum_macros = { workspace = true }
-thiserror = { workspace = true }
-paste = { workspace = true }
-nom = { workspace = true }
