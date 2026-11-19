@@ -1,34 +1,18 @@
-//! Against a running SurrealDB server, over each supported remote transport (HTTP and
-//! WebSocket): connecting, model definitions, CRUD, relations, and statement and transaction
-//! error handling. The other test files use the in-memory engine; these check the same behaviour
-//! survives the network round trip.
+//! The same scenarios over each supported remote transport: HTTP ([`Endpoint::Http`]) and
+//! WebSocket ([`Endpoint::Main`]). Connecting, model definitions, CRUD, relations, statement and
+//! transaction error handling, versioned reads and evaluated queries. The servers are configured
+//! as `crates/tests/README.md` describes; each scenario runs in a database of its own.
 //!
-//! Ignored by default. Run them against a server you started with
-//! `cargo test -p umbriel-tests --test server -- --ignored`, configured by:
-//!
-//! - `UMBRIEL_TEST_HTTP_URL`, e.g. `http://127.0.0.1:8000`
-//! - `UMBRIEL_TEST_WS_URL`, e.g. `ws://127.0.0.1:8000`
-//! - `UMBRIEL_TEST_USER`, `UMBRIEL_TEST_PASS`: a root user
-//! - `UMBRIEL_TEST_NS`, `UMBRIEL_TEST_DB`: the namespace and database to use
-//!
-//! The tests write only to the tables `server_person`, `server_company` and `server_works_at`,
-//! which they remove before and after each test, and run one at a time. `cloned_sessions` also
-//! defines one database user named `server_reader_<random>`, refusing a name that exists, and
-//! removes only that user once it has created it.
-//!
-//! The `versioned_*` tests also need the server's store to keep versions (SurrealKV started with
-//! `versioned=true`), since the memory engine refuses `SELECT … VERSION`. The `eval_*` tests
-//! need a server started with `--allow-eval-query`, which `--allow-all` does not include. SDK
-//! transaction handles run over WebSocket only; over HTTP the test checks `begin` is refused (as
-//! a method not found).
+//! SDK transaction handles run over WebSocket only; over HTTP the test checks `begin` is refused
+//! (as a method not found).
 
 use std::collections::BTreeMap;
 
 use chrono::TimeZone;
 use surrealdb::{
     IndexedResults, Surreal,
-    engine::any::{self, Any},
-    opt::auth::{Database, Root},
+    engine::any::Any,
+    opt::auth::Database,
     types::{self, NotFoundError, SurrealValue, Value},
 };
 use umbriel::{
@@ -38,7 +22,9 @@ use umbriel::{
     model,
     statements::{Returning, info_for, relate, return_, select, update},
 };
-use umbriel_tests::{read, statement_error};
+use umbriel_tests::{
+    DATABASE_PREFIX, Endpoint, NAMESPACE, TestDb, db, http_db, read, statement_error,
+};
 
 #[model(node, table = "server_person")]
 #[derive(Debug, Clone, Default)]
@@ -81,54 +67,31 @@ enum Transport {
     Ws,
 }
 
-/// A configuration variable; a missing one fails the test rather than passing it unchecked.
-fn config(name: &str) -> String {
-    std::env::var(name).unwrap_or_else(|_| {
-        panic!("{name} is not set; see the module documentation of tests/server.rs")
-    })
+impl Transport {
+    /// A database of its own over this transport. `any::connect` picks the transport from the
+    /// URL's scheme, so the scheme is checked: it decides what is tested.
+    async fn open(self) -> (Surreal<Any>, TestDb) {
+        let (endpoint, schemes) = match self {
+            Transport::Http => (Endpoint::Http, ["http://", "https://"]),
+            Transport::Ws => (Endpoint::Main, ["ws://", "wss://"]),
+        };
+        let url = endpoint.url();
+        assert!(
+            schemes.iter().any(|scheme| url.starts_with(scheme)),
+            "{endpoint:?} must start with {} or {}, got {url}",
+            schemes[0],
+            schemes[1]
+        );
+        match self {
+            Transport::Http => http_db().await,
+            Transport::Ws => db().await,
+        }
+    }
 }
 
-/// Serializes the tests: they share the server's tables.
-static SERVER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-/// A connection over `transport`, signed in and using the configured namespace and database.
-async fn connect(transport: Transport) -> Surreal<Any> {
-    let (variable, schemes) = match transport {
-        Transport::Http => ("UMBRIEL_TEST_HTTP_URL", ["http://", "https://"]),
-        Transport::Ws => ("UMBRIEL_TEST_WS_URL", ["ws://", "wss://"]),
-    };
-    let url = config(variable);
-    // `any::connect` picks the transport from the scheme, so the scheme decides what is tested.
-    assert!(
-        schemes.iter().any(|scheme| url.starts_with(scheme)),
-        "{variable} must start with {} or {}, got {url}",
-        schemes[0],
-        schemes[1]
-    );
-    let db = any::connect(&url)
-        .await
-        .unwrap_or_else(|error| panic!("cannot connect to {url}: {error}"));
-    db.signin(Root {
-        username: config("UMBRIEL_TEST_USER"),
-        password: config("UMBRIEL_TEST_PASS"),
-    })
-    .await
-    .expect("signed in as the configured root user");
-    db.use_ns(config("UMBRIEL_TEST_NS"))
-        .use_db(config("UMBRIEL_TEST_DB"))
-        .await
-        .expect("namespace and database selected");
-    db
-}
-
-/// Removes the tables the tests create, and only those.
-async fn remove_tables(db: &Surreal<Any>) -> umbriel::Result<IndexedResults> {
-    Raw::new(
-        "REMOVE TABLE IF EXISTS server_works_at; REMOVE TABLE IF EXISTS server_person; \
-         REMOVE TABLE IF EXISTS server_company;",
-    )
-    .run(db)
-    .await
+/// The database the session uses.
+async fn database(db: &Surreal<Any>) -> String {
+    read(db, "RETURN session::db();").await
 }
 
 async fn define_models(db: &Surreal<Any>) {
@@ -177,13 +140,14 @@ mod scenarios {
             .expect("ran");
         assert_eq!(results.take::<Option<i64>>(0).expect("int"), Some(1));
         assert_eq!(
-            results.take::<Option<String>>(1).expect("string"),
-            Some(config("UMBRIEL_TEST_NS"))
+            results.take::<Option<String>>(1).expect("string").as_deref(),
+            Some(NAMESPACE)
         );
-        assert_eq!(
-            results.take::<Option<String>>(2).expect("string"),
-            Some(config("UMBRIEL_TEST_DB"))
-        );
+        let database = results
+            .take::<Option<String>>(2)
+            .expect("string")
+            .expect("a database");
+        assert!(database.starts_with(DATABASE_PREFIX), "{database}");
 
         // Bound values travel as query variables.
         let mut results = return_("Alice").run(db).await.expect("ran");
@@ -422,7 +386,7 @@ mod scenarios {
     }
 
     /// `SELECT … VERSION` reads a record as it was at a time, and finds nothing before the record
-    /// existed. The memory engine refuses `VERSION`, so this needs a versioned server store.
+    /// existed. It needs the main server's versioned store.
     pub async fn versioned_reads(db: &Surreal<Any>) {
         define_models(db).await;
         person("alice", "Alice", 30)
@@ -460,7 +424,7 @@ mod scenarios {
     }
 
     /// `INFO … VERSION` lists a table's definitions as they were at a time: a field defined
-    /// later is missing. The memory engine refuses `VERSION`, so this needs a versioned store.
+    /// later is missing. It needs the main server's versioned store.
     ///
     /// The added field's name is new on every run: a versioned store keeps the history of a field
     /// that was defined before and then removed with its table, and `INFO … VERSION` lists such a
@@ -498,8 +462,8 @@ mod scenarios {
         assert!(then.fields.contains_key("name"), "{:?}", then.fields);
     }
 
-    /// `eval::surql` runs a query and returns its result, with bindings. The embedded engine
-    /// cannot allow it in 3.3.4, so this needs a server started with `--allow-eval-query`.
+    /// `eval::surql` runs a query and returns its result, with bindings, on the main server, which
+    /// allows evaluated queries.
     pub async fn eval_surql_runs(db: &Surreal<Any>) {
         let sum: Option<i64> = eval::surql!("RETURN 1 + 2")
             .run(db)
@@ -515,52 +479,20 @@ mod scenarios {
     }
 
     /// K17: a clone signed in as another user keeps its own authentication; the original stays
-    /// the root user.
-    ///
-    /// The other user is this run's own: its name is new on every run, and `DEFINE USER` without
-    /// `IF NOT EXISTS` or `OVERWRITE` refuses a name that exists, so the test never takes over a
-    /// user it did not create. Only a user it created is removed, after the checks, whether they
-    /// pass or panic.
+    /// the root user. The other user is defined on the test's own database, so it goes with it.
     pub async fn cloned_sessions(db: &Surreal<Any>) {
         define_models(db).await;
-        let suffix: String = read(
-            db,
-            "RETURN string::replace(<string> rand::uuid(), '-', '_');",
-        )
-        .await;
-        let username = format!("server_reader_{suffix}");
-        Raw::new(format!(
-            "DEFINE USER {username} ON DATABASE PASSWORD 'example-password' ROLES VIEWER;"
-        ))
-        .run(db)
-        .await
-        .expect("this run's user is created, not found existing");
-
-        let checks = tokio::spawn({
-            let db = db.clone();
-            let username = username.clone();
-            async move { reader_checks(&db, username).await }
-        })
-        .await;
-        Raw::new(format!("REMOVE USER {username} ON DATABASE;"))
+        Raw::new("DEFINE USER reader ON DATABASE PASSWORD 'example-password' ROLES VIEWER;")
             .run(db)
             .await
-            .expect("this run's user is removed");
-        if let Err(error) = checks {
-            match error.try_into_panic() {
-                Ok(panic) => std::panic::resume_unwind(panic),
-                Err(error) => panic!("the checks did not finish: {error}"),
-            }
-        }
-    }
+            .expect("the reader is created");
 
-    async fn reader_checks(db: &Surreal<Any>, username: String) {
         let reader = db.clone();
         reader
             .signin(Database {
-                namespace: config("UMBRIEL_TEST_NS"),
-                database: config("UMBRIEL_TEST_DB"),
-                username,
+                namespace: NAMESPACE.to_owned(),
+                database: database(db).await,
+                username: "reader".to_owned(),
                 password: "example-password".to_owned(),
             })
             .await
@@ -666,39 +598,22 @@ mod scenarios {
     }
 }
 
-/// One ignored test per scenario and transport, holding the server and starting and ending with
-/// the test tables removed. `$http` and `$ws` name the modules, and `$reason` says what server
-/// the scenarios need.
+/// One test per scenario and transport, each in a database of its own. `$http` and `$ws` name the
+/// modules.
 macro_rules! over_each_transport {
-    ($reason:literal, $http:ident, $ws:ident; $($scenario:ident),* $(,)?) => {
-        over_each_transport!(@transport $http, Http, $reason; $($scenario),*);
-        over_each_transport!(@transport $ws, Ws, $reason; $($scenario),*);
+    ($http:ident, $ws:ident; $($scenario:ident),* $(,)?) => {
+        over_each_transport!(@transport $http, Http; $($scenario),*);
+        over_each_transport!(@transport $ws, Ws; $($scenario),*);
     };
-    (@transport $module:ident, $transport:ident, $reason:literal; $($scenario:ident),*) => {
+    (@transport $module:ident, $transport:ident; $($scenario:ident),*) => {
         mod $module {
             use super::*;
 
             $(
                 #[tokio::test]
-                #[ignore = $reason]
                 async fn $scenario() {
-                    let _server = SERVER.lock().await;
-                    let db = connect(Transport::$transport).await;
-                    remove_tables(&db).await.expect("test tables removed");
-                    // A task of its own, so the tables are removed even when the scenario panics.
-                    let outcome = tokio::spawn({
-                        let db = db.clone();
-                        async move { scenarios::$scenario(&db).await }
-                    })
-                    .await;
-                    let cleanup = remove_tables(&db).await;
-                    if let Err(error) = outcome {
-                        match error.try_into_panic() {
-                            Ok(panic) => std::panic::resume_unwind(panic),
-                            Err(error) => panic!("the scenario did not finish: {error}"),
-                        }
-                    }
-                    cleanup.expect("test tables removed");
+                    let (db, _guard) = Transport::$transport.open().await;
+                    scenarios::$scenario(&db).await;
                 }
             )*
         }
@@ -706,7 +621,6 @@ macro_rules! over_each_transport {
 }
 
 over_each_transport!(
-    "needs a running SurrealDB server; see tests/server.rs",
     http,
     ws;
     connection,
@@ -716,33 +630,11 @@ over_each_transport!(
     statement_errors,
     transactions,
     cloned_sessions,
-);
-
-over_each_transport!(
-    @transport sdk_transactions_ws,
-    Ws,
-    "needs a running SurrealDB server; see tests/server.rs";
-    sdk_transactions
-);
-
-over_each_transport!(
-    @transport sdk_transactions_http,
-    Http,
-    "needs a running SurrealDB server; see tests/server.rs";
-    begin_is_refused
-);
-
-over_each_transport!(
-    "needs a SurrealDB server with a versioned store (SurrealKV, `versioned=true`); see tests/server.rs",
-    versioned_http,
-    versioned_ws;
     versioned_reads,
     versioned_info,
-);
-
-over_each_transport!(
-    "needs a SurrealDB server started with `--allow-eval-query`; see tests/server.rs",
-    eval_http,
-    eval_ws;
     eval_surql_runs,
 );
+
+over_each_transport!(@transport sdk_transactions_ws, Ws; sdk_transactions);
+
+over_each_transport!(@transport sdk_transactions_http, Http; begin_is_refused);
