@@ -117,10 +117,7 @@ async fn a_user_who_may_not_define_databases_creates_nothing() {
         .await
         .expect_err("the viewer may not define a database");
 
-    assert!(
-        error.to_string().to_lowercase().contains("permission"),
-        "{error}"
-    );
+    assert!(error.to_string().contains("not allowed"), "{error}");
     let databases = databases_in(&root, guard.namespace()).await;
     assert!(
         databases.iter().all(|name| !name.starts_with(COMPARISON_PREFIX)),
