@@ -5,6 +5,8 @@
 //! Fixtures that must generate successfully define nothing whose secrets the database redacts:
 //! no users and no record access. Those live in their own fixtures, whose generation fails.
 
+pub mod helpers;
+
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
