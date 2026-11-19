@@ -101,26 +101,14 @@ async fn database_configs_are_defined_and_removed() {
     );
 }
 
+/// The default config is stored on the root, where a 3.x server defines one when it starts. It
+/// is server-wide, so the test reads it rather than redefining or removing it.
 #[tokio::test]
 async fn the_default_config_is_stored_on_the_root() {
     let (db, _guard) = db().await;
-    define_config_default()
-        .namespace("acme")
-        .database("app")
-        .run(&db)
-        .await
-        .expect("defined");
     let root: Object = read(&db, "INFO FOR ROOT STRUCTURE;").await;
     assert!(
         matches!(root.get("defaults"), Some(Value::Object(defaults)) if !defaults.is_empty()),
-        "{root:?}"
-    );
-
-    // Without a default config, 3.3.4 lists `defaults` as an empty object.
-    remove_config_default().run(&db).await.expect("removed");
-    let root: Object = read(&db, "INFO FOR ROOT STRUCTURE;").await;
-    assert!(
-        matches!(root.get("defaults"), Some(Value::Object(defaults)) if defaults.is_empty()),
         "{root:?}"
     );
 }
