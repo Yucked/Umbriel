@@ -46,6 +46,15 @@ async fn constants_render_without_parentheses_and_evaluate() {
     ];
     for (constant, name, expected) in floats {
         assert_eq!(constant.to_debug_sql(), name);
+        // An infinite float is refused on the way back over the network (the server answers with
+        // a parse error), so the infinities are compared in the database.
+        if expected.is_infinite() {
+            let beyond = if expected > 0.0 { ">" } else { "<" };
+            let infinite: bool =
+                read(&db, &format!("RETURN {name} {beyond} {:e};", f64::MAX.copysign(expected))).await;
+            assert!(infinite, "{name}");
+            continue;
+        }
         let value: f64 = read(&db, &format!("RETURN {name};")).await;
         assert_eq!(value, expected, "{name}");
     }
