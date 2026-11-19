@@ -4,15 +4,22 @@
 /// belong to the struct -  than using the basic struct to initialize values
 /// Compared to using a normal struct, this also allows using `parameter` or `field` as value.
 /// Example
-/// ```rust, ignore
-/// let space_ship1 = create::<SpaceShip>()
-///     .set(object!(SpaceShip {
-///            id: spaceship_id_1,
-///            name: "SpaceShip1",
-///            created: Utc::now(),
-///        }))
-///     .get_one(db.clone())
-///     .await?;
+/// ```rust
+/// use umbriel::{*, statements::create};
+/// # #[model(node, table = "space_ship")]
+/// # #[derive(Debug, Clone)]
+/// # pub struct SpaceShip {
+/// #     pub id: RecordId<Self>,
+/// #     pub name: String,
+/// # }
+/// let statement = create::<SpaceShip>(SpaceShip::table()).set(object!(SpaceShip {
+///     id: SpaceShip::id("apollo"),
+///     name: "Apollo",
+/// }));
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "CREATE space_ship SET id = space_ship:apollo, name = 'Apollo';"
+/// );
 /// ```
 #[macro_export]
 macro_rules! object {
@@ -41,13 +48,17 @@ macro_rules! object {
 /// Compared to using a normal struct, this also allows using `parameter` or `field` as value.
 ///
 /// Example
-/// ```rust, ignore
-///     let updated = update::<Weapon>(id)
-/// .set(object_partial!(Weapon { strength: 923u64 }))
-/// .return_one(db.clone())
-/// .await?;
-///
-///
+/// ```rust
+/// use umbriel::{*, statements::update};
+/// # #[model(node, table = "space_ship")]
+/// # #[derive(Debug, Clone)]
+/// # pub struct SpaceShip {
+/// #     pub id: RecordId<Self>,
+/// #     pub name: String,
+/// # }
+/// let statement = update::<SpaceShip>(SpaceShip::id("apollo"))
+///     .set(object_partial!(SpaceShip { name: "Gemini" }));
+/// assert_eq!(statement.to_debug_sql(), "UPDATE space_ship:apollo SET name = 'Gemini';");
 /// ```
 #[macro_export]
 macro_rules! object_partial {

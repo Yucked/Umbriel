@@ -516,13 +516,7 @@ pub struct AnyEdgeFilter {
 }
 
 impl AnyEdgeFilter {
-    /// Creates a WHERE condition for one or more edges
-    /// # Example
-    /// ```rust, ignore
-    /// Student::schema()
-    ///             .writes__(any_other_edges(&[writes, likes]).where_(timeWritten.less_than_or_equal(50)))
-    ///             .book(Empty);
-    /// ```
+    /// Creates a WHERE condition for one or more edges; see [`any_other_edges`] for an example.
     pub fn where_(mut self, condition: impl Conditional) -> Self {
         self.condition = Some(Filter::new(condition));
         self
@@ -537,16 +531,38 @@ impl AnyEdgeFilter {
 ///
 /// Examples:
 ///
-/// ```rust, ignore
-/// # let likes = Table::new("likes");
-/// # let writes = StudentWritesBook::table();
-/// # let timeWritten = Field::new("timeWritten");
-///  Student::with(student_id)
-///     .writes__(Empty)
-///     .writes__(Empty)
-///     .writes__(any_other_edges(&[writes, likes]).where_(timeWritten.less_than_or_equal(50)))
-///     .book(book_id)
-///     .__as__(Student::aliases().writtenBooks);
+/// ```rust
+/// use umbriel::*;
+/// # #[model(node, table = "student")]
+/// # #[derive(Debug, Clone, Default)]
+/// # pub struct Student {
+/// #     pub id: RecordId<Self>,
+/// #     #[orm(relate(model = "StudentWritesBook", connection = "->writes->book"))]
+/// #     pub books: Relate<Book>,
+/// # }
+/// # #[model(node, table = "book")]
+/// # #[derive(Debug, Clone, Default)]
+/// # pub struct Book {
+/// #     pub id: RecordId<Self>,
+/// # }
+/// # #[model(edge, table = "writes")]
+/// # #[derive(Debug, Clone)]
+/// # pub struct Writes<In: Node, Out: Node> {
+/// #     pub id: RecordId<Self>,
+/// #     #[orm(link_one = "In")]
+/// #     pub r#in: LinkOne<In>,
+/// #     #[orm(link_one = "Out")]
+/// #     pub out: LinkOne<Out>,
+/// # }
+/// # pub type StudentWritesBook = Writes<Student, Book>;
+/// let likes = Table::new("likes");
+/// let path = Student::with(Student::id("alice"))
+///     .writes__(any_other_edges(&[likes]).where_(Field::new("count").lte(50)))
+///     .book(E);
+/// assert_eq!(
+///     Field::from(path).to_debug_sql(),
+///     "student:alice->(writes, likes WHERE count <= 50)->book"
+/// );
 /// ```
 pub fn any_other_edges(edges: impl Into<crate::Tables>) -> AnyEdgeFilter {
     AnyEdgeFilter {

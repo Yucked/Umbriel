@@ -950,12 +950,12 @@ impl<O, C: Cardinality> SelectStatement<O, C> {
     ///     .split(emails);
     ///
     /// ```
-    /// ```rust, ignore
-    /// // Split the results by each value in a nested
-    ///  let locations = Country::schema();
-    ///  select(All)
-    ///     .from(country)
-    ///     .split(locations.cities);
+    /// ```rust
+    /// # use umbriel::{*, statements::select};
+    /// # let country = Table::new("country");
+    /// // Split the results by each value of a nested field
+    /// let cities = Field::new("locations").with_field("cities");
+    /// select(All).from(country).split(cities);
     /// ```
     ///
     /// Splitting changes each result's shape, so the result is untyped until
@@ -1022,12 +1022,12 @@ impl<O, C: Cardinality> SelectStatement<O, C> {
     ///     .group_by(gender)
     ///     .group_by(country);
     /// ```
-    /// ```rust, ignore
+    /// ```rust
+    /// # use umbriel::{*, statements::select};
+    /// # let article = Table::new("article");
     /// // Group results by a nested field
-    /// let settings = Article::schem();
-    /// select(settings.published)
-    ///     .from(article)
-    ///     .group_by(settings.published);
+    /// let published = Field::new("settings").with_field("published");
+    /// select(All).from(article).group_by(published);
     /// ```
     ///
     /// Grouping changes each result's shape, so the result is untyped until
@@ -1211,12 +1211,14 @@ impl<O, C: Cardinality> SelectStatement<O, C> {
     ///     .fetch(account)
     ///     .fetch(friend);
     /// ```
-    /// ```rust, ignore
-    /// let account = Person::schema().account;
+    /// ```rust
+    /// # use umbriel::{*, statements::select};
+    /// # let user = Table::new("user");
+    /// let account = Field::new("account");
     /// select(All)
     ///     .from(user)
-    ///     // Fetch nested field
-    ///     .fetch(&[account, account.users]);
+    ///     // Fetch a field and a field nested in it
+    ///     .fetch(&[account.clone(), account.with_field("users")]);
     /// ```
     ///
     /// Fetching replaces links with records, so the result is untyped until
