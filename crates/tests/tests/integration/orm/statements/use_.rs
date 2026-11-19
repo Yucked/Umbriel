@@ -15,7 +15,10 @@ use umbriel_tests::*;
 #[tokio::test]
 async fn each_use_returns_its_selection_for_the_request_only() {
     let (db, guard) = db().await;
-    let mut results = chain(use_().namespace("acme").database("sales"))
+    // The `USE` selects a namespace of the test's own, so nothing outside it is touched.
+    let (_root, scratch) = namespace().await;
+    let ns = scratch.namespace();
+    let mut results = chain(use_().namespace(ns).database("sales"))
         .chain(use_().database("support"))
         .run(&db)
         .await
@@ -25,14 +28,14 @@ async fn each_use_returns_its_selection_for_the_request_only() {
         .take::<Option<UseResult>>(0)
         .expect("decodes")
         .expect("a selection");
-    assert_eq!(both.namespace.as_deref(), Some("acme"));
+    assert_eq!(both.namespace.as_deref(), Some(ns));
     assert_eq!(both.database.as_deref(), Some("sales"));
     // A database alone keeps the namespace, and the result says so.
     let database_only: UseResult = results
         .take::<Option<UseResult>>(1)
         .expect("decodes")
         .expect("a selection");
-    assert_eq!(database_only.namespace.as_deref(), Some("acme"));
+    assert_eq!(database_only.namespace.as_deref(), Some(ns));
     assert_eq!(database_only.database.as_deref(), Some("support"));
 
     // The handle's own session is unchanged: SurrealDB keeps a `USE` statement's selection in the
@@ -41,11 +44,12 @@ async fn each_use_returns_its_selection_for_the_request_only() {
     assert_eq!(session, [guard.namespace(), guard.database()]);
 }
 
-/// `USE DEFAULT` selects the namespace and database of `DEFINE CONFIG DEFAULT`; with none
-/// defined it changes nothing, and like every `USE` since 3.0.0 it returns the selection it ends
-/// with (3.3.4 `dbs/executor.rs`).
+/// `USE DEFAULT` selects the namespace and database of `DEFINE CONFIG DEFAULT` (a 3.x server
+/// starts with one), and like every `USE` since 3.0.0 it returns the selection it ends with
+/// (3.3.4 `dbs/executor.rs`), for its request only. The server's default config is shared state,
+/// so the test reads it rather than defining one.
 #[tokio::test]
-async fn use_default_without_a_default_keeps_the_selection() {
+async fn use_default_returns_the_selection_it_ends_with() {
     let (db, guard) = db().await;
     let mut results = Raw::new("USE DEFAULT; RETURN [session::ns(), session::db()];")
         .run(&db)
@@ -56,14 +60,11 @@ async fn use_default_without_a_default_keeps_the_selection() {
         .take::<Option<_>>(0)
         .expect("decodes")
         .expect("an object");
-    assert_eq!(
-        selected.get("namespace"),
-        Some(&Value::String(guard.namespace().to_owned()))
-    );
-    assert_eq!(
-        selected.get("database"),
-        Some(&Value::String(guard.database().to_owned()))
-    );
     let session: Vec<String> = results.take(1).expect("the session");
-    assert_eq!(session, [guard.namespace(), guard.database()]);
+    let [namespace, database] = [&session[0], &session[1]].map(|name| Value::String(name.clone()));
+    assert_eq!(selected.get("namespace"), Some(&namespace));
+    assert_eq!(selected.get("database"), Some(&database));
+
+    let after: Vec<String> = read(&db, "RETURN [session::ns(), session::db()];").await;
+    assert_eq!(after, [guard.namespace(), guard.database()]);
 }
