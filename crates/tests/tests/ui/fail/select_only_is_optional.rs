@@ -1,4 +1,4 @@
-use surrealdb::{Surreal, engine::local::Db};
+use surrealdb::{Surreal, engine::any::Any};
 use umbriel::{
     All, Model, RecordId, model,
     statements::{Returning, select},
@@ -11,7 +11,7 @@ pub struct User {
 }
 
 // `FROM ONLY` returns one record or none, never a list.
-async fn run(db: &Surreal<Db>) -> umbriel::Result<()> {
+async fn run(db: &Surreal<Any>) -> umbriel::Result<()> {
     let _: Vec<User> = select(All)
         .from_only(User::id("alice"))
         .decode::<User>()

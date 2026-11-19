@@ -1,4 +1,4 @@
-use surrealdb::{Surreal, engine::local::Db};
+use surrealdb::{Surreal, engine::any::Any};
 use umbriel::{
     All, Field, Operatable, RecordId, SchemaGetter, SetterAssignable, SurrealCrud, Table, TableOf, model,
     object,
@@ -26,7 +26,7 @@ pub enum Reports {
 }
 
 // A view's records come from its query: every typed write is refused at compile time.
-fn writes(db: &Surreal<Db>, copy: SaleCopy, id: RecordId<SaleCopy>) {
+fn writes(db: &Surreal<Any>, copy: SaleCopy, id: RecordId<SaleCopy>) {
     // `SurrealCrud`.
     let _ = copy.save(db);
     let _ = SaleCopy::delete_by_id(db, &id);

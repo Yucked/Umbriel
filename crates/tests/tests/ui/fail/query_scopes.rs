@@ -1,5 +1,5 @@
 // A declaration holds only in its scope, and only after it.
-async fn run(db: surrealdb::Surreal<surrealdb::engine::local::Db>) {
+async fn run(db: surrealdb::Surreal<surrealdb::engine::any::Any>) {
     // A closure's parameter, outside the closure.
     let _ = umbriel::query!(db, "RETURN [1].map(|$n| $n * 2); RETURN $n;").await;
     // A function's argument, outside its body.

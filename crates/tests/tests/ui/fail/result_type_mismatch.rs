@@ -1,4 +1,4 @@
-use surrealdb::{Surreal, engine::local::Db};
+use surrealdb::{Surreal, engine::any::Any};
 use umbriel::{
     Model, RecordId, SchemaGetter, model,
     statements::{Returning, delete, update},
@@ -12,7 +12,7 @@ pub struct User {
 
 // The return mode decides the result type: `RETURN NONE` returns `()`, `RETURN VALUE name`
 // returns names, and `DELETE` returns nothing by default.
-async fn run(db: &Surreal<Db>) -> umbriel::Result<()> {
+async fn run(db: &Surreal<Any>) -> umbriel::Result<()> {
     let _: Vec<User> = update::<User>(User::id("alice")).return_none().execute(db).await?;
     let _: Vec<User> = update::<User>(User::id("alice"))
         .return_value(User::schema().name)

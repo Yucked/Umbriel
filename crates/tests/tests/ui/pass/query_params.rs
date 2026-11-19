@@ -1,5 +1,5 @@
 // `query!` requires bindings only for the parameters a query takes from outside.
-async fn run(db: surrealdb::Surreal<surrealdb::engine::local::Db>) {
+async fn run(db: surrealdb::Surreal<surrealdb::engine::any::Any>) {
     // Text that looks like a parameter: in strings and comments.
     let _ = umbriel::query!(db, "RETURN \"$price\" + '$tax'; /* $note */ # $other").await;
     // Parameters the query declares.
