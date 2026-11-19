@@ -893,7 +893,9 @@ mod timeout {
     }
 }
 
-mod select {
+/// Every clause rendered in order, projections and targets, the refused combinations, and
+/// filtering, grouping, ranges and fetching on the engine.
+mod clauses_and_results {
     use super::*;
 
     #[test]

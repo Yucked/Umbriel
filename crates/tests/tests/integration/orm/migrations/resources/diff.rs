@@ -12,7 +12,7 @@ use umbriel_tests::{
 };
 
 /// Diffs between schemas, as the statements of generated migrations, applied to a database.
-mod diff {
+mod schema_changes {
     use super::*;
     use pretty_assertions::assert_eq;
 
