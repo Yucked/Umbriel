@@ -1,6 +1,5 @@
 //! `umbriel-macros` `custom_type_inference`: the stored type each Rust field type is given, and
-//! that a value of every SurrealQL kind round-trips through a model field on the in-memory
-//! engine.
+//! that a value of every SurrealQL kind round-trips through a model field.
 
 use std::{collections::BTreeMap, ops::Bound, time::Duration};
 
@@ -84,7 +83,7 @@ fn value_kind(key: &str) -> ValueKind {
     }
 }
 
-async fn stored(db: &surrealdb::Surreal<surrealdb::engine::local::Db>, record: ValueKind) {
+async fn stored(db: &surrealdb::Surreal<surrealdb::engine::any::Any>, record: ValueKind) {
     let created = record.clone().create(db).await.expect("created");
     assert_eq!(created, record, "create returns the stored record");
     let found = ValueKind::get(db, &record.id)
@@ -136,14 +135,14 @@ DEFINE FIELD watchers ON TABLE value_kind TYPE array<record<user>>;"
 
 #[tokio::test]
 async fn every_field_round_trips() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     apply_definitions::<ValueKind>(&db).await;
     stored(&db, value_kind("alice")).await;
 }
 
 #[tokio::test]
 async fn edge_values_round_trip() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     apply_definitions::<ValueKind>(&db).await;
     stored(
         &db,
@@ -182,7 +181,7 @@ async fn edge_values_round_trip() {
 
 #[tokio::test]
 async fn each_union_variant_round_trips() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     apply_definitions::<ValueKind>(&db).await;
     stored(
         &db,
@@ -210,7 +209,7 @@ async fn each_union_variant_round_trips() {
 
 /// Each case sets `field` on a stored record: the first value fits its type, the second does not.
 async fn assert_accepts_then_refuses(field: &str, accepted: &str, refused: &str) {
-    let db = db().await;
+    let (db, _guard) = db().await;
     apply_definitions::<ValueKind>(&db).await;
     value_kind("alice").create(&db).await.expect("created");
     assert!(
@@ -247,7 +246,7 @@ async fn fixed_arrays_refuse_shorter_and_longer() {
 
 /// Runs `sql` with `$source` bound to the table `table`, as the SDK writes a `types::Table`.
 async fn with_table(
-    db: &surrealdb::Surreal<surrealdb::engine::local::Db>,
+    db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
     sql: &str,
     table: &str,
 ) -> surrealdb::Result<()> {
@@ -260,7 +259,7 @@ async fn with_table(
 
 #[tokio::test]
 async fn table_fields_refuse_other_tables() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     apply_definitions::<ValueKind>(&db).await;
     value_kind("alice").create(&db).await.expect("created");
     let sql = "UPDATE value_kind:alice SET source = $source;";
@@ -278,7 +277,7 @@ async fn table_fields_refuse_other_tables() {
 /// When this fails, SurrealDB accepts table values and `types::Table` can be inferred again.
 #[tokio::test]
 async fn a_plain_table_field_refuses_table_values() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     assert!(
         succeeds(
             &db,
@@ -306,7 +305,7 @@ async fn record_fields_refuse_other_tables() {
 
 #[tokio::test]
 async fn every_key_kind_round_trips_in_a_record_field() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     apply_definitions::<ValueKind>(&db).await;
     let mut object = types::Object::new();
     object.insert("region", "eu");
