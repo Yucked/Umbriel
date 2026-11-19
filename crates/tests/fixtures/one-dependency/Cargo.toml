@@ -11,4 +11,4 @@ publish = false
 [workspace]
 
 [dependencies]
-umbriel = { path = "../../../orm", default-features = false, features = ["kv-mem"] }
+umbriel = { path = "../../../orm", default-features = false, features = ["protocol-ws"] }

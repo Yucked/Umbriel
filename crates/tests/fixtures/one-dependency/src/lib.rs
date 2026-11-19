@@ -8,7 +8,6 @@ use umbriel::{
     All, Executor, Model, Raw, RecordId, Result, Runnable, Surreal, SurrealCrud, SurrealCrudNode,
     engine::any::{self, Any},
     model,
-    opt::Config,
     statements::{Returning, select},
 };
 
@@ -43,14 +42,14 @@ async fn store(db: &impl Executor) -> Result<Vec<User>> {
         .await
 }
 
-/// Connects to an in-memory database, then runs statements, model methods and a transaction,
-/// returning the users the transaction committed.
+/// Connects to the server at `url` (e.g. `ws://localhost:8000`), then runs statements, model
+/// methods and a transaction, returning the users the transaction committed.
 ///
 /// # Errors
 ///
 /// Any database error, classified as `umbriel::Error`.
-pub async fn run() -> Result<Vec<User>> {
-    let db: Surreal<Any> = any::connect(("mem://".to_owned(), Config::new())).await?;
+pub async fn run(url: &str) -> Result<Vec<User>> {
+    let db: Surreal<Any> = any::connect(url).await?;
     db.use_ns("app").use_db("app").await?;
 
     // A shared client is borrowed, never cloned.
