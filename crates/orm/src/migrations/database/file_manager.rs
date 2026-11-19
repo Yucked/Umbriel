@@ -241,21 +241,27 @@ impl FileManagerUni {
         self.0.get_oneway_migrations_sorted_asc(false)
     }
 
-    /// Generate migration directory if it does not exist
-    pub async fn generate_migrations(
+    /// Writes a one-way migration from the difference between the directory and the codebase,
+    /// compared in `comparison`'s namespace (see [`Comparison`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`MigratorDatabase::generate_migrations`].
+    pub async fn generate_migrations<C: Connection>(
         &self,
+        comparison: &Comparison<C>,
         migration_basename: &Basename,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
     ) -> MigrationResult<()> {
         MigratorDatabase::generate_migrations(
+            comparison,
             migration_basename,
             self,
             codebase_resources,
             prompter,
         )
-        .await?;
-        Ok(())
+        .await
     }
 
     /// Applies the directory's pending migrations to `db`, each in its own transaction (see
@@ -330,17 +336,23 @@ impl FileManagerBi {
             )
     }
 
-    /// Generate migration directory if it does not exist
-    pub async fn generate_migrations(
+    /// Writes a two-way migration from the difference between the directory and the codebase,
+    /// compared in `comparison`'s namespace (see [`Comparison`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`MigratorDatabase::generate_migrations`].
+    pub async fn generate_migrations<C: Connection>(
         &self,
+        comparison: &Comparison<C>,
         migration_basename: &Basename,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
     ) -> MigrationResult<()> {
-        let file_manager = self.0.clone();
         MigratorDatabase::generate_migrations(
+            comparison,
             migration_basename,
-            &file_manager,
+            &self.0,
             codebase_resources,
             prompter,
         )

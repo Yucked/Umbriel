@@ -10,7 +10,13 @@ use typed_builder::TypedBuilder;
 use surrealdb::engine::any::{Any, connect};
 
 use surrealdb::Surreal;
-use surrealdb::opt::auth::{Database, Root};
+use surrealdb::opt::auth::{Database, Namespace, Root};
+
+use crate::migrations::Comparison;
+
+/// The environment variable holding the comparison user's password, so it stays out of the
+/// process list and shell history.
+pub const COMPARISON_PASSWORD_VARIABLE: &str = "UMBRIEL_COMPARISON_PASS";
 
 /// Where the database is: the in-memory engine or a URL.
 #[derive(Clone, Debug)]
@@ -139,6 +145,31 @@ pub struct DatabaseConnection {
     #[arg(skip)]
     #[builder(default, setter(strip_option))]
     pub(crate) db_connection: Option<Surreal<Any>>,
+
+    /// The namespace `init`, `generate` and `reset` create their comparison databases in (see
+    /// [`Comparison`]). Required by those commands; no default.
+    #[arg(
+        global = true,
+        long,
+        help = "Namespace the generator creates its comparison databases in (init, generate, reset)"
+    )]
+    #[builder(default, setter(strip_option))]
+    pub(crate) comparison_ns: Option<String>,
+
+    /// The namespace-level user the generator signs in as, on the same URL. Its password is read
+    /// from `UMBRIEL_COMPARISON_PASS`.
+    #[arg(
+        global = true,
+        long,
+        help = "Namespace user for the comparison databases; password from UMBRIEL_COMPARISON_PASS"
+    )]
+    #[builder(default, setter(strip_option))]
+    pub(crate) comparison_user: Option<String>,
+
+    /// A comparison already connected, used instead of connecting with the arguments above.
+    #[arg(skip)]
+    #[builder(default, setter(strip_option))]
+    pub(crate) comparison: Option<Comparison<Any>>,
 }
 
 impl DatabaseConnection {
@@ -199,16 +230,40 @@ impl DatabaseConnection {
     pub fn db(&self) -> Option<&Surreal<Any>> {
         self.db_connection.as_ref()
     }
-}
 
-impl Default for DatabaseConnection {
-    fn default() -> Self {
-        DatabaseConnection::builder()
-            .db("test".into())
-            .ns("test".into())
-            .user("root".into())
-            .pass("root".into())
-            .url(UrlDb::Memory)
-            .build()
+    /// The comparison the generator uses: the one given to the builder, or a connection to the
+    /// URL signed in as `--comparison-user` (password from `UMBRIEL_COMPARISON_PASS`) in
+    /// `--comparison-ns`. The connection is made once and reused.
+    ///
+    /// # Panics
+    ///
+    /// If `--comparison-ns`, `--comparison-user` or `UMBRIEL_COMPARISON_PASS` is missing, or
+    /// connecting or signing in fails.
+    pub async fn comparison(&mut self) -> Comparison<Any> {
+        if let Some(comparison) = &self.comparison {
+            return comparison.clone();
+        }
+        let namespace = self.comparison_ns.clone().expect(
+            "--comparison-ns names the namespace the generator creates its comparison databases in",
+        );
+        let username = self
+            .comparison_user
+            .clone()
+            .expect("--comparison-user names the namespace user the generator signs in as");
+        let password = std::env::var(COMPARISON_PASSWORD_VARIABLE)
+            .unwrap_or_else(|_| panic!("{COMPARISON_PASSWORD_VARIABLE} holds the comparison user's password"));
+        let db = connect(self.url.to_string())
+            .await
+            .expect("Failed to connect for the comparison");
+        db.signin(Namespace {
+            namespace: namespace.clone(),
+            username,
+            password,
+        })
+        .await
+        .expect("Failed to sign in to the comparison namespace");
+        let comparison = Comparison::new(db, namespace);
+        self.comparison = Some(comparison.clone());
+        comparison
     }
 }

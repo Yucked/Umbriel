@@ -34,13 +34,19 @@ impl Generate {
         let file_manager = cli.file_manager();
         let migration_basename = &self.name;
         let mig_type = file_manager.detect_migration_type();
+        let comparison = cli.comparison().await;
 
         match mig_type {
             Ok(MigrationFlag::TwoWay) => {
                 log::info!("Generating two-way migration");
                 let generated = file_manager
                     .two_way()
-                    .generate_migrations(migration_basename, codebase_resources, prompter)
+                    .generate_migrations(
+                        &comparison,
+                        migration_basename,
+                        codebase_resources,
+                        prompter,
+                    )
                     .await;
                 if let Err(e) = generated {
                     log::error!("Failed to generate migrations: {e}");
@@ -50,7 +56,12 @@ impl Generate {
             Ok(MigrationFlag::OneWay) => {
                 let generated = file_manager
                     .one_way()
-                    .generate_migrations(migration_basename, codebase_resources, prompter)
+                    .generate_migrations(
+                        &comparison,
+                        migration_basename,
+                        codebase_resources,
+                        prompter,
+                    )
                     .await;
 
                 if let Err(e) = generated {

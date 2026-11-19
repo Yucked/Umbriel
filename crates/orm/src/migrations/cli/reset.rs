@@ -59,7 +59,9 @@ impl Reset {
         let file_manager = cli
             .file_manager()
             .set_flag(MigrationFlag::from(self.reversible));
+        let comparison = cli.comparison().await;
         let migration = MigratorDatabase::first_migration(
+            &comparison,
             &self.name,
             &file_manager,
             codebase_resources,

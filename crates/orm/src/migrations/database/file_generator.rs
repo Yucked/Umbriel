@@ -1,67 +1,215 @@
-use surrealdb::{
-    Surreal,
-    engine::local::{Db, Mem},
-    opt::{
-        Config,
-        capabilities::{Capabilities, ExperimentalFeature},
-    },
-};
+use std::collections::BTreeSet;
 
-use crate::{DbResources, Raw, Runnable};
+use surrealdb::{Connection, Surreal};
+
+use crate::{
+    DbResources, Raw, Runnable,
+    statements::{define_database, remove_database},
+};
 
 use crate::migrations::{resources::SchemaDiff, *};
 
-/// The namespace and database of the generator's private in-memory databases.
-const SCRATCH: &str = "migrations";
+/// The prefix of every comparison database's name, so the leftovers of an interrupted generation
+/// can be found.
+pub const COMPARISON_PREFIX: &str = "umbriel_cmp_";
 
-/// The two in-memory databases a migration is generated from: `left` replays the migration
-/// files, `right` holds the codebase's schema.
+/// Where migrations are generated: a connection, and a namespace set aside for the generator.
+///
+/// Each generation creates two databases in the namespace, `umbriel_cmp_<uuid>_left` and
+/// `umbriel_cmp_<uuid>_right`. It replays the migration directory into the first and applies the
+/// codebase's definitions to the second, then removes both by name, whether it succeeded or
+/// failed. It reads nothing else in the namespace except `INFO FOR NS`, to reject namespace-level
+/// definitions the comparison added. An interrupted generation leaves its two databases behind,
+/// and nothing removes them automatically.
+///
+/// The connection must be signed in as a user that may define and remove databases in the
+/// namespace: a namespace owner or editor, or a root user. It is cloned for each database, and a
+/// clone's session is its own, so the connection's own selection never changes. The server must
+/// allow every resource kind the codebase defines, such as the experimental `files` and
+/// `surrealism` features for buckets and modules. Waits are bounded only by the connection's own
+/// configuration.
 #[derive(Debug, Clone)]
-pub struct ComparisonDatabase {
-    left: LeftDatabase,
-    right: RightDatabase,
+pub struct Comparison<C: Connection> {
+    db: Surreal<C>,
+    namespace: String,
 }
 
-impl ComparisonDatabase {
-    /// Creates both databases.
-    pub async fn init() -> MigrationResult<Self> {
-        Ok(Self {
-            left: LeftDatabase(MigratorDatabase::init().await?),
-            right: RightDatabase(MigratorDatabase::init().await?),
+impl<C: Connection> Comparison<C> {
+    /// Compares in `namespace` on `db`.
+    pub fn new(db: Surreal<C>, namespace: impl Into<String>) -> Self {
+        Self {
+            db,
+            namespace: namespace.into(),
+        }
+    }
+
+    /// The namespace the comparison databases are created in.
+    pub fn namespace(&self) -> &str {
+        &self.namespace
+    }
+}
+
+/// The two databases a migration is generated from: `left` replays the migration files, `right`
+/// holds the codebase's schema.
+#[derive(Debug, Clone)]
+pub struct ComparisonDatabase<C: Connection> {
+    left: LeftDatabase<C>,
+    right: RightDatabase<C>,
+    /// The namespace-level definitions before the comparison ran.
+    namespace_before: BTreeSet<(String, String)>,
+}
+
+impl<C: Connection> ComparisonDatabase<C> {
+    /// Creates both databases in `comparison`'s namespace. When the second cannot be created, the
+    /// first is removed.
+    ///
+    /// # Errors
+    ///
+    /// The database's error when a database cannot be created, or
+    /// [`MigrationError::ComparisonNotRemoved`] when one was created but cannot be removed again.
+    pub async fn init(comparison: &Comparison<C>) -> MigrationResult<Self> {
+        let run = uuid::Uuid::new_v4().simple();
+        let left =
+            MigratorDatabase::create(comparison, format!("{COMPARISON_PREFIX}{run}_left")).await?;
+        let created = async {
+            let right =
+                MigratorDatabase::create(comparison, format!("{COMPARISON_PREFIX}{run}_right"))
+                    .await?;
+            Ok((right, Schema::namespace_definitions(left.db()).await?))
+        }
+        .await;
+        match created {
+            Ok((right, namespace_before)) => Ok(Self {
+                left: LeftDatabase(left),
+                right: RightDatabase(right),
+                namespace_before,
+            }),
+            Err(error) => {
+                let namespace = left.namespace.clone();
+                let name = left.name.clone();
+                Err(match left.remove().await {
+                    Ok(()) => error,
+                    Err(cleanup) => MigrationError::ComparisonNotRemoved {
+                        namespace,
+                        databases: vec![name],
+                        cleanup: Box::new(cleanup),
+                        generation: Some(Box::new(error)),
+                    },
+                })
+            }
+        }
+    }
+
+    /// Removes both databases, by name, and returns `outcome` unless a removal failed. When one
+    /// did, the error names the databases left behind and keeps `outcome`'s own failure as its
+    /// cause.
+    async fn finish<T>(self, outcome: MigrationResult<T>) -> MigrationResult<T> {
+        let namespace = self.left.namespace.clone();
+        let mut left_behind = Vec::new();
+        let mut cleanup = None;
+        for database in [self.left.0, self.right.0] {
+            let name = database.name.clone();
+            if let Err(error) = database.remove().await {
+                left_behind.push(name);
+                cleanup.get_or_insert(error);
+            }
+        }
+        let Some(cleanup) = cleanup else {
+            return outcome;
+        };
+        Err(MigrationError::ComparisonNotRemoved {
+            namespace,
+            databases: left_behind,
+            cleanup: Box::new(cleanup),
+            generation: outcome.err().map(Box::new),
         })
     }
+
+    /// The schema the migration directory produces, or an empty one unless `replay_directory`,
+    /// and the codebase's. Namespace-level definitions the comparison added, which migrations do
+    /// not manage, are rejected.
+    async fn schemas(
+        &self,
+        file_manager: &MigrationConfig,
+        codebase_resources: &impl DbResources,
+        replay_directory: bool,
+    ) -> MigrationResult<(Schema, Schema)> {
+        let migration_flag = file_manager.migration_flag_checked()?;
+        if replay_directory {
+            match migration_flag {
+                MigrationFlag::TwoWay => {
+                    self.left
+                        .run_twoway_up_migrations(file_manager, true)
+                        .await?;
+                }
+                MigrationFlag::OneWay => {
+                    self.left.run_oneway_migrations(file_manager, true).await?;
+                }
+            }
+        }
+        self.right
+            .run_codebase_schema_queries(codebase_resources, migration_flag)
+            .await?;
+        let namespace_after = Schema::namespace_definitions(self.left.db()).await?;
+        Schema::reject_added_namespace_definitions(&self.namespace_before, &namespace_after)?;
+        Ok((self.left.schema().await?, self.right.schema().await?))
+    }
 }
 
-/// A private in-memory database of the generator.
+/// A comparison database the generator created.
 #[derive(Debug, Clone)]
-pub struct MigratorDatabase {
-    /// The connection to the database.
-    pub db: Surreal<Db>,
+pub struct MigratorDatabase<C: Connection> {
+    db: Surreal<C>,
+    namespace: String,
+    name: String,
 }
 
-impl MigratorDatabase {
-    /// Creates an empty in-memory database. It allows the experimental `files` and `surrealism`
-    /// features, which `DEFINE BUCKET` and `DEFINE MODULE` need: it only ever holds the
-    /// codebase's definitions or replays the migration files, and the database those are applied
-    /// to must allow the features anyway.
-    pub async fn init() -> MigrationResult<Self> {
-        let capabilities = Capabilities::default()
-            .with_experimental_feature_allowed(ExperimentalFeature::Files)
-            .with_experimental_feature_allowed(ExperimentalFeature::Surrealism);
-        let db = Surreal::new::<Mem>(Config::default().capabilities(capabilities)).await?;
-        db.use_ns(SCRATCH).use_db(SCRATCH).await?;
-        Ok(Self { db })
+impl<C: Connection> MigratorDatabase<C> {
+    /// Creates the database `name` in `comparison`'s namespace, on a clone of its connection
+    /// that selects it. Without `IF NOT EXISTS` or `OVERWRITE`, `DEFINE DATABASE` refuses a name
+    /// that exists, so the generator never takes over a database it didn't create.
+    async fn create(comparison: &Comparison<C>, name: String) -> MigrationResult<Self> {
+        let db = comparison.db.clone();
+        db.use_ns(comparison.namespace.as_str()).await?;
+        define_database(name.as_str()).run(&db).await?;
+        let database = Self {
+            db,
+            namespace: comparison.namespace.clone(),
+            name,
+        };
+        if let Err(error) = database.db.use_db(database.name.as_str()).await {
+            let (namespace, name) = (database.namespace.clone(), database.name.clone());
+            return Err(match database.remove().await {
+                Ok(()) => error.into(),
+                Err(cleanup) => MigrationError::ComparisonNotRemoved {
+                    namespace,
+                    databases: vec![name],
+                    cleanup: Box::new(cleanup),
+                    generation: Some(Box::new(error.into())),
+                },
+            });
+        }
+        Ok(database)
+    }
+
+    /// Removes the database, by name.
+    async fn remove(self) -> MigrationResult<()> {
+        remove_database(self.name.as_str()).run(&self.db).await?;
+        Ok(())
     }
 
     /// The connection to the database.
-    pub fn db(&self) -> &Surreal<Db> {
+    pub fn db(&self) -> &Surreal<C> {
         &self.db
     }
 
-    /// The schema the database holds. Namespace-level definitions, which migrations do not
-    /// manage, are rejected rather than left out.
+    /// The database's name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The schema the database holds.
     pub async fn schema(&self) -> MigrationResult<Schema> {
-        Schema::reject_namespace_definitions(&self.db).await?;
         Schema::inspect(&self.db).await
     }
 
@@ -73,14 +221,22 @@ impl MigratorDatabase {
     }
 
     /// Writes a migration holding the difference between the schema the migration files
-    /// produce and the codebase's schema.
+    /// produce and the codebase's schema, compared in `comparison`'s namespace.
+    ///
+    /// # Errors
+    ///
+    /// Any error of creating the comparison databases, replaying the directory, applying the
+    /// codebase's definitions, planning or writing the migration, or
+    /// [`MigrationError::ComparisonNotRemoved`].
     pub async fn generate_migrations(
+        comparison: &Comparison<C>,
         migration_basename: &Basename,
         file_manager: &MigrationConfig,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
     ) -> MigrationResult<()> {
-        let (left, right) = Self::schemas(file_manager, &codebase_resources, true).await?;
+        let (left, right) =
+            Self::schemas(comparison, file_manager, &codebase_resources, true).await?;
         generate_from_schemas(
             &left,
             &right,
@@ -92,15 +248,21 @@ impl MigratorDatabase {
     }
 
     /// The first migration for the codebase's schema, as a reset writes it into an emptied
-    /// migration directory. Nothing is written, so a reset can validate its migration before it
-    /// deletes the existing ones.
+    /// migration directory, compared in `comparison`'s namespace. Nothing is written, so a reset
+    /// can validate its migration before it deletes the existing ones.
+    ///
+    /// # Errors
+    ///
+    /// As [`generate_migrations`](Self::generate_migrations), except writing.
     pub async fn first_migration(
+        comparison: &Comparison<C>,
         migration_basename: &Basename,
         file_manager: &MigrationConfig,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
     ) -> MigrationResult<MigrationFile> {
-        let (left, right) = Self::schemas(file_manager, &codebase_resources, false).await?;
+        let (left, right) =
+            Self::schemas(comparison, file_manager, &codebase_resources, false).await?;
         let (migration, _) = plan_migration(
             &left,
             &right,
@@ -113,27 +275,19 @@ impl MigratorDatabase {
         Ok(migration)
     }
 
-    /// The schema the migration directory produces, or an empty one unless `replay_directory`,
-    /// and the codebase's, each read from a scratch database of its own.
+    /// The schemas compared in a pair of comparison databases, which are removed afterwards
+    /// whether the comparison succeeded or failed.
     async fn schemas(
+        comparison: &Comparison<C>,
         file_manager: &MigrationConfig,
         codebase_resources: &impl DbResources,
         replay_directory: bool,
     ) -> MigrationResult<(Schema, Schema)> {
-        let migration_flag = file_manager.migration_flag_checked()?;
-        let ComparisonDatabase { left, right } = ComparisonDatabase::init().await?;
-        if replay_directory {
-            match migration_flag {
-                MigrationFlag::TwoWay => left.run_twoway_up_migrations(file_manager, true).await?,
-                MigrationFlag::OneWay => {
-                    left.run_oneway_migrations(file_manager, true).await?;
-                }
-            }
-        }
-        right
-            .run_codebase_schema_queries(codebase_resources, migration_flag)
-            .await?;
-        Ok((left.schema().await?, right.schema().await?))
+        let databases = ComparisonDatabase::init(comparison).await?;
+        let schemas = databases
+            .schemas(file_manager, codebase_resources, replay_directory)
+            .await;
+        databases.finish(schemas).await
     }
 }
 

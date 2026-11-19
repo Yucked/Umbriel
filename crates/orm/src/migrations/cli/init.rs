@@ -61,10 +61,11 @@ impl Init {
             }
         };
 
+        let comparison = cli.comparison().await;
         if self.reversible {
             let generated = file_manager
                 .two_way()
-                .generate_migrations(&migration_name, codebase_resources, prompter)
+                .generate_migrations(&comparison, &migration_name, codebase_resources, prompter)
                 .await;
             if let Err(e) = generated {
                 log::error!("Failed to generate migrations: {e}");
@@ -73,7 +74,7 @@ impl Init {
         } else {
             let generated = file_manager
                 .one_way()
-                .generate_migrations(&migration_name, codebase_resources, prompter)
+                .generate_migrations(&comparison, &migration_name, codebase_resources, prompter)
                 .await;
 
             if let Err(e) = generated {

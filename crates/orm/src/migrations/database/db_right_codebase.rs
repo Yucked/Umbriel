@@ -1,17 +1,19 @@
 use std::ops::Deref;
 
+use surrealdb::Connection;
+
 use crate::{DbResources, Raw, Runnable, statements::begin_transaction};
 
 use crate::migrations::*;
 
-/// The generator's database holding the codebase's schema.
+/// The comparison database holding the codebase's schema, the right side of a diff.
 #[derive(Debug, Clone)]
-pub struct RightDatabase(
-    /// The scratch database.
-    pub MigratorDatabase,
+pub struct RightDatabase<C: Connection>(
+    /// The comparison database.
+    pub MigratorDatabase<C>,
 );
 
-impl RightDatabase {
+impl<C: Connection> RightDatabase<C> {
     /// Applies the migration history table and the codebase's definitions in one transaction.
     pub async fn run_codebase_schema_queries(
         &self,
@@ -52,8 +54,8 @@ impl RightDatabase {
     }
 }
 
-impl Deref for RightDatabase {
-    type Target = MigratorDatabase;
+impl<C: Connection> Deref for RightDatabase<C> {
+    type Target = MigratorDatabase<C>;
 
     fn deref(&self) -> &Self::Target {
         &self.0

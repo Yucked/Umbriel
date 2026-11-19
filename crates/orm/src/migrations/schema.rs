@@ -6,7 +6,10 @@
 //! schema are removed (see `ResourceKind::normalise`). The plain `INFO FOR …` output supplies each
 //! definition's `DEFINE` statement, which is used only to write migrations.
 
-use std::{collections::BTreeMap, fmt};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
 
 use surrealdb::{
     IndexedResults,
@@ -307,20 +310,48 @@ impl Schema {
         Ok(schema)
     }
 
-    /// Rejects definitions at the namespace level, which migrations do not manage. Only the
-    /// generator's own in-memory databases run it: `INFO FOR NS` needs a root or namespace user,
-    /// which [`Schema::inspect`] must not require.
-    pub(crate) async fn reject_namespace_definitions(db: &impl Executor) -> MigrationResult<()> {
+    /// The namespace-level definitions `INFO FOR NS` lists, as `(kind, name)` pairs. Migrations
+    /// do not manage them: the generator reads them before and after a comparison and rejects any
+    /// the migrations or the codebase added. Only the generator reads them: `INFO FOR NS` needs a
+    /// root or namespace user, which [`Schema::inspect`] must not require.
+    pub(crate) async fn namespace_definitions(
+        db: &impl Executor,
+    ) -> MigrationResult<BTreeSet<(String, String)>> {
         let mut info = info_for().namespace().structure().run(db).await?;
         let info = NamespaceInfo::<Structures>::from_info(take_value(&mut info, 0)?)?;
+        let named = |kind: &str, entry: Option<&str>| (kind.to_owned(), entry.unwrap_or("?").to_owned());
+        let mut definitions = BTreeSet::new();
         // `databases` are the namespace's databases themselves, not definitions inside one.
-        Self::default().collect(
-            "namespace",
-            None,
-            [],
-            [("accesses", info.accesses), ("users", info.users)],
-            info.other,
-        )
+        for (kind, entries) in [("accesses", info.accesses), ("users", info.users)] {
+            definitions.extend(entries.iter().map(|entry| named(kind, name_of(entry))));
+        }
+        for (kind, value) in info.other {
+            let Value::Array(entries) = value else {
+                return Err(unexpected_shape("namespace", &kind));
+            };
+            definitions.extend(entries.iter().map(|entry| match entry {
+                Value::Object(entry) => named(&kind, name_of(entry)),
+                _ => named(&kind, None),
+            }));
+        }
+        Ok(definitions)
+    }
+
+    /// Rejects the namespace-level definitions in `after` that `before` does not hold, naming
+    /// those of the first kind found.
+    pub(crate) fn reject_added_namespace_definitions(
+        before: &BTreeSet<(String, String)>,
+        after: &BTreeSet<(String, String)>,
+    ) -> MigrationResult<()> {
+        let mut added = after.difference(before).peekable();
+        let Some((kind, _)) = added.peek() else {
+            return Ok(());
+        };
+        let kind = kind.clone();
+        let names = added
+            .filter(|(added_kind, _)| *added_kind == kind)
+            .map(|(_, name)| Some(name.as_str()));
+        Err(unsupported("namespace", &kind, names))
     }
 
     /// Adds the definitions one `INFO` level lists. Each `managed` kind comes with its entries

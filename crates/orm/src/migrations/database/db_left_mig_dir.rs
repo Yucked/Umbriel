@@ -1,26 +1,26 @@
 use std::ops::Deref;
 
-use surrealdb::{Connection, Surreal};
+use surrealdb::Connection;
 
 use super::db_runner::run_transaction;
 use crate::migrations::*;
 
-/// The scratch database the migration directory is replayed into, the left side of a diff.
+/// The comparison database the migration directory is replayed into, the left side of a diff.
 #[derive(Debug, Clone)]
-pub struct LeftDatabase(
-    /// The scratch database.
-    pub MigratorDatabase,
+pub struct LeftDatabase<C: Connection>(
+    /// The comparison database.
+    pub MigratorDatabase<C>,
 );
 
-impl Deref for LeftDatabase {
-    type Target = MigratorDatabase;
+impl<C: Connection> Deref for LeftDatabase<C> {
+    type Target = MigratorDatabase<C>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl LeftDatabase {
+impl<C: Connection> LeftDatabase<C> {
     /// Applies every two-way migration's up file in order, each in its own transaction.
     pub async fn run_twoway_up_migrations(
         &self,
@@ -29,18 +29,6 @@ impl LeftDatabase {
     ) -> MigrationResult<()> {
         for migration in file_manager.get_two_way_migrations_sorted_asc(create_migration_table)? {
             run_transaction(self.db(), migration.up.content.to_string()).await?;
-        }
-        Ok(())
-    }
-
-    /// Applies `migrations` to `db` in order, each in its own transaction.
-    pub async fn run_local_dir_oneway_content_migrations<C: Connection>(
-        db: &Surreal<C>,
-        migrations: Vec<MigrationFileOneWay>,
-    ) -> MigrationResult<()> {
-        for migration in migrations {
-            log::info!("Running migration: {}", migration.name());
-            run_transaction(db, migration.content().to_string()).await?;
         }
         Ok(())
     }

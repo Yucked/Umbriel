@@ -418,6 +418,23 @@ There are {one_way_filecount} up only files and {two_way_filecount} up and down 
     /// The database reported an error.
     #[error(transparent)]
     DbError(#[from] surrealdb::Error),
+
+    /// The generator could not remove comparison databases it created (see
+    /// [`Comparison`](crate::migrations::Comparison)). Remove them by name.
+    #[error(
+        "The comparison databases {databases:?} in namespace `{namespace}` were not removed: {cleanup}"
+    )]
+    ComparisonNotRemoved {
+        /// The comparison namespace.
+        namespace: String,
+        /// The databases left behind.
+        databases: Vec<String>,
+        /// Why the removal failed.
+        cleanup: Box<MigrationError>,
+        /// The generation's own failure, when it failed too.
+        #[source]
+        generation: Option<Box<MigrationError>>,
+    },
 }
 
 /// The result type of migrations.

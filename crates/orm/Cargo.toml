@@ -38,9 +38,8 @@ parse = ["surrealdb/parse"]
 test-support = []
 
 # Schema migrations and their CLI (`umbriel::migrations`). The generator compares schemas in
-# in-memory databases, so it needs the memory engine.
+# databases it creates on the caller's server (`Comparison`); no engine is enabled here.
 migrations = [
-  "kv-mem",
   "dep:nom",
   "dep:sha2",
   "dep:inquire",
