@@ -69,20 +69,8 @@ error[E0277]: the trait bound `u64: From<__6Planet4dataField<u32>>` is not satis
    |          required by a bound introduced by this call
    |
    = help: `u64` implements trait `From<T>`:
-             From<&rend::u64_be>
-             From<&rend::u64_le>
-             From<&rend::unaligned::u64_ube>
-             From<&rend::unaligned::u64_ule>
-             From<aws_lc_rs::endian::BigEndian<u64>>
-             From<aws_lc_rs::endian::LittleEndian<u64>>
              From<bool>
              From<char>
-             From<deranged::RangedU64<MIN, MAX>>
-             From<diskann_wide::bitmask::BitMask<64>>
-             From<rend::u64_be>
-             From<rend::u64_le>
-             From<rend::unaligned::u64_ube>
-             From<rend::unaligned::u64_ule>
              From<std::ascii::Char>
              From<u16>
              From<u32>

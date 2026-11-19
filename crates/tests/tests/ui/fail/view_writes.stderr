@@ -73,9 +73,8 @@ note: the trait `Writable` must be implemented
    | pub trait Writable: Model {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: items from traits can only be used if the trait is implemented and in scope
-   = note: the following traits define an item `patch`, perhaps you need to implement one of them:
+   = note: the following trait defines an item `patch`, perhaps you need to implement it:
            candidate #1: `SurrealCrud`
-           candidate #2: `surrealdb_core::rpc::protocol::RpcProtocol`
 
 error[E0599]: `SaleCopy` cannot be written to
   --> tests/ui/fail/view_writes.rs:34:23
@@ -103,14 +102,8 @@ note: the trait `Writable` must be implemented
    = note: the following traits define an item `merge`, perhaps you need to implement one of them:
            candidate #1: `SurrealCrud`
            candidate #2: `itertools::Itertools`
-           candidate #3: `itertools::Itertools`
-           candidate #4: `itertools::Itertools`
-           candidate #5: `itertools::merge_join::OrderingOrBool`
-           candidate #6: `itertools::merge_join::OrderingOrBool`
-           candidate #7: `itertools::merge_join::OrderingOrBool`
-           candidate #8: `rstar::envelope::Envelope`
-           candidate #9: `surrealdb_core::exec::function::aggregate::Accumulator`
-           candidate #10: `surrealdb_core::rpc::protocol::RpcProtocol`
+           candidate #3: `itertools::merge_join::OrderingOrBool`
+           candidate #4: `rstar::envelope::Envelope`
 
 error[E0599]: `SaleCopy` cannot be written to
   --> tests/ui/fail/view_writes.rs:35:23
