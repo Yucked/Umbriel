@@ -1,7 +1,7 @@
 //! SurrealML calls (`orm/src/functions/ml.rs`, `MlVersion` in `orm/src/query/function.rs`):
-//! rendering, version parsing, path checks, and SurrealDB refusing the call without its `ml`
-//! feature. Running a model is not covered: it needs SurrealDB's `ml` feature and a `.surml`
-//! fixture, neither of which this crate has.
+//! rendering, version parsing, path checks, and SurrealDB refusing a call to a model the database
+//! doesn't hold. Running a model is not covered: it needs a `.surml` fixture, which this crate
+//! doesn't have.
 
 use umbriel::{Field, MlVersion, Render, functions::ml, kinds};
 use umbriel_tests::*;
@@ -56,10 +56,9 @@ fn bad_paths_are_render_errors() {
 }
 
 #[tokio::test]
-async fn calls_without_the_feature_are_refused() {
-    let db = db().await;
+async fn a_call_to_an_undefined_model_is_refused() {
+    let (db, _guard) = db().await;
     let call = ml::call::<kinds::Float, _>("insurance::prediction", version(), [18]);
     let error = call_failure(&db, &call).await;
     assert!(!error.is_empty());
-    println!("SurrealDB refuses `ml::` without its `ml` feature: {error}");
 }

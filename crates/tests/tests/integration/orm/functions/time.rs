@@ -141,7 +141,7 @@ fn method_rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let at = datetime();
     holds_all!(
         &db,
@@ -228,7 +228,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(&db, &time::set_month!(datetime(), 13)).await;
     assert!(error.contains("month 13"), "{error}");
 }
@@ -236,7 +236,7 @@ async fn runtime_type_failures() {
 /// Every mapped method runs on a datetime and evaluates like its function form.
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let at = datetime();
     let d = || DatetimeLike::from(datetime());
     let hour = || Duration::from_secs(3600);

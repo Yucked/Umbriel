@@ -171,7 +171,7 @@ fn method_rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
@@ -233,7 +233,7 @@ async fn results() {
 
 #[tokio::test]
 async fn string_receivers_dispatch_to_string_checks() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
@@ -263,7 +263,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(&db, &type_::int!("five")).await;
     assert!(
         error.contains("five") || error.contains("type::int"),
@@ -276,7 +276,7 @@ async fn runtime_type_failures() {
 /// the `string::is_*` functions (`string_receivers_dispatch_to_string_checks`).
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let v = |value: ValueLike| value;
     let one = || ValueLike::from(1);
     let set = || Field::raw("(<set> [2, 1])");

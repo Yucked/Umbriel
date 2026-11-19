@@ -55,7 +55,7 @@ fn rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
@@ -88,7 +88,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = failure(&db, "RETURN object::keys([1]);").await;
     assert!(error.contains("object::keys"), "{error}");
 }
@@ -96,7 +96,7 @@ async fn runtime_type_failures() {
 /// Every mapped method runs on an object and evaluates like its function form.
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let o = || ObjectLike::from(alice());
     let other = || BTreeMap::from([("age".to_owned(), 31)]);
     same_all!(

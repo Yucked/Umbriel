@@ -28,7 +28,7 @@ fn rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
@@ -66,7 +66,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = failure(&db, "RETURN record::tb('user');").await;
     assert!(error.contains("record::tb"), "{error}");
 }
@@ -74,7 +74,7 @@ async fn runtime_type_failures() {
 /// Every mapped method runs on a record id and evaluates like its function form.
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     assert!(succeeds(&db, "CREATE user:alice;").await);
     let r = || RecordIdLike::from(User::id("alice"));
     same_all!(

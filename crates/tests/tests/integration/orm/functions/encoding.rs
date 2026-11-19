@@ -1,9 +1,9 @@
-//! `bytes::*` and `encoding::*` (`orm/src/functions/{bytes, encoding}.rs`): every function
-//! rendered, and the results SurrealDB computes.
+//! `encoding::*` (`orm/src/functions/encoding.rs`): every function rendered, and the results
+//! SurrealDB computes.
 
 use umbriel::{
-    BytesLike, Field, Param, Render,
-    functions::{bytes, encoding, type_},
+    Field, Param, Render,
+    functions::{encoding, type_},
 };
 use umbriel_tests::*;
 
@@ -11,8 +11,6 @@ use umbriel_tests::*;
 fn rendering() {
     let payload = Field::new("payload");
     calls!(
-        (bytes::len!(payload.clone()), "bytes::len(payload)"),
-        (BytesLike::from(payload.clone()).len(), "payload.len()"),
         (
             encoding::base64::decode!("aGk="),
             "encoding::base64::decode('aGk=')"
@@ -46,13 +44,10 @@ fn rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
-            (bytes::len!(vec![1u8, 2, 3]), "3"),
-            (bytes::len!(Vec::<u8>::new()), "0"),
-            (BytesLike::from(vec![1u8]).len(), "1"),
             (
                 encoding::base64::encode!(type_::bytes!("hi"), true),
                 "'aGk='"
@@ -91,21 +86,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
-    let error = failure(&db, "RETURN bytes::len('text');").await;
-    assert!(error.contains("bytes::len"), "{error}");
+    let (db, _guard) = db().await;
     let error = call_failure(&db, &encoding::base64::decode!("not base64!")).await;
     assert!(!error.is_empty());
-}
-
-/// The mapped method runs on bytes and evaluates like its function form.
-#[tokio::test]
-async fn methods_run() {
-    let db = db().await;
-    same(
-        &db,
-        &BytesLike::from(vec![1u8, 2, 3]).len(),
-        &bytes::len!(vec![1u8, 2, 3]),
-    )
-    .await;
 }

@@ -52,7 +52,7 @@ fn rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
@@ -80,7 +80,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = failure(&db, "RETURN parse::url::host(1);").await;
     assert!(error.contains("parse::url::host"), "{error}");
 }

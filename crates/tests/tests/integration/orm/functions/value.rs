@@ -43,7 +43,7 @@ fn rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let before = BTreeMap::from([("name".to_owned(), "Alice")]);
     let after = BTreeMap::from([("name".to_owned(), "Bob")]);
     holds_all!(
@@ -79,7 +79,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(
         &db,
         &value::expect!(0, closure(["n"], |[n]| n.gt(1)), "too low"),
@@ -91,7 +91,7 @@ async fn runtime_type_failures() {
 /// Every mapped method runs on a value and evaluates like its function form.
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let before = || BTreeMap::from([("name".to_owned(), "Alice")]);
     let after = || BTreeMap::from([("name".to_owned(), "Bob")]);
     let triple = || closure(["n"], |[n]| n.multiply(3));

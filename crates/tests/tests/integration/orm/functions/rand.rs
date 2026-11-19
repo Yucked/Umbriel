@@ -47,7 +47,7 @@ fn rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     is_each!(
         &db,
         [
@@ -95,7 +95,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(&db, &rand_fn::int!(10, 1)).await;
     assert!(error.contains("rand::int"), "{error}");
 }

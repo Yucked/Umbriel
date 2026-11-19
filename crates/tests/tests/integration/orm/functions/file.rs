@@ -80,19 +80,19 @@ async fn run<T: SurrealValue, K: KindOf>(
 }
 
 /// A database with the `memory` bucket `avatars`.
-async fn avatars() -> Surreal<Any> {
-    let db = experimental_db().await;
+async fn avatars() -> (Surreal<Any>, TestDb) {
+    let (db, guard) = db().await;
     define_bucket("avatars")
         .backend("memory")
         .run(&db)
         .await
         .expect("bucket defined");
-    db
+    (db, guard)
 }
 
 #[tokio::test]
 async fn a_file_is_written_read_copied_renamed_listed_and_deleted() {
-    let db = avatars().await;
+    let (db, _guard) = avatars().await;
     assert_eq!(run::<bool, _>(&db, file::exists!(alice())).await, Some(false));
     let missing = run::<Value, _>(&db, file::get!(alice())).await;
     assert!(matches!(missing, None | Some(Value::None)), "{missing:?}");
@@ -146,7 +146,7 @@ async fn contents(db: &Surreal<Any>, pointer: FileLike) -> Vec<u8> {
 /// changes nothing.
 #[tokio::test]
 async fn the_if_not_exists_forms_leave_an_existing_target_unchanged() {
-    let db = avatars().await;
+    let (db, _guard) = avatars().await;
     run::<Value, _>(&db, file::put!(alice(), "Alice")).await;
     run::<Value, _>(&db, file::put!(bob(), "Bob")).await;
     for no_op in [
@@ -163,7 +163,7 @@ async fn the_if_not_exists_forms_leave_an_existing_target_unchanged() {
 
 #[tokio::test]
 async fn the_if_not_exists_forms_act_on_a_missing_target() {
-    let db = avatars().await;
+    let (db, _guard) = avatars().await;
     run::<Value, _>(&db, file::put_if_not_exists!(alice(), "Alice")).await;
     assert_eq!(contents(&db, alice()).await, b"Alice");
     run::<Value, _>(&db, file::copy_if_not_exists!(alice(), "bob.txt")).await;
@@ -176,7 +176,7 @@ async fn the_if_not_exists_forms_act_on_a_missing_target() {
 
 #[tokio::test]
 async fn a_read_only_bucket_refuses_writes() {
-    let db = experimental_db().await;
+    let (db, _guard) = db().await;
     define_bucket("avatars")
         .backend("memory")
         .readonly()
@@ -187,9 +187,10 @@ async fn a_read_only_bucket_refuses_writes() {
     assert!(result.is_err(), "{result:?}");
 }
 
+/// A server without the experimental `files` feature refuses file calls.
 #[tokio::test]
 async fn files_need_the_files_feature() {
-    let db = db().await;
+    let (db, _guard) = restricted_db().await;
     let error = call_failure(&db, &file::exists!(alice())).await;
     assert!(error.to_lowercase().contains("files"), "{error}");
 }

@@ -1,6 +1,5 @@
-//! `eval::*` (`orm/src/functions/eval.rs`): rendering, and the embedded engine refusing them,
-//! since the SDK's `Capabilities` cannot allow evaluated queries in 3.3.4. Running them needs a
-//! server started with `--allow-eval-query`.
+//! `eval::*` (`orm/src/functions/eval.rs`): rendering, and a server refusing them unless started
+//! with `--allow-eval-query`. Running them is covered in `server.rs` (`eval_surql_runs`).
 
 use std::collections::BTreeMap;
 
@@ -26,8 +25,8 @@ fn rendering() {
 }
 
 #[tokio::test]
-async fn eval_is_refused_on_the_embedded_engine() {
-    let db = db().await;
+async fn eval_is_refused_without_eval_queries_allowed() {
+    let (db, _guard) = restricted_db().await;
     let error = call_failure(&db, &eval::surql!("RETURN 1")).await;
     assert!(error.contains("eval::surql"), "{error}");
 }

@@ -98,7 +98,7 @@ fn method_rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
@@ -164,7 +164,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(
         &db,
         &math::abs!(NumberLike::from(Field::from_expr(ValueLike::from("five")))),
@@ -176,7 +176,7 @@ async fn runtime_type_failures() {
 /// Every mapped method runs on a number and evaluates like its function form.
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let x = || NumberLike::from(0.5);
     same_all!(
         &db,

@@ -62,7 +62,7 @@ fn rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let cases = [
         (vector::add!(vec![1, 2], vec![3, 4]), "[4, 6]"),
         (vector::cross!(vec![1, 0, 0], vec![0, 1, 0]), "[0, 0, 1]"),

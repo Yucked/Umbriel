@@ -66,7 +66,7 @@ fn method_rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let london = geo::Point::new(-0.118092, 51.509865);
     let paris = geo::Point::new(2.352222, 48.856614);
     for function in [
@@ -99,7 +99,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = failure(&db, "RETURN geo::area('not a geometry');").await;
     assert!(error.contains("geo::area"), "{error}");
     // `geo::hash::decode` takes any value and gives `NONE` for one that is not a geohash string.
@@ -114,7 +114,7 @@ async fn runtime_type_failures() {
 /// Every mapped method runs on a geometry and evaluates like its function form.
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let london = geo::Point::new(-0.118092, 51.509865);
     let paris = geo::Point::new(2.352222, 48.856614);
     let g = || GeometryLike::from(square());

@@ -23,7 +23,7 @@ fn rendering() {
 }
 
 /// The response object of `api::invoke(path)`.
-async fn invoke(db: &surrealdb::Surreal<surrealdb::engine::local::Db>, path: &str) -> Object {
+async fn invoke(db: &surrealdb::Surreal<surrealdb::engine::any::Any>, path: &str) -> Object {
     bound::<Object, _>(db, &api::invoke!(path))
         .await
         .expect("a response")
@@ -31,7 +31,7 @@ async fn invoke(db: &surrealdb::Surreal<surrealdb::engine::local::Db>, path: &st
 
 #[tokio::test]
 async fn invoke_answers_with_the_action_and_its_middleware() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let mut answer = Object::new();
     answer.insert("status", 200_i64);
     answer.insert("body", "ok".to_owned());
@@ -63,7 +63,7 @@ async fn invoke_answers_with_the_action_and_its_middleware() {
 /// 3.3.4 answers a path no API defines with a 404 response rather than an error.
 #[tokio::test]
 async fn an_undefined_path_answers_404() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let response = invoke(&db, "/missing").await;
     assert_eq!(
         response.get("status"),
@@ -74,7 +74,7 @@ async fn an_undefined_path_answers_404() {
 
 #[tokio::test]
 async fn a_path_without_a_leading_slash_fails() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(&db, &api::invoke!("status")).await;
     assert!(error.contains('/'), "{error}");
 }

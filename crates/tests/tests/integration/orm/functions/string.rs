@@ -284,7 +284,7 @@ fn method_rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
@@ -381,7 +381,7 @@ async fn results() {
 
 #[tokio::test]
 async fn generated_bindings() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let nested = string::uppercase!(string::concat!(Param::new("first"), " ", "Smith"));
     let (sql, vars) = nested.to_query().expect("renders").into_parts();
     assert_eq!(sql, "string::uppercase(string::concat($first, $_p0, $_p1))");
@@ -393,7 +393,7 @@ async fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(&db, &string::semver::major!("not a version")).await;
     assert!(error.contains("string::semver::major"), "{error}");
 }
@@ -401,7 +401,7 @@ async fn runtime_type_failures() {
 /// Every mapped method runs on a string and evaluates like its function form.
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let s = |text: &'static str| StrandLike::from(text);
     same_all!(
         &db,

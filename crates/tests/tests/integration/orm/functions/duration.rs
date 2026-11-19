@@ -63,7 +63,7 @@ fn method_rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let week_and_a_day = Duration::from_secs(8 * 86_400 + 90);
     holds_all!(
         &db,
@@ -100,7 +100,7 @@ fn generated_bindings() {
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(
         &db,
         &duration::days!(DurationLike::from(Field::from_expr(
@@ -114,7 +114,7 @@ async fn runtime_type_failures() {
 /// Every mapped method runs on a duration and evaluates like its function form.
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let long = Duration::from_secs(400 * 86_400 + 3_661);
     let d = || DurationLike::from(long);
     same_all!(

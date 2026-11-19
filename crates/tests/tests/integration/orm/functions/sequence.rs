@@ -20,7 +20,7 @@ fn rendering() {
 
 #[tokio::test]
 async fn values_increase_from_the_start() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_sequence("order_number")
         .start(10)
         .run(&db)
@@ -40,7 +40,7 @@ async fn values_increase_from_the_start() {
 
 #[tokio::test]
 async fn an_undefined_sequence_fails() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(&db, &sequence::nextval!("missing")).await;
     assert!(error.contains("missing"), "{error}");
 }

@@ -263,7 +263,7 @@ fn method_rendering() {
 
 #[tokio::test]
 async fn results() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     holds_all!(
         &db,
         [
@@ -358,14 +358,14 @@ async fn generated_bindings() {
     let (sql, vars) = nested.to_query().expect("renders").into_parts();
     assert_eq!(sql, "array::len(array::push($goals, $_p0))");
     assert_eq!(vars.len(), 1);
-    let db = db().await;
+    let (db, _guard) = db().await;
     let len: Option<i64> = bound(&db, &array::len!(vec![1, 2, 3])).await;
     assert_eq!(len, Some(3));
 }
 
 #[tokio::test]
 async fn runtime_type_failures() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let error = call_failure(
         &db,
         &array::len!(ArrayLike::from(Field::from_expr(ValueLike::from("text")))),
@@ -377,7 +377,7 @@ async fn runtime_type_failures() {
 /// Every mapped method runs on an array and evaluates like its function form.
 #[tokio::test]
 async fn methods_run() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let n = || ArrayLike::from(vec![3, 1, 2, 1]);
     let nv = || vec![3, 1, 2, 1];
     let b = || ArrayLike::from(vec![true, false]);
