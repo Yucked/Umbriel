@@ -10,6 +10,12 @@ rust-version = "1.99"
 authors = ["Yucked"]
 description = "A pure Rust ORM for SurrealDB."
 
+# Debug info dominates the size of every binary that links SurrealDB. Line tables keep file and
+# line numbers in backtraces. Set on `dev`, which `test` inherits, so `cargo build --all-targets`
+# and `cargo test` share their artifacts.
+[profile.dev]
+debug = "line-tables-only"
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
@@ -57,7 +63,5 @@ pretty_env_logger = "0.5.0"
 # Must match the SDK's `geo` (geometry values are exchanged with `surrealdb::types`); 0.33 conflicts.
 geo = { version = "0.32", features = ["use-serde"] }
 inquire = "0.9.4"
-insta = "1.49.0"
 pretty_assertions = "1.4.1"
-test-case = "3.4.0"
 trybuild = "1.0.122"
