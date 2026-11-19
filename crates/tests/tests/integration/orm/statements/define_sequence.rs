@@ -61,7 +61,7 @@ fn remove_takes_if_exists() {
 }
 
 /// The sequence's `INFO FOR DB STRUCTURE` entry.
-async fn structure(db: &surrealdb::Surreal<surrealdb::engine::local::Db>) -> Object {
+async fn structure(db: &surrealdb::Surreal<surrealdb::engine::any::Any>) -> Object {
     let info: Object = read(db, "INFO FOR DB STRUCTURE;").await;
     let Some(Value::Array(sequences)) = info.get("sequences") else {
         panic!("`sequences` is listed: {info:?}");
@@ -74,7 +74,7 @@ async fn structure(db: &surrealdb::Surreal<surrealdb::engine::local::Db>) -> Obj
 
 #[tokio::test]
 async fn a_sequence_issues_values_and_alter_keeps_them() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_sequence("order_number")
         .batch(10)
         .start(100)
@@ -117,7 +117,7 @@ async fn a_sequence_issues_values_and_alter_keeps_them() {
 
 #[tokio::test]
 async fn defining_an_existing_sequence_without_overwrite_fails() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_sequence("order_number")
         .run(&db)
         .await

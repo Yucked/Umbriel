@@ -72,7 +72,7 @@ fn a_record_outside_the_union_does_not_decode() {
 
 #[tokio::test]
 async fn a_mixed_create_decodes_each_record_into_its_variant() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let created = create_any::<Item>([Book::id("rust").into(), drafts().id("n1").into()])
         .execute(&db)
         .await
@@ -114,7 +114,7 @@ async fn a_mixed_create_decodes_each_record_into_its_variant() {
 
 #[tokio::test]
 async fn a_mixed_targetless_insert_stores_each_record_in_its_table() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let records = vec![
         Item::Book(Book {
             id: Book::id("rust"),

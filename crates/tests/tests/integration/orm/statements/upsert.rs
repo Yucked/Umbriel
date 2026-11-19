@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use surrealdb::{Surreal, engine::local::Db, types::Value};
+use surrealdb::{Surreal, engine::any::Any, types::Value};
 use umbriel::{
     Field, Model, Operatable, Patchable, Raw, Render, Runnable, SchemaGetter, SetterAssignable,
     SetterNumeric,
@@ -20,7 +20,7 @@ fn organization(key: &str, name: &str, age: u8) -> Organization {
     }
 }
 
-async fn names(db: &Surreal<Db>) -> Vec<String> {
+async fn names(db: &Surreal<Any>) -> Vec<String> {
     read(db, "SELECT VALUE name FROM organization ORDER BY name;").await
 }
 
@@ -72,7 +72,7 @@ fn every_clause_renders_in_order() {
 
 #[tokio::test]
 async fn without_where_it_inserts_and_then_updates_a_record_id() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let org = Organization::schema();
     let created = upsert::<Organization>(Organization::id("acme"))
         .content(organization("acme", "Acme Corp", 10))
@@ -99,7 +99,7 @@ async fn without_where_it_inserts_and_then_updates_a_record_id() {
 
 #[tokio::test]
 async fn on_a_table_without_where_it_always_inserts() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let org = Organization::schema();
     for _ in 0..2 {
         upsert::<Organization>(Organization::table())
@@ -114,7 +114,7 @@ async fn on_a_table_without_where_it_always_inserts() {
 
 #[tokio::test]
 async fn a_unique_index_match_updates_the_record_holding_the_value() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     Raw::new("DEFINE INDEX org_name ON organization FIELDS name UNIQUE;")
         .run(&db)
         .await
@@ -138,7 +138,7 @@ async fn a_unique_index_match_updates_the_record_holding_the_value() {
 
 #[tokio::test]
 async fn where_gates_only_the_update_path() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let org = Organization::schema();
     upsert::<Organization>(Organization::id("acme"))
         .content(organization("acme", "Acme Corp", 10))
@@ -172,7 +172,7 @@ async fn where_gates_only_the_update_path() {
 
 #[tokio::test]
 async fn explain_writes_nothing() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let org = Organization::schema();
     let plan = upsert::<Organization>(Organization::table())
         .set(org.name.equal_to("Acme Corp"))

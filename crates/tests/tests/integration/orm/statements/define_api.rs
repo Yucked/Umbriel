@@ -125,7 +125,7 @@ fn remove_takes_if_exists() {
 
 #[tokio::test]
 async fn an_api_is_defined_altered_and_removed() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_api("/status")
         .action(api_action([ApiMethod::Get], "ok"))
         .run(&db)

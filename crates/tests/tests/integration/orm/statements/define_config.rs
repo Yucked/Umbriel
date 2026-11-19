@@ -77,7 +77,7 @@ fn removal_names_the_config() {
 
 #[tokio::test]
 async fn database_configs_are_defined_and_removed() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_config_api(api_config().permissions_full())
         .run(&db)
         .await
@@ -103,7 +103,7 @@ async fn database_configs_are_defined_and_removed() {
 
 #[tokio::test]
 async fn the_default_config_is_stored_on_the_root() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_config_default()
         .namespace("acme")
         .database("app")
@@ -128,7 +128,7 @@ async fn the_default_config_is_stored_on_the_root() {
 /// Pins the upstream limitation the builders' docs cite: `ALTER CONFIG` drops its comment.
 #[tokio::test]
 async fn alter_config_drops_its_comment() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_config_api(api_config().permissions_full())
         .run(&db)
         .await

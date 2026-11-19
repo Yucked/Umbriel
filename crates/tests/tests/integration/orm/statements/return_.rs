@@ -13,7 +13,7 @@ use umbriel_tests::*;
 /// value as it is.
 #[tokio::test]
 async fn result_shapes_in_a_chain() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let mut results = chain(let_("n").equal_to(2))
         .chain(return_(Field::from(Param::new("n")).multiply(3)))
         .chain(return_(vec![1, 2]))
@@ -29,7 +29,7 @@ async fn result_shapes_in_a_chain() {
 
 #[tokio::test]
 async fn return_fetch_replaces_links() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     Raw::new(
         "CREATE user:alice SET name = 'Alice'; \
          CREATE organization:acme SET name = 'Acme Corp', users = [user:alice];",

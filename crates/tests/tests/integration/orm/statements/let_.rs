@@ -31,7 +31,7 @@ fn a_typed_let_renders_the_value_type() {
 
 #[tokio::test]
 async fn a_typed_let_accepts_its_type() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let mut results = chain(let_("count").typed::<i64>().equal_to(5))
         .chain(return_(umbriel::Param::new("count")))
         .run(&db)
@@ -45,7 +45,7 @@ async fn a_typed_let_accepts_its_type() {
 /// (`dbs/executor.rs`).
 #[tokio::test]
 async fn a_typed_let_rejects_another_type() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let refused = let_("count").typed::<i64>().equal_to("five").run(&db).await;
     assert!(refused.is_err(), "{refused:?}");
 }
@@ -54,7 +54,7 @@ async fn a_typed_let_rejects_another_type() {
 /// #28 (T01).
 #[tokio::test]
 async fn a_model_typed_let() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let organization = Organization {
         id: Organization::id("acme"),
         name: "Acme Corp".to_owned(),

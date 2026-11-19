@@ -9,7 +9,7 @@ use umbriel_tests::*;
 
 #[tokio::test]
 async fn a_branch_reads_a_field_written_earlier_in_the_transaction() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let org = Organization::schema();
     let acme = Organization::id("acme");
     let age = Field::from_expr(ValueLike::from(acme.clone())).with_field("age");

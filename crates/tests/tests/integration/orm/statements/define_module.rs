@@ -1,7 +1,7 @@
 //! Modules (`orm/src/statements/define_module.rs`, and `alter_module`/`remove_module`):
 //! rendering, checked with SurrealDB's parser, names, and their effect on a database that allows
-//! the experimental `surrealism` feature. The embedded engine stores a module's definition but
-//! never loads it, so no module here is called.
+//! the experimental `surrealism` feature, and its refusal on a server without it. No module here
+//! is called.
 
 use umbriel::{
     Render, Runnable,
@@ -122,7 +122,7 @@ fn alter_and_remove_name_either_form() {
 
 #[tokio::test]
 async fn a_module_is_defined_altered_and_removed() {
-    let db = experimental_db().await;
+    let (db, _guard) = db().await;
     define_bucket("modules")
         .backend("memory")
         .run(&db)
@@ -149,7 +149,7 @@ async fn a_module_is_defined_altered_and_removed() {
 
 #[tokio::test]
 async fn a_module_needs_the_surrealism_feature() {
-    let db = db().await;
+    let (db, _guard) = restricted_db().await;
     let error = define_module_silo("acme", "geo", (1, 2, 3))
         .run(&db)
         .await

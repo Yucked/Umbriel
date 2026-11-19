@@ -1,16 +1,16 @@
 //! `DEFINE DATABASE` (`orm/src/statements/define_database.rs`): `STRICT`, and how `OVERWRITE`
 //! changes it, since no `ALTER` does.
 
-use surrealdb::{Surreal, engine::local::Db};
+use surrealdb::{Surreal, engine::any::Any};
 use umbriel::{Runnable, statements::define_database};
 use umbriel_tests::*;
 
-async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
+async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
 }
 
 /// Whether `CREATE person` succeeds in the database `name`.
-async fn creates_undefined_table(db: &Surreal<Db>, name: &str) -> bool {
+async fn creates_undefined_table(db: &Surreal<Any>, name: &str) -> bool {
     db.use_db(name).await.expect("database selected");
     db.query("CREATE person:alice;")
         .await
@@ -49,7 +49,7 @@ fn a_changefeed_renders_with_its_expiry() {
 
 #[tokio::test]
 async fn the_database_stores_its_changefeed() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     run(
         &db,
         define_database("acme").changefeed(std::time::Duration::from_secs(3600)),
@@ -69,14 +69,14 @@ async fn the_database_stores_its_changefeed() {
 
 #[tokio::test]
 async fn a_strict_database_refuses_undefined_tables() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     run(&db, define_database("acme").strict()).await;
     assert!(!creates_undefined_table(&db, "acme").await);
 }
 
 #[tokio::test]
 async fn overwrite_without_strict_lifts_it() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     run(&db, define_database("acme").strict()).await;
     run(&db, define_database("acme").overwrite()).await;
     assert!(creates_undefined_table(&db, "acme").await);

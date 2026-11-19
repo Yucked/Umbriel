@@ -3,7 +3,7 @@
 
 use surrealdb::{
     Surreal,
-    engine::local::Db,
+    engine::any::Any,
     types::{SurrealValue, Value},
 };
 use umbriel::{
@@ -12,7 +12,7 @@ use umbriel::{
 };
 use umbriel_tests::*;
 
-async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
+async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
 }
 
@@ -31,7 +31,7 @@ fn ordered_entry(key: &str) -> Block {
 }
 
 /// The number of `log` entries, read in a query of its own.
-async fn log_count(db: &Surreal<Db>) -> usize {
+async fn log_count(db: &Surreal<Any>) -> usize {
     read(db, "RETURN count(SELECT * FROM log);").await
 }
 
@@ -95,7 +95,7 @@ mod behaviour {
 
     /// The `log` count once it reaches `expected`, checked every 100ms for at most 5s. The wait
     /// is SurrealQL's `SLEEP`, inside the database, since async events run on its own task.
-    async fn log_count_reaching(db: &Surreal<Db>, expected: usize) -> usize {
+    async fn log_count_reaching(db: &Surreal<Any>, expected: usize) -> usize {
         let mut count = log_count(db).await;
         for _ in 0..50 {
             if count >= expected {
@@ -114,7 +114,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn without_when_the_event_runs_on_every_change() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_event("audit")
@@ -134,7 +134,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn every_then_runs_in_order() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_event("audit")
@@ -152,7 +152,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn an_async_event_runs_after_the_triggering_transaction_commits() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_event("synchronous")
@@ -192,7 +192,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn when_null_never_runs() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         assert!(
             succeeds(
                 &db,

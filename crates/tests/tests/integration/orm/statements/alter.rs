@@ -1,7 +1,7 @@
 //! `ALTER` statements (`orm/src/statements/alter.rs`): every builder's sets and drops, rendered
 //! and checked with SurrealDB's parser, and their effect on stored definitions.
 
-use surrealdb::{Surreal, engine::local::Db, types::Kind};
+use surrealdb::{Surreal, engine::any::Any, types::Kind};
 use umbriel::{
     All, Field, NONE, Operatable, Param, Render, Runnable, Table, chain,
     statements::{
@@ -13,7 +13,7 @@ use umbriel::{
 };
 use umbriel_tests::*;
 
-async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
+async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
 }
 
@@ -265,7 +265,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn alter_table_replaces_and_drops_the_changefeed() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_table("reading").changefeed(std::time::Duration::from_secs(3600)),
@@ -287,7 +287,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn alter_table_changes_only_what_it_names() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(&db, define_table("user").schemaless().comment("first")).await;
         run(&db, alter_table("user").schemafull()).await;
         let table = stored_definition(&db, "INFO FOR DB;", "tables", "user").await;
@@ -300,7 +300,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn alter_field_changes_its_clauses() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_field(Field::new("score"))
@@ -325,7 +325,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn a_none_default_leaves_new_records_without_the_field() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_field(Field::new("score"))
@@ -348,7 +348,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn alter_event_changes_how_it_runs() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_event("audit")
@@ -377,7 +377,7 @@ mod behaviour {
     /// nothing.
     #[tokio::test]
     async fn surrealdb_ignores_drop_when_and_drop_then() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         assert!(
             succeeds(
                 &db,
@@ -393,7 +393,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn alter_param_replaces_the_value() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         let greeting = Param::new("greeting");
         run(&db, define_param(&greeting).value("Hello")).await;
         run(&db, alter_param(&greeting).value("Hi")).await;
@@ -403,7 +403,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn alter_function_replaces_the_body() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         let x = Param::new("x");
         let arguments = || {
             vec![FunctionArgument {
@@ -429,7 +429,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn alter_analyzer_replaces_the_filters() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_analyzer("simple")
@@ -451,7 +451,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn if_exists_alters_nothing_without_failing() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         assert!(
             alter_table("missing")
                 .if_exists()

@@ -7,8 +7,7 @@ use std::{collections::BTreeMap, time::Duration};
 use chrono::{TimeZone, Utc};
 use surrealdb::{
     Surreal,
-    engine::local::{Db, Mem},
-    opt::Config,
+    engine::any::Any,
     types::{Object, Value},
 };
 use umbriel::{
@@ -16,7 +15,7 @@ use umbriel::{
     SchemaGetter, SetterAssignable, SurrealCrud, SurrealRead, Table, arr, count,
     statements::{Returning, explain, order, select, select_value, update},
 };
-use umbriel_tests::*;
+use umbriel_tests::{support::statements::*, *};
 
 fn organization(key: &str, name: &str, age: u8) -> Organization {
     Organization {
@@ -28,8 +27,8 @@ fn organization(key: &str, name: &str, age: u8) -> Organization {
 }
 
 /// Acme Corp (30), Globex (20) and Initech (40).
-async fn organizations() -> Surreal<Db> {
-    let db = db().await;
+async fn organizations() -> (Surreal<Any>, TestDb) {
+    let (db, guard) = db().await;
     for (key, name, age) in [
         ("acme", "Acme Corp", 30),
         ("globex", "Globex", 20),
@@ -37,10 +36,10 @@ async fn organizations() -> Surreal<Db> {
     ] {
         organization(key, name, age).save(&db).await.expect("saved");
     }
-    db
+    (db, guard)
 }
 
-async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
+async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
 }
 
@@ -203,7 +202,7 @@ mod typed_results {
 
     #[tokio::test]
     async fn a_model_select_decodes_the_model() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let found: Vec<Organization> = Organization::select()
             .order_by(order(Field::new("age")))
             .execute(&db)
@@ -220,7 +219,7 @@ mod typed_results {
 
     #[tokio::test]
     async fn select_value_decodes_the_field_type() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let ages: Vec<u8> = Organization::select_value(Organization::schema().age)
             .order_by(order(Field::new("age")).desc())
             .execute(&db)
@@ -231,7 +230,7 @@ mod typed_results {
 
     #[tokio::test]
     async fn only_gives_one_record_or_none() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let acme: Option<Organization> = select(All)
             .from_only(Organization::id("acme"))
             .decode()
@@ -251,7 +250,7 @@ mod typed_results {
 
     #[tokio::test]
     async fn only_over_a_table_needs_limit_one() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let unlimited = select(All)
             .from_only(Organization::table())
             .decode::<Organization>()
@@ -274,7 +273,7 @@ mod typed_results {
 
     #[tokio::test]
     async fn a_type_that_does_not_match_the_projection_fails_to_decode() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let mismatched = select(Field::new("name"))
             .from(Organization::table())
             .decode::<Organization>()
@@ -288,7 +287,7 @@ mod typed_results {
 
     #[tokio::test]
     async fn fetch_and_omit_are_decoded_into_the_named_type() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         run(
             &db,
             Raw::new("UPDATE organization:acme SET users = [user:alice]; CREATE user:alice SET name = 'Alice';"),
@@ -324,7 +323,7 @@ mod ordering_and_grouping {
 
     #[tokio::test]
     async fn order_by_a_field_that_is_not_projected() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let names: Vec<String> = select_value(Field::new("name"))
             .from(Organization::table())
             .order_by(order(Field::new("age")).desc())
@@ -337,7 +336,7 @@ mod ordering_and_grouping {
 
     #[tokio::test]
     async fn ties_keep_their_order() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             Raw::new(
@@ -358,7 +357,7 @@ mod ordering_and_grouping {
 
     #[tokio::test]
     async fn numeric_and_collate_orders() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             Raw::new(
@@ -399,7 +398,7 @@ mod ordering_and_grouping {
     /// collects that field's values into an array.
     #[tokio::test]
     async fn a_non_aggregate_field_outside_the_group_is_collected() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let groups: Vec<Value> = select(&[Field::new("name"), Field::new("age")])
             .from(Organization::table())
             .group_by(Field::new("age"))
@@ -419,7 +418,7 @@ mod ordering_and_grouping {
     /// Pinned on 3.3.4: `GROUP ALL` over no records still gives one group, with a zero count.
     #[tokio::test]
     async fn an_empty_group_all_is_one_zero_group() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(&db, Raw::new("DEFINE TABLE organization;")).await;
         let groups: Vec<Value> = select(count!())
             .from(Organization::table())
@@ -440,14 +439,14 @@ mod index_hints {
     use super::*;
 
     /// The organizations, with an index on `age`.
-    async fn indexed() -> Surreal<Db> {
-        let db = organizations().await;
+    async fn indexed() -> (Surreal<Any>, TestDb) {
+        let (db, guard) = organizations().await;
         run(
             &db,
             Raw::new("DEFINE INDEX organization_age ON organization FIELDS age;"),
         )
         .await;
-        db
+        (db, guard)
     }
 
     /// The operator names of a SELECT plan: the newer executor's tree of `operator` and
@@ -487,7 +486,7 @@ mod index_hints {
     /// Asserts that a write statement reads through the index under `WITH INDEX` and through the
     /// table under `WITH NOINDEX`, and that explaining it wrote nothing.
     async fn assert_write_follows_its_hint(
-        db: &Surreal<Db>,
+        db: &Surreal<Any>,
         indexed: umbriel::statements::Explained,
         scanned: umbriel::statements::Explained,
     ) {
@@ -518,7 +517,7 @@ mod index_hints {
 
     #[tokio::test]
     async fn select_follows_its_hint() {
-        let db = indexed().await;
+        let (db, _guard) = indexed().await;
         let age = Field::new("age");
         let base = || {
             select(All)
@@ -552,7 +551,7 @@ mod index_hints {
 
     #[tokio::test]
     async fn update_follows_its_hint() {
-        let db = indexed().await;
+        let (db, _guard) = indexed().await;
         let org = Organization::schema();
         let base = || {
             update::<Organization>(Organization::table())
@@ -569,7 +568,7 @@ mod index_hints {
 
     #[tokio::test]
     async fn upsert_follows_its_hint() {
-        let db = indexed().await;
+        let (db, _guard) = indexed().await;
         let org = Organization::schema();
         let base = || {
             umbriel::statements::upsert::<Organization>(Organization::table())
@@ -586,7 +585,7 @@ mod index_hints {
 
     #[tokio::test]
     async fn delete_follows_its_hint() {
-        let db = indexed().await;
+        let (db, _guard) = indexed().await;
         let base = || {
             umbriel::statements::delete::<Organization>(Organization::table())
                 .where_(Field::new("age").equal(30))
@@ -605,7 +604,7 @@ mod explain_prefix {
 
     #[tokio::test]
     async fn text_and_json_plans() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let base = || select(All).from(Organization::table());
 
         let text: String = explain(base()).execute(&db).await.expect("plan");
@@ -629,13 +628,13 @@ mod explain_prefix {
 mod explaining_writes {
     use super::*;
 
-    async fn acme_age(db: &Surreal<Db>) -> u8 {
+    async fn acme_age(db: &Surreal<Any>) -> u8 {
         read(db, "RETURN organization:acme.age;").await
     }
 
     #[tokio::test]
     async fn explain_does_not_write() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         update::<Organization>(Organization::id("acme"))
             .set(Organization::schema().age.equal_to(99u8))
             .explain()
@@ -647,7 +646,7 @@ mod explaining_writes {
 
     #[tokio::test]
     async fn explain_full_performs_the_write() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         update::<Organization>(Organization::id("acme"))
             .set(Organization::schema().age.equal_to(99u8))
             .explain_full()
@@ -659,7 +658,7 @@ mod explaining_writes {
 
     #[tokio::test]
     async fn the_prefix_over_a_write_is_refused() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let refused = Raw::new("EXPLAIN ANALYZE UPDATE organization:acme SET age = 98;")
             .run(&db)
             .await;
@@ -673,7 +672,7 @@ mod for_update {
 
     #[tokio::test]
     async fn it_runs_inside_a_query_transaction() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let mut results = umbriel::statements::begin_transaction()
             .query(select(All).from(Organization::id("acme")).for_update())
             .commit_transaction()
@@ -687,7 +686,7 @@ mod for_update {
 
     #[tokio::test]
     async fn a_conflicting_write_fails_the_commit() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let (sql, vars) = select(All)
             .from(Organization::id("acme"))
             .for_update()
@@ -720,7 +719,7 @@ mod for_update {
     /// Recorded behaviour: outside a transaction, `FOR UPDATE` reads like a plain `SELECT`.
     #[tokio::test]
     async fn outside_a_transaction_it_reads() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let read: Vec<Organization> = select(All)
             .from(Organization::id("acme"))
             .for_update()
@@ -737,7 +736,7 @@ mod storage {
 
     #[tokio::test]
     async fn the_memory_engine_refuses_version() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let at = Utc
             .with_ymd_and_hms(2026, 1, 1, 0, 0, 0)
             .single()
@@ -755,7 +754,7 @@ mod storage {
     /// engine accepts it, and the record is written now.
     #[tokio::test]
     async fn version_on_create_and_insert_is_ignored() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             Raw::new(
@@ -770,21 +769,12 @@ mod storage {
         assert_eq!(names, ["Acme Corp", "Globex"]);
     }
 
-    /// `TEMPFILES` with the SDK's temporary directory: the same rows, and a plan that sorts on
+    /// `TEMPFILES` with the server's temporary directory: the same rows, and a plan that sorts on
     /// disk. 3.3.4 plans `ExternalSortByKey` only when the statement has `TEMPFILES` and the
-    /// database has a temporary directory (`exec/planner/select/pipeline.rs`).
+    /// server has a temporary directory (`exec/planner/select/pipeline.rs`).
     #[tokio::test]
     async fn tempfiles_sorts_through_the_temporary_directory() {
-        let directory = tempfile::tempdir().expect("a temporary directory");
-        let db = Surreal::new::<Mem>(
-            Config::new().temporary_directory(Some(directory.path().to_path_buf())),
-        )
-        .await
-        .expect("in-memory engine");
-        db.use_ns("test")
-            .use_db("test")
-            .await
-            .expect("namespace and database");
+        let (db, _guard) = db().await;
         for (key, name, age) in [("acme", "Acme Corp", 30), ("globex", "Globex", 20)] {
             organization(key, name, age).save(&db).await.expect("saved");
         }
@@ -813,7 +803,7 @@ mod timeout {
     /// timeout.
     #[tokio::test]
     async fn a_duration_parameter_is_accepted() {
-        let db = organizations().await;
+        let (db, _guard) = organizations().await;
         let mut results =
             umbriel::chain(umbriel::statements::let_("limit").equal_to(Duration::from_secs(5)))
                 .chain(
@@ -882,7 +872,7 @@ mod timeout {
     /// A bound `TIMEOUT` is enforced: the statement fails with `TimedOut`.
     #[tokio::test]
     async fn a_bound_timeout_cuts_a_slow_select_short() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         let failed = select(All)
             .from(umbriel::functions::sleep::sleep!(Duration::from_millis(
                 500
@@ -902,3 +892,241 @@ mod timeout {
         }
     }
 }
+
+mod select {
+    use super::*;
+
+    #[test]
+    fn every_clause_in_order() {
+        let user = Table::from("user");
+        let age = Field::new("age");
+        assert_sql(
+            &select(All)
+                .omit(Field::new("password"))
+                .from(&user)
+                .with_index(Field::new("user_age"))
+                .where_(age.gte(18))
+                .order_by(order(&age).numeric().desc())
+                .order_by(order(Field::new("name")).collate().asc())
+                .limit(10)
+                .start(5)
+                .fetch(Field::new("account"))
+                .timeout(Duration::from_secs(5))
+                .explain_full(),
+            "SELECT * OMIT password FROM user WITH INDEX user_age WHERE age >= 18 \
+             ORDER BY age NUMERIC DESC, name COLLATE ASC LIMIT 10 START AT 5 FETCH account \
+             TIMEOUT 5s EXPLAIN FULL;",
+        );
+        assert_sql(
+            &select(All).from(&user).with_no_index().explain(),
+            "SELECT * FROM user WITH NOINDEX EXPLAIN;",
+        );
+    }
+
+    #[test]
+    fn projections_and_targets() {
+        let user = Table::from("user");
+        let country = Field::new("country");
+        assert_sql(
+            &select(arr![count!().__as__(AliasName::new("total")), &country])
+                .from(&user)
+                .group_by(&country),
+            "SELECT count() AS total, country FROM user GROUP BY country;",
+        );
+        assert_sql(
+            &select(math::sum!(Field::new("age")))
+                .from(&user)
+                .group_all(),
+            "SELECT math::sum(age) FROM user GROUP ALL;",
+        );
+        assert_sql(
+            &select(&[Field::new("name"), Field::new("age")]).from_only(User::id("alice")),
+            "SELECT name, age FROM ONLY user:alice;",
+        );
+        assert_sql(
+            &select_value(Field::new("name")).from(vec![User::id("alice"), User::id("bob")]),
+            "SELECT VALUE name FROM user:alice, user:bob;",
+        );
+        assert_sql(
+            &select(All).from(&[Table::from("user"), Table::from("company")]),
+            "SELECT * FROM user, company;",
+        );
+        assert_sql(
+            &select(All).from(select(All).from(&user).limit(1)),
+            "SELECT * FROM (SELECT * FROM user LIMIT 1);",
+        );
+        assert_sql(
+            &select(All).from(User::id(1)..User::id(5)),
+            "SELECT * FROM user:1..5;",
+        );
+        assert_sql(
+            &select(All).from(&user).split(Field::new("emails")),
+            "SELECT * FROM user SPLIT emails;",
+        );
+    }
+
+    #[test]
+    fn rejected_combinations() {
+        let user = Table::from("user");
+        assert_render_error(
+            &select(All)
+                .from(&user)
+                .split(Field::new("emails"))
+                .group_all(),
+            "SPLIT and GROUP cannot be combined",
+        );
+        assert_render_error(
+            &select(All)
+                .from(&user)
+                .split(Field::new("emails"))
+                .group_by(Field::new("country")),
+            "SPLIT and GROUP cannot be combined",
+        );
+        assert_render_error(
+            &select(All)
+                .from(&user)
+                .order_rand()
+                .order_by(order(Field::new("age"))),
+            "ORDER BY RAND()",
+        );
+        assert_sql(
+            &select(All).from(&user).order_rand().limit(3),
+            "SELECT * FROM user ORDER BY RAND() LIMIT 3;",
+        );
+    }
+
+    #[test]
+    fn values_are_bound_and_rendering_is_stable() {
+        let statement = select(All)
+            .from(Table::from("user"))
+            .where_(cond(Field::new("name").equal("Alice")).or(Field::new("age").gt(30)))
+            .limit(5);
+        let query = statement.to_query().expect("valid");
+        assert_eq!(
+            query.sql(),
+            "SELECT * FROM user WHERE (name = $_p0) OR (age > $_p1) LIMIT $_p2;"
+        );
+        assert_eq!(query.vars().len(), 3);
+        assert_eq!(statement.to_query().expect("valid"), query);
+    }
+
+    async fn seeded() -> (Surreal<Any>, TestDb) {
+        let (db, guard) = db().await;
+        run(
+            &db,
+            Raw::new(
+                "CREATE user:alice SET name = 'Alice', age = 30, country = 'CA', emails = ['a@example.com', 'alice@example.com'];
+                 CREATE user:bob SET name = 'Bob', age = 20, country = 'CA', emails = ['bob@example.com'];
+                 CREATE user:carol SET name = 'Carol', age = 40, country = 'NO', emails = ['carol@example.com'];",
+            ),
+        )
+        .await;
+        (db, guard)
+    }
+
+    #[tokio::test]
+    async fn filters_orders_and_pages() {
+        let (db, _guard) = seeded().await;
+        let user = Table::from("user");
+        let age = Field::new("age");
+        let names: Vec<String> = select_value(Field::new("name"))
+            .from(&user)
+            .where_(age.gte(20))
+            .order_by(order(&age).desc())
+            .limit(2)
+            .start(1)
+            .decode()
+            .execute(&db)
+            .await
+            .expect("read");
+        assert_eq!(names, ["Alice", "Bob"]);
+    }
+
+    #[tokio::test]
+    async fn groups_splits_and_omits() {
+        let (db, _guard) = seeded().await;
+        let user = Table::from("user");
+        let country = Field::new("country");
+
+        let groups: Vec<BTreeMap<String, Value>> = select(arr![count!().__as__("total"), &country])
+            .from(&user)
+            .group_by(&country)
+            .decode()
+            .execute(&db)
+            .await
+            .expect("grouped");
+        assert_eq!(groups.len(), 2);
+
+        let split: Vec<Value> = select(All)
+            .from(&user)
+            .split(Field::new("emails"))
+            .execute(&db)
+            .await
+            .expect("split");
+        assert_eq!(split.len(), 4);
+
+        let omitted: Vec<BTreeMap<String, Value>> = select(All)
+            .omit(Field::new("emails"))
+            .from(&user)
+            .decode()
+            .execute(&db)
+            .await
+            .expect("omitted");
+        assert!(omitted.iter().all(|row| !row.contains_key("emails")));
+    }
+
+    #[tokio::test]
+    async fn record_ranges_select_by_key() {
+        let (db, _guard) = db().await;
+        for strength in 1..=6 {
+            Weapon {
+                id: Weapon::id(strength),
+                ..Default::default()
+            }
+            .save(&db)
+            .await
+            .expect("saved");
+        }
+        let in_range: Vec<Value> = select(All)
+            .from(Weapon::id(2)..Weapon::id(5))
+            .execute(&db)
+            .await
+            .expect("read");
+        assert_eq!(in_range.len(), 3);
+        let inclusive: Vec<Value> = select(All)
+            .from(Weapon::id(2)..=Weapon::id(5))
+            .execute(&db)
+            .await
+            .expect("read");
+        assert_eq!(inclusive.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn fetch_replaces_links_with_records() {
+        let (db, _guard) = db().await;
+        run(
+            &db,
+            Raw::new(
+                "CREATE account:one SET balance = 5; CREATE user:alice SET account = account:one;",
+            ),
+        )
+        .await;
+        let balance: Vec<i64> = select_value(Field::new("account").with_field("balance"))
+            .from(User::id("alice"))
+            .decode()
+            .execute(&db)
+            .await
+            .expect("read");
+        assert_eq!(balance, [5]);
+        let fetched: BTreeMap<String, Value> = select(All)
+            .from_only(User::id("alice"))
+            .fetch(Field::new("account"))
+            .decode()
+            .execute(&db)
+            .await
+            .expect("read")
+            .expect("alice");
+        assert!(matches!(fetched.get("account"), Some(Value::Object(_))));
+    }
+}
+

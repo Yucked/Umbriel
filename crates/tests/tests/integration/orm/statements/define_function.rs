@@ -70,7 +70,7 @@ fn a_name_given_with_fn_fails_with_a_hint() {
 
 #[tokio::test]
 async fn a_defined_function_runs_and_is_removed() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     add_one("math::add_one")
         .run(&db)
         .await

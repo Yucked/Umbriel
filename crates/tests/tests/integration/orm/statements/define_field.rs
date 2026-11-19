@@ -4,7 +4,7 @@
 
 use surrealdb::{
     Surreal,
-    engine::local::Db,
+    engine::any::Any,
     types::{Kind, Object, Value},
 };
 use umbriel::{
@@ -15,7 +15,7 @@ use umbriel::{
 };
 use umbriel_tests::*;
 
-async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
+async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
 }
 
@@ -179,7 +179,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn default_always_refills_a_field_left_none() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_field(Field::new("refunds"))
@@ -206,7 +206,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn readonly_refuses_a_change_and_accepts_the_same_value() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_field(Field::new("created_by"))
@@ -224,7 +224,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn flexible_keeps_undefined_keys_on_a_schemafull_table() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(&db, define_table("sale").schemafull()).await;
         run(
             &db,
@@ -262,7 +262,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn every_joined_assertion_applies() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_field(amount())
@@ -279,7 +279,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn an_array_length_is_exact() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_field(Field::new("pair"))
@@ -294,7 +294,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn a_flexible_computed_object_keeps_its_keys_on_a_schemafull_table() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(&db, define_table("sale").schemafull()).await;
         run(
             &db,
@@ -317,7 +317,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn a_computed_field_takes_its_name_from_a_parameter() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         let name = umbriel::Param::new("name");
         run(
             &db,
@@ -346,7 +346,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn computed_fields_read_other_computed_fields() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_field(Field::new("doubled"))
@@ -368,7 +368,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn a_decimal_default_redefines_from_its_stored_form() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_field(Field::new("price"))
@@ -389,7 +389,7 @@ mod behaviour {
             panic!("price is defined");
         };
         // The stored statement defines the same field again.
-        let fresh = umbriel_tests::db().await;
+        let (fresh, _fresh_guard) = umbriel_tests::db().await;
         assert!(succeeds(&fresh, &format!("{sql};")).await, "{sql}");
         let price: Value = read(&fresh, "CREATE ONLY sale:1 RETURN VALUE price;").await;
         assert!(matches!(price, Value::Number(_)), "{price:?}");
@@ -401,7 +401,7 @@ mod behaviour {
 mod computed_baseline {
     use super::*;
 
-    async fn sale_with_doubled(db: &Surreal<Db>) {
+    async fn sale_with_doubled(db: &Surreal<Any>) {
         assert!(
             succeeds(
                 db,
@@ -414,7 +414,7 @@ mod computed_baseline {
 
     #[tokio::test]
     async fn a_written_computed_value_is_discarded() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         sale_with_doubled(&db).await;
         assert!(succeeds(&db, "CREATE sale:1 CONTENT { amount: 2, doubled: 100 };").await);
         assert!(succeeds(&db, "UPDATE sale:1 CONTENT { amount: 3, doubled: 100 };").await);
@@ -428,7 +428,7 @@ mod computed_baseline {
 
     #[tokio::test]
     async fn a_computed_expression_that_writes_is_refused_when_defined() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         let error = failure(
             &db,
             "DEFINE FIELD logged ON sale COMPUTED (CREATE log CONTENT { at: time::now() });",
@@ -443,7 +443,7 @@ mod computed_baseline {
 
     #[tokio::test]
     async fn a_computed_expression_calling_a_writing_function_fails_when_read() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         assert!(
             succeeds(
                 &db,
@@ -463,35 +463,18 @@ mod computed_baseline {
 }
 
 /// Whose rights a computed field reads with: the inventory's open question (reader capped by the
-/// definer, or the definer's rights). It needs a record user, so it runs on an in-memory engine
-/// with authentication on.
+/// definer, or the definer's rights). It needs a record user, signed up to the test's own
+/// database.
 mod computed_privileges {
     use std::collections::BTreeMap;
 
-    use surrealdb::{
-        engine::local::Mem,
-        opt::{
-            Config,
-            auth::{Record, Root},
-        },
-    };
+    use surrealdb::opt::auth::Record;
 
     use super::*;
 
-    fn root() -> Root {
-        Root {
-            username: "root".to_owned(),
-            password: "example-password".to_owned(),
-        }
-    }
-
     #[tokio::test]
     async fn a_computed_field_reads_with_the_readers_rights() {
-        let db = Surreal::new::<Mem>(Config::new().user(root()))
-            .await
-            .expect("in-memory engine");
-        db.signin(root()).await.expect("signed in as root");
-        db.use_ns("test").use_db("test").await.expect("selected");
+        let (db, guard) = db().await;
         assert!(
             succeeds(
                 &db,
@@ -513,8 +496,8 @@ mod computed_privileges {
         assert_eq!(as_root, 2);
 
         db.signup(Record {
-            namespace: "test".to_owned(),
-            database: "test".to_owned(),
+            namespace: guard.namespace().to_owned(),
+            database: guard.database().to_owned(),
             access: "account".to_owned(),
             params: BTreeMap::from([("name".to_owned(), "alice".to_owned())]),
         })
@@ -540,7 +523,7 @@ pub struct Invoice {
 mod computed_models {
     use super::*;
 
-    async fn schema(db: &Surreal<Db>) {
+    async fn schema(db: &Surreal<Any>) {
         run(db, Invoice::define_table()).await;
         for field in Invoice::define_fields() {
             run(db, field).await;
@@ -572,7 +555,7 @@ mod computed_models {
 
     #[tokio::test]
     async fn every_write_reads_back_the_computed_value() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         schema(&db).await;
 
         let created = invoice(2).create(&db).await.expect("created");
@@ -617,7 +600,7 @@ mod computed_models {
 
     #[tokio::test]
     async fn a_computed_field_selects_by_its_type() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         schema(&db).await;
         invoice(7).create(&db).await.expect("created");
         let doubled = Invoice::select_value(Invoice::schema().doubled)

@@ -4,7 +4,7 @@
 use chrono::{TimeZone, Utc};
 use surrealdb::{
     Surreal,
-    engine::local::Db,
+    engine::any::Any,
     types::{Object, Value},
 };
 use umbriel::{
@@ -17,7 +17,7 @@ use umbriel::{
 };
 use umbriel_tests::*;
 
-async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
+async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
 }
 
@@ -72,8 +72,8 @@ mod rendering {
     }
 }
 
-/// One of each kind `INFO FOR DB` and `INFO FOR TABLE` list that the in-memory engine allows.
-async fn schema(db: &Surreal<Db>) {
+/// One of each kind `INFO FOR DB` and `INFO FOR TABLE` list.
+async fn schema(db: &Surreal<Any>) {
     run(db, define_table("user").schemafull()).await;
     run(
         db,
@@ -124,7 +124,7 @@ mod results {
 
     #[tokio::test]
     async fn database_info_decodes_in_both_forms() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         schema(&db).await;
 
         let plain: DatabaseInfo<Statements> =
@@ -157,7 +157,7 @@ mod results {
 
     #[tokio::test]
     async fn table_info_decodes_in_both_forms() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         schema(&db).await;
 
         let plain: TableInfo<Statements> = info_for()
@@ -184,10 +184,10 @@ mod results {
 
     #[tokio::test]
     async fn root_and_namespace_info_decode() {
-        let db = db().await;
+        let (db, guard) = db().await;
         let root = info_for().root().execute(&db).await.expect("decoded");
         assert!(
-            root.namespaces.contains_key("test"),
+            root.namespaces.contains_key(guard.namespace()),
             "{:?}",
             root.namespaces
         );
@@ -201,7 +201,7 @@ mod results {
         assert!(!root.namespaces.is_empty());
 
         let namespace = info_for().namespace().execute(&db).await.expect("decoded");
-        assert!(namespace.databases.contains_key("test"));
+        assert!(namespace.databases.contains_key(guard.database()));
         let namespace = info_for()
             .namespace()
             .structure()
@@ -213,7 +213,7 @@ mod results {
 
     #[tokio::test]
     async fn user_info_is_one_statement_or_one_object() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         schema(&db).await;
         let sql = info_for()
             .user("alice")
@@ -237,7 +237,7 @@ mod results {
 
     #[tokio::test]
     async fn index_info_is_its_build_status() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         schema(&db).await;
         let status = info_for()
             .index("user_email", "user")
@@ -288,7 +288,7 @@ mod results {
     async fn begin_inside_a_function_body_is_no_transaction() {
         let sql = "DEFINE FUNCTION fn::transfer() { BEGIN; CREATE log:1; CANCEL; RETURN 1; };";
         assert!(surrealdb_syn::parse(sql).is_ok());
-        let db = db().await;
+        let (db, _guard) = db().await;
         assert!(succeeds(&db, sql).await);
         let result: i64 = read(&db, "RETURN fn::transfer();").await;
         assert_eq!(result, 1);

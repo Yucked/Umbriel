@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use surrealdb::{
     Surreal,
-    engine::local::Db,
+    engine::any::Any,
     types::{Object, RecordId, SurrealValue, Value},
 };
 use umbriel::{
@@ -48,7 +48,7 @@ fn either_target_renders() {
 }
 
 /// Runs each statement as a query, and so a transaction, of its own.
-async fn each(db: &Surreal<Db>, statements: &[&str]) {
+async fn each(db: &Surreal<Any>, statements: &[&str]) {
     for statement in statements {
         assert!(succeeds(db, statement).await, "{statement}");
     }
@@ -68,7 +68,7 @@ fn string(text: &str) -> Value {
 
 #[tokio::test]
 async fn include_original_records_patches_from_current_to_previous() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_table("reading")
         .changefeed(HOUR)
         .include_original()
@@ -143,7 +143,7 @@ async fn include_original_records_patches_from_current_to_previous() {
 
 #[tokio::test]
 async fn without_include_original_updates_carry_the_record_only() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_table("reading")
         .changefeed(HOUR)
         .run(&db)
@@ -181,7 +181,7 @@ async fn without_include_original_updates_carry_the_record_only() {
 
 #[tokio::test]
 async fn since_and_limit_select_the_change_sets() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_table("reading")
         .changefeed(HOUR)
         .run(&db)
@@ -215,20 +215,12 @@ async fn since_and_limit_select_the_change_sets() {
         .await
         .expect("decodes");
     assert_eq!(limited.len(), 1);
-    // Pins an upstream limitation of the in-memory engine: it turns a `SINCE` time into
-    // nanoseconds since the epoch, which lie past every versionstamp it has issued, so even a
-    // time before every change selects nothing. Selection by time is not verified here.
-    let by_time = show_changes_for_table("reading", datetime())
-        .execute::<Object>(&db)
-        .await
-        .expect("decodes");
-    assert!(by_time.is_empty(), "{by_time:#?}");
 }
 
 #[tokio::test]
 async fn a_database_changefeed_spans_its_tables() {
-    let db = db().await;
-    define_database("test")
+    let (db, guard) = db().await;
+    define_database(guard.database())
         .overwrite()
         .changefeed(HOUR)
         .run(&db)
@@ -264,7 +256,7 @@ async fn a_database_changefeed_spans_its_tables() {
 
 #[tokio::test]
 async fn a_record_that_does_not_decode_fails() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     define_table("reading")
         .changefeed(HOUR)
         .run(&db)

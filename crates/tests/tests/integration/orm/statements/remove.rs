@@ -1,7 +1,7 @@
 //! `REMOVE` statements (`orm/src/statements/remove.rs`): `IF EXISTS` on every kind, and names read
 //! from parameters.
 
-use surrealdb::{Surreal, engine::local::Db};
+use surrealdb::{Surreal, engine::any::Any};
 use umbriel::{
     Field, Param, Runnable,
     statements::{
@@ -113,13 +113,13 @@ fn names_come_from_parameters() {
 }
 
 /// Runs `statement` and reports whether it succeeded.
-async fn runs(db: &Surreal<Db>, statement: impl Runnable + Sync) -> bool {
+async fn runs(db: &Surreal<Any>, statement: impl Runnable + Sync) -> bool {
     statement.run(db).await.is_ok()
 }
 
 #[tokio::test]
 async fn if_exists_removes_nothing_without_failing() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     db.query("DEFINE TABLE user;")
         .await
         .and_then(surrealdb::IndexedResults::check)
@@ -151,7 +151,7 @@ async fn if_exists_removes_nothing_without_failing() {
 
 #[tokio::test]
 async fn without_if_exists_a_missing_resource_fails() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     assert!(!runs(&db, remove_table("missing")).await);
     assert!(!runs(&db, remove_param("greeting")).await);
     assert!(!runs(&db, remove_analyzer("simple")).await);

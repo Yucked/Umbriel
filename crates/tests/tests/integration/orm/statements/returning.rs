@@ -5,8 +5,6 @@
 use std::collections::BTreeMap;
 
 use surrealdb::{
-    Surreal,
-    engine::local::Mem,
     opt::auth::Record,
     types::{Object, SurrealNull, SurrealValue, Value},
 };
@@ -101,7 +99,7 @@ fn unknown_or_incomplete_operations_fail() {
 
 #[tokio::test]
 async fn only_returns_one_optional_result() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let ship = SpaceShip {
         id: SpaceShip::id("apollo"),
         name: "Apollo".to_owned(),
@@ -138,12 +136,11 @@ async fn only_returns_one_optional_result() {
     assert_eq!(deleted.map(|ship| ship.name), Some("Apollo".to_owned()));
 }
 
-/// `RETURN NULL` under select permissions: a record user on an isolated in-memory database may
-/// create in a table it may not select from, and the written records are not returned.
+/// `RETURN NULL` under select permissions: a record user of the test's own database may create in
+/// a table it may not select from, and the written records are not returned.
 #[tokio::test]
 async fn return_null_omits_records_the_session_may_not_select() {
-    let db = Surreal::new::<Mem>(()).await.expect("in-memory engine");
-    db.use_ns("test").use_db("test").await.expect("selected");
+    let (db, guard) = db().await;
     let mut defined = db
         .query(
             "DEFINE ACCESS account ON DATABASE TYPE RECORD \
@@ -156,8 +153,8 @@ async fn return_null_omits_records_the_session_may_not_select() {
         .expect("defined");
     assert!(defined.take_errors().is_empty(), "definitions");
     db.signup(Record {
-        namespace: "test".to_owned(),
-        database: "test".to_owned(),
+        namespace: guard.namespace().to_owned(),
+        database: guard.database().to_owned(),
         access: "account".to_owned(),
         params: BTreeMap::from([("name".to_owned(), "Alice".to_owned())]),
     })
@@ -183,7 +180,7 @@ async fn return_null_omits_records_the_session_may_not_select() {
 /// covered by the test above.
 #[tokio::test]
 async fn return_null_gives_one_null_per_returned_record() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let ship = |key: &str| SpaceShip {
         id: SpaceShip::id(key),
         name: "Apollo".to_owned(),
@@ -239,7 +236,7 @@ async fn return_null_gives_one_null_per_returned_record() {
 /// An `ONLY` result that is itself an array decodes whole, whatever its length.
 #[tokio::test]
 async fn only_keeps_an_array_result_whole() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     User {
         id: User::id("alice"),
         name: "Alice".to_owned(),

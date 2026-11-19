@@ -63,7 +63,7 @@ fn remove_takes_if_exists() {
 
 #[tokio::test]
 async fn a_bucket_is_defined_altered_and_removed() {
-    let db = experimental_db().await;
+    let (db, _guard) = db().await;
     define_bucket("avatars")
         .backend("memory")
         .comment("Acme Corp avatars")
@@ -89,7 +89,7 @@ async fn a_bucket_is_defined_altered_and_removed() {
 
 #[tokio::test]
 async fn a_bucket_needs_the_files_feature() {
-    let db = db().await;
+    let (db, _guard) = restricted_db().await;
     let error = define_bucket("avatars")
         .backend("memory")
         .run(&db)

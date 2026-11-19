@@ -14,7 +14,7 @@ use umbriel_tests::*;
 
 #[tokio::test]
 async fn each_use_returns_its_selection_for_the_request_only() {
-    let db = db().await;
+    let (db, guard) = db().await;
     let mut results = chain(use_().namespace("acme").database("sales"))
         .chain(use_().database("support"))
         .run(&db)
@@ -38,7 +38,7 @@ async fn each_use_returns_its_selection_for_the_request_only() {
     // The handle's own session is unchanged: SurrealDB keeps a `USE` statement's selection in the
     // request's options and never writes it back (`dbs/executor.rs`).
     let session: Vec<String> = read(&db, "RETURN [session::ns(), session::db()];").await;
-    assert_eq!(session, ["test", "test"]);
+    assert_eq!(session, [guard.namespace(), guard.database()]);
 }
 
 /// `USE DEFAULT` selects the namespace and database of `DEFINE CONFIG DEFAULT`; with none
@@ -46,11 +46,11 @@ async fn each_use_returns_its_selection_for_the_request_only() {
 /// with (3.3.4 `dbs/executor.rs`).
 #[tokio::test]
 async fn use_default_without_a_default_keeps_the_selection() {
-    let db = db().await;
+    let (db, guard) = db().await;
     let mut results = Raw::new("USE DEFAULT; RETURN [session::ns(), session::db()];")
         .run(&db)
         .await
-        .expect("USE DEFAULT runs on the embedded engine");
+        .expect("USE DEFAULT runs");
     // `take` decodes into `Option`, `Vec` or `Value`, so a single object is taken as an `Option`.
     let selected: BTreeMap<String, Value> = results
         .take::<Option<_>>(0)
@@ -58,12 +58,12 @@ async fn use_default_without_a_default_keeps_the_selection() {
         .expect("an object");
     assert_eq!(
         selected.get("namespace"),
-        Some(&Value::String("test".to_owned()))
+        Some(&Value::String(guard.namespace().to_owned()))
     );
     assert_eq!(
         selected.get("database"),
-        Some(&Value::String("test".to_owned()))
+        Some(&Value::String(guard.database().to_owned()))
     );
     let session: Vec<String> = results.take(1).expect("the session");
-    assert_eq!(session, ["test", "test"]);
+    assert_eq!(session, [guard.namespace(), guard.database()]);
 }

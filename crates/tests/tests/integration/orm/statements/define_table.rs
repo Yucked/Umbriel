@@ -1,19 +1,19 @@
 //! `DEFINE TABLE` (`orm/src/statements/define_table.rs`): table kinds, `TYPE RELATION`
 //! endpoints, the stored default kind, and view models (`#[umbriel::model(view)]`).
 
-use surrealdb::{Surreal, engine::local::Db};
+use surrealdb::{Surreal, engine::any::Any};
 use umbriel::{
     All, Field, Model, Operatable, RecordId, Runnable, SurrealRead, Table, model,
     statements::{Returning, SelectStatement, define_table, select, table_relation},
 };
 use umbriel_tests::*;
 
-async fn run(db: &Surreal<Db>, statement: impl Runnable + Sync) {
+async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
 }
 
 /// The `DEFINE TABLE` statement `INFO FOR DB` lists for `table`.
-async fn stored(db: &Surreal<Db>, table: &str) -> String {
+async fn stored(db: &Surreal<Any>, table: &str) -> String {
     stored_definition(db, "INFO FOR DB;", "tables", table).await
 }
 
@@ -90,7 +90,7 @@ mod behaviour {
 
     #[tokio::test]
     async fn the_stored_default_kind_is_any_and_schemafull_is_normal() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(&db, define_table("user")).await;
         run(&db, define_table("account").schemafull()).await;
         assert!(stored(&db, "user").await.contains("TYPE ANY"));
@@ -99,14 +99,14 @@ mod behaviour {
 
     #[tokio::test]
     async fn a_normal_table_refuses_relations() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(&db, define_table("likes").kind_normal()).await;
         assert!(!succeeds(&db, "RELATE user:alice->likes->post:hello;").await);
     }
 
     #[tokio::test]
     async fn an_enforced_relation_needs_both_endpoints() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         run(
             &db,
             define_table("likes")
@@ -150,7 +150,7 @@ mod views {
     use super::*;
     use umbriel::SurrealCrud;
 
-    async fn sales(db: &Surreal<Db>) {
+    async fn sales(db: &Surreal<Any>) {
         // A view's source table must exist before the view is defined (3.3.4).
         run(db, Sale::define_table()).await;
         run(db, LargeSale::define_table()).await;
@@ -177,7 +177,7 @@ mod views {
 
     #[tokio::test]
     async fn a_view_model_reads_the_rows_its_query_keeps() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         sales(&db).await;
         let mut large = LargeSale::select().execute(&db).await.expect("selected");
         large.sort_by_key(|sale| sale.amount);
@@ -194,14 +194,14 @@ mod views {
 
     #[tokio::test]
     async fn surrealdb_refuses_writes_to_a_view() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         sales(&db).await;
         assert!(!succeeds(&db, "CREATE large_sale:x SET amount = 50;").await);
     }
 
     #[tokio::test]
     async fn a_view_source_cannot_be_removed() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         sales(&db).await;
         assert!(!succeeds(&db, "REMOVE TABLE sale;").await);
     }
