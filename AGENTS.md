@@ -53,7 +53,7 @@ Issues live in `Yucked/umbriel`. Every change-log entry carries the issue number
 
 ## Tests
 
-- **Two test targets only.** `crates/tests/tests/integration/main.rs` declares every integration test module, and `crates/tests/tests/compile.rs` runs trybuild and the fixture crates. Never add another top-level `tests/*.rs`: each one is a separate binary that links SurrealDB.
+- **Two test targets only.** `crates/tests/tests/integration/main.rs` declares every integration test module, and `crates/tests/tests/compile.rs` runs trybuild and the fixture crates. trybuild holds compile-fail cases only, so it checks them in one batch; code that must compile is a `compiles_*` module in the integration binary. Never add another top-level `tests/*.rs`: each one is a separate binary that links SurrealDB.
 - **The tree mirrors the sources.** The tests of `crates/<crate>/src/<path>.rs` are in `crates/tests/tests/integration/<crate>/<path>.rs`, with `orm` for `umbriel` and `macros` for `umbriel-macros`: e.g. `orm/statements/select.rs`. A module's own tests are in the file named after it (`orm/statements.rs` for `statements/mod.rs`, `orm.rs` for `lib.rs`), which declares its children. A file tests exactly one source module. `server.rs` is the one exception and covers the remote transports.
 - **No ignored doctests.** Examples compile and run; use `no_run` where they need a server. `umbriel-macros` can't use `umbriel` in its doctests, so the examples of the macros are on `umbriel`'s re-exports. Illustrations of generated code are `text` blocks.
 - **A parameterised case** is added only when it covers a distinct contract or code path.
