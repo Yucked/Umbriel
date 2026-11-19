@@ -7,10 +7,7 @@ use std::error::Error as _;
 
 use surrealdb::{
     Error as SdkError, Surreal,
-    engine::{
-        any::Any,
-        local::{Db, Mem},
-    },
+    engine::any::Any,
     types::{AlreadyExistsError, ConnectionError, NotFoundError, QueryError},
 };
 use umbriel::{
@@ -28,18 +25,6 @@ fn apollo() -> SpaceShip {
     }
 }
 
-/// An in-memory database defined `STRICT`, where tables must be defined before use.
-async fn strict_db() -> Surreal<Db> {
-    let db = Surreal::new::<Mem>(()).await.expect("in-memory engine");
-    let mut defined = db
-        .query("DEFINE NAMESPACE test; USE NS test; DEFINE DATABASE test STRICT;")
-        .await
-        .expect("defined");
-    assert!(defined.take_errors().is_empty(), "a strict database");
-    db.use_ns("test").use_db("test").await.expect("selected");
-    db
-}
-
 mod record_exists {
     use super::*;
 
@@ -47,7 +32,7 @@ mod record_exists {
     /// details, so it is classified without reading the message.
     #[tokio::test]
     async fn a_second_sdk_create_is_record_exists_with_its_cause() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         apollo().create(&db).await.expect("created");
         let error = apollo().create(&db).await.expect_err("a duplicate");
         let Error::RecordExists {
@@ -70,7 +55,7 @@ mod record_exists {
     /// The feasibility check for the statement path.
     #[tokio::test]
     async fn a_second_create_statement_is_record_exists_with_its_context() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         let statement = || create_only::<SpaceShip>(CreateTarget::table()).content(apollo());
         statement().execute(&db).await.expect("created");
 
@@ -90,7 +75,7 @@ mod record_exists {
 
     #[tokio::test]
     async fn the_context_keeps_the_index_and_related_errors() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         apollo().create(&db).await.expect("created");
         let error =
             Raw::new("RETURN 1; CREATE space_ship:apollo SET name = 'Apollo'; THROW 'later';")
@@ -113,7 +98,7 @@ mod record_exists {
     /// not classified and stays a statement error.
     #[tokio::test]
     async fn a_unique_index_conflict_stays_a_statement_error() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         Raw::new("DEFINE INDEX ship_name ON space_ship FIELDS name UNIQUE;")
             .run(&db)
             .await
@@ -142,7 +127,7 @@ mod table_not_found {
 
     #[tokio::test]
     async fn reading_updating_and_deleting_an_undefined_table_fail_distinctly() {
-        let db = strict_db().await;
+        let (db, _guard) = strict_db().await;
         let read = select(All)
             .from(SpaceShip::table())
             .decode::<SpaceShip>()
@@ -167,7 +152,7 @@ mod table_not_found {
 
     #[tokio::test]
     async fn an_sdk_read_of_an_undefined_table_is_classified_too() {
-        let db = strict_db().await;
+        let (db, _guard) = strict_db().await;
         let error = SpaceShip::get(&db, &SpaceShip::id("apollo"))
             .await
             .expect_err("undefined");
@@ -177,11 +162,10 @@ mod table_not_found {
 
 /// Write conflicts. The ordering of the two committers is fixed by the test, never by timing: a
 /// query transaction commits inside one request, so it cannot be made to lose to another
-/// committer on the embedded engine without racing it. The query path is therefore checked with
-/// the responses SurrealDB gives (its `COMMIT` result keeps the structured `TransactionConflict`
-/// kind, `surrealdb-core` `dbs/executor.rs:2027`), and the end-to-end conflict with SDK handles,
-/// ordered by their commits: here on the embedded engine, and over WebSocket in
-/// `tests/server.rs` (`sdk_transactions`), where the kind survives.
+/// committer without racing it. The query path is therefore checked with the responses SurrealDB
+/// gives (its `COMMIT` result keeps the structured `TransactionConflict` kind, `surrealdb-core`
+/// `dbs/executor.rs:2027`), and the end-to-end conflict with SDK handles, ordered by their
+/// commits, in `server.rs` (`sdk_transactions`).
 mod conflict {
     use super::*;
     use umbriel::test_support::select_failure;
@@ -245,7 +229,7 @@ mod conflict {
     /// stays applied, so replaying the whole batch would write it twice.
     #[tokio::test]
     async fn an_earlier_write_of_the_batch_stays_applied() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         apollo().create(&db).await.expect("created");
         let error = Raw::new(
             "CREATE space_ship:gemini SET name = 'Gemini'; \
@@ -268,53 +252,15 @@ mod conflict {
             "the earlier write stays"
         );
     }
-
-    /// Q13b on the embedded engine, ordered by the handles' commits: `FOR UPDATE` takes no lock,
-    /// so a write to the selected record committed first fails the reader's commit. The SDK
-    /// handle's `commit` error converts through `From<surrealdb::Error>`, but on the embedded
-    /// engine it carries no structured kind: `surrealdb-engine-local` maps the commit failure
-    /// with `Error::internal(text)` (`lib.rs:113`), so it is not classified as a conflict and its
-    /// advice is `Uncertain`. Over WebSocket it is a `Conflict` (`tests/server.rs`).
-    #[tokio::test]
-    async fn an_embedded_handle_commit_conflict_converts_without_a_kind() {
-        let db = db().await;
-        apollo().create(&db).await.expect("created");
-        let reader = db.clone().begin().await.expect("reader begins");
-        select(All)
-            .from(SpaceShip::id("apollo"))
-            .for_update()
-            .run(&reader)
-            .await
-            .expect("selected for update");
-        let writer = db.clone().begin().await.expect("writer begins");
-        update::<SpaceShip>(SpaceShip::id("apollo"))
-            .set(SpaceShip::schema().name.equal_to("Gemini"))
-            .run(&writer)
-            .await
-            .expect("updated");
-        writer.commit().await.expect("the writer commits first");
-
-        let error = Error::from(
-            reader
-                .commit()
-                .await
-                .expect_err("the reader's commit fails"),
-        );
-        assert!(
-            matches!(&error, Error::Query(source) if source.is_internal()),
-            "{error:?}"
-        );
-        assert_eq!(error.retry(), Retry::Uncertain);
-    }
 }
 
 mod not_allowed {
     use super::*;
 
-    /// Scripting is a capability the default embedded engine does not grant.
+    /// Scripting is a capability a server does not grant by default.
     #[tokio::test]
     async fn a_refused_capability_is_not_allowed() {
-        let db = db().await;
+        let (db, _guard) = restricted_db().await;
         let error = Raw::new("RETURN 1; RETURN function() { return 1; };")
             .run(&db)
             .await
@@ -470,7 +416,7 @@ mod retry {
     /// nothing, which this case shows but which is not claimed for every timeout path.
     #[tokio::test]
     async fn a_timed_out_write_transaction_is_uncertain() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         let error = Raw::new(
             "BEGIN TRANSACTION; CREATE space_ship:apollo SET name = 'Apollo'; \
              SELECT * FROM sleep(500ms) TIMEOUT 10ms; COMMIT TRANSACTION;",
@@ -493,7 +439,7 @@ mod retry {
 
     #[tokio::test]
     async fn a_query_that_does_not_build_is_never_retried() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         let error = use_().run(&db).await.expect_err("USE needs a target");
         assert!(matches!(&error, Error::QueryBuilder(_)), "{error:?}");
         assert_eq!(error.retry(), Retry::Never);
@@ -501,7 +447,7 @@ mod retry {
 
     #[tokio::test]
     async fn a_duplicate_record_is_never_retried() {
-        let db = db().await;
+        let (db, _guard) = db().await;
         apollo().create(&db).await.expect("created");
         let error = apollo().create(&db).await.expect_err("a duplicate");
         assert_eq!(error.retry(), Retry::Never);

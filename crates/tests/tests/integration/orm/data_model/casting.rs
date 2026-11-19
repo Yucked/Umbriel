@@ -105,7 +105,7 @@ fn casts_enter_only_the_expressions_of_their_kind() {
 
 #[tokio::test]
 async fn casts_convert_on_the_engine() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let int: Option<i64> =
         umbriel::statements::return_(Field::from_expr(cast::<kinds::Int>("5")).add(1))
             .get_data(&db)

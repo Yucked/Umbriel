@@ -1,6 +1,17 @@
 //! Crate-root items (`orm/src/lib.rs`): offline SurrealQL value parsing behind the `parse`
 //! feature.
 
+mod data_model;
+mod errors;
+mod execution;
+mod functions;
+mod kinds;
+mod migrations;
+mod query;
+mod render;
+mod statements;
+mod traits;
+
 use umbriel::types::Value;
 
 #[test]

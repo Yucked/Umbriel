@@ -51,7 +51,7 @@ async fn every_marker_renders_its_kind() {
     renders::<kinds::Set<kinds::String>>("set<string>");
     renders::<kinds::Optional<kinds::Int>>("none | int");
 
-    let db = db().await;
+    let (db, _guard) = db().await;
     assert!(succeeds(&db, "DEFINE TABLE thing SCHEMAFULL;").await);
     for definition in [
         defined_as::<kinds::Point>(),

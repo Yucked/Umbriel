@@ -12,7 +12,7 @@ use umbriel_tests::*;
 
 #[tokio::test]
 async fn constants_render_without_parentheses_and_evaluate() {
-    let db = db().await;
+    let (db, _guard) = db().await;
     let floats = [
         (math::E, "math::E", consts::E),
         (math::FRAC_1_PI, "math::FRAC_1_PI", consts::FRAC_1_PI),
