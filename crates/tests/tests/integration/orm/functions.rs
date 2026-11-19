@@ -1,0 +1,30 @@
+//! `orm/src/functions/`: one module per function family.
+
+mod api;
+mod array;
+mod bytes;
+mod count;
+mod crypto;
+mod duration;
+mod encoding;
+mod eval;
+mod file;
+mod geo;
+mod http;
+mod math;
+mod ml;
+mod module;
+mod object;
+mod parse;
+mod rand;
+mod record;
+mod search;
+mod sequence;
+mod session;
+mod set;
+mod sleep;
+mod string;
+mod time;
+mod type_;
+mod value;
+mod vector;
