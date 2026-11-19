@@ -9,6 +9,16 @@ async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
 }
 
+/// A root connection with a namespace of the test's own selected, so the databases a test defines
+/// are removed with it and never meet another test's.
+async fn in_own_namespace() -> (Surreal<Any>, TestNamespace) {
+    let (db, scratch) = namespace().await;
+    db.use_ns(scratch.namespace())
+        .await
+        .expect("namespace selected");
+    (db, scratch)
+}
+
 /// Whether `CREATE person` succeeds in the database `name`.
 async fn creates_undefined_table(db: &Surreal<Any>, name: &str) -> bool {
     db.use_db(name).await.expect("database selected");
@@ -49,7 +59,7 @@ fn a_changefeed_renders_with_its_expiry() {
 
 #[tokio::test]
 async fn the_database_stores_its_changefeed() {
-    let (db, _guard) = db().await;
+    let (db, _scratch) = in_own_namespace().await;
     run(
         &db,
         define_database("acme").changefeed(std::time::Duration::from_secs(3600)),
@@ -69,14 +79,14 @@ async fn the_database_stores_its_changefeed() {
 
 #[tokio::test]
 async fn a_strict_database_refuses_undefined_tables() {
-    let (db, _guard) = db().await;
+    let (db, _scratch) = in_own_namespace().await;
     run(&db, define_database("acme").strict()).await;
     assert!(!creates_undefined_table(&db, "acme").await);
 }
 
 #[tokio::test]
 async fn overwrite_without_strict_lifts_it() {
-    let (db, _guard) = db().await;
+    let (db, _scratch) = in_own_namespace().await;
     run(&db, define_database("acme").strict()).await;
     run(&db, define_database("acme").overwrite()).await;
     assert!(creates_undefined_table(&db, "acme").await);

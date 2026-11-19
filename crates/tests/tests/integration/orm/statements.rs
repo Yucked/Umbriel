@@ -1025,7 +1025,10 @@ mod definitions {
 
     #[tokio::test]
     async fn every_definition_is_accepted_and_removable() {
-        let (db, _guard) = db().await;
+        let (db, guard) = db().await;
+        // Unique names: a namespace is server-wide, and a fixed name could be another test's or
+        // something real.
+        let defined = format!("{}_defined", guard.database());
         let user = Table::from("user");
         run(&db, define_table(user.clone()).schemaless()).await;
         run(
@@ -1084,8 +1087,8 @@ mod definitions {
                 .role(UserRole::Viewer),
         )
         .await;
-        run(&db, define_namespace(Namespace::new("acme"))).await;
-        run(&db, define_database("acme")).await;
+        run(&db, define_namespace(defined.as_str())).await;
+        run(&db, define_database(defined.as_str())).await;
 
         let info: Option<BTreeMap<String, Value>> = info_for()
             .database()
@@ -1119,8 +1122,8 @@ mod definitions {
         )
         .await;
         run(&db, remove_table(user)).await;
-        run(&db, remove_database("acme")).await;
-        run(&db, remove_namespace("acme")).await;
+        run(&db, remove_database(defined.as_str())).await;
+        run(&db, remove_namespace(defined.as_str())).await;
     }
 }
 

@@ -119,14 +119,16 @@ async fn runs(db: &Surreal<Any>, statement: impl Runnable + Sync) -> bool {
 
 #[tokio::test]
 async fn if_exists_removes_nothing_without_failing() {
-    let (db, _guard) = db().await;
+    let (db, guard) = db().await;
     db.query("DEFINE TABLE user;")
         .await
         .and_then(surrealdb::IndexedResults::check)
         .expect("table defined");
 
-    assert!(runs(&db, remove_namespace("acme").if_exists()).await);
-    assert!(runs(&db, remove_database("acme").if_exists()).await);
+    // Unique names: on a shared server a fixed one could name something real.
+    let missing = format!("{}_missing", guard.database());
+    assert!(runs(&db, remove_namespace(missing.as_str()).if_exists()).await);
+    assert!(runs(&db, remove_database(missing.as_str()).if_exists()).await);
     assert!(runs(&db, remove_table("missing").if_exists()).await);
     assert!(
         runs(

@@ -59,28 +59,27 @@ mod sessions {
     use super::*;
 
     /// A clone's session is its own: changing the selection of one through the SDK does not move
-    /// the other. (A `USE` statement never changes a session; see `orm/statements/use_.rs`.)
+    /// the other. (A `USE` statement never changes a session; see `orm/statements/use_.rs`.) The
+    /// selections are inside a namespace of the test's own, so nothing outside it is touched.
     #[tokio::test]
     async fn cloned_handles_keep_their_selection_independent() {
-        let (db, _guard) = db().await;
+        let (db, scratch) = namespace().await;
+        let ns = scratch.namespace();
         let other = db.clone();
-        other
-            .use_ns("acme")
-            .use_db("sales")
-            .await
-            .expect("selected");
-        db.use_db("support").await.expect("selected");
-        assert_eq!(selection(&db).await, selected(NAMESPACE, "support"));
-        assert_eq!(selection(&other).await, selected("acme", "sales"));
+        other.use_ns(ns).use_db("sales").await.expect("selected");
+        db.use_ns(ns).use_db("support").await.expect("selected");
+        assert_eq!(selection(&db).await, selected(ns, "support"));
+        assert_eq!(selection(&other).await, selected(ns, "sales"));
     }
 
     /// A clone starts from its original's session.
     #[tokio::test]
     async fn a_clone_starts_from_the_original_selection() {
-        let (db, _guard) = db().await;
-        db.use_ns("acme").use_db("sales").await.expect("selected");
+        let (db, scratch) = namespace().await;
+        let ns = scratch.namespace();
+        db.use_ns(ns).use_db("sales").await.expect("selected");
         let clone = db.clone();
-        assert_eq!(selection(&clone).await, selected("acme", "sales"));
+        assert_eq!(selection(&clone).await, selected(ns, "sales"));
     }
 }
 
