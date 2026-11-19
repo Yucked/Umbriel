@@ -283,7 +283,7 @@ pub struct NodeEdgeMetadata<'a> {
     edge_relation_model_selected_ident: EdgeRelationModelSelectedIdent,
     /// Example Generated:
     ///
-    /// ```rust, ignore
+    /// ```text
     /// impl Writes__ {
     ///     fn book(&self, filter: Filter) -> Book {
     ///         Book::__________connect_to_graph_traversal_string(
@@ -302,7 +302,7 @@ pub struct NodeEdgeMetadata<'a> {
     /// ```
     ///
     /// Example Value:
-    /// ```rust, ignore
+    /// ```text
     /// vec![
     ///     quote!(
     ///        fn book(&self, filter: Filter) -> Book {

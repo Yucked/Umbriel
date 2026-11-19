@@ -62,7 +62,7 @@ pub struct Codegen<'a> {
     /// key(normalized_field_name)-value(Field) e.g pub out: Field, of field name and Field type
     /// to build up struct for generating fields of a Schema of the Edge
     /// The full thing can look like, next to the model (no module):
-    /// ```rust,ignore
+    /// ```text
     /// pub struct __6Writes2idField<In, Out>(pub Field, pub PhantomData<fn() -> (In, Out,)>);
     /// pub struct __6Writes11timeWrittenField<In, Out>(pub Field, pub PhantomData<fn() -> (In, Out,)>);
     ///
@@ -84,7 +84,7 @@ pub struct Codegen<'a> {
     /// Generated example: pub writtenBooks: AliasName,
     /// This is used when you have a relate attribute signaling a graph with e.g node->edge->node
     /// The full thing can look like:
-    /// ```rust,ignore
+    /// ```text
     ///     #[derive(Debug, Default)]
     ///     pub struct Writes<Model: ::serde::Serialize + Default> {
     ///                pub writtenBooks: AliasName,
@@ -96,7 +96,7 @@ pub struct Codegen<'a> {
     /// This is used to build the actual instance of the struct with aliases
     /// The full thing can look like and the fields should be in normalized form:
     /// i.e writtenBooks => writtenBooks if serde camelizes
-    /// ```rust, ignore
+    /// ```text
     /// Self {
     ///                pub writtenBooks: AliasName,
     /// }
@@ -109,7 +109,7 @@ pub struct Codegen<'a> {
     pub serialized_field_names_normalised: Vec<DbFieldName>,
 
     /// Generated example:
-    /// ```rust,ignore
+    /// ```text
     /// // For relate field
     /// type StudentWritesBlogTableName = <StudentWritesBlog as Edge>::TableNameChecker;
     /// #crate_name::validators::assert_fields!(StudentWritesBlogTableName: Writes);
@@ -132,7 +132,7 @@ pub struct Codegen<'a> {
     /// When a field references another model as Link, we want to generate a method for that
     /// to be able to access the foreign fields
     /// Generated Example for e.g field with best_student: <Student>
-    /// ```rust, ignore
+    /// ```text
     /// pub fn best_student(&self, filter: Filter) -> Student {
     ///     Student::__________connect_to_graph_traversal_string(&self.___________graph_traversal_string, filter)
     /// }

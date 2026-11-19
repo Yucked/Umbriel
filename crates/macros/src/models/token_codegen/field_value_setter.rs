@@ -12,7 +12,7 @@ create_tokenstream_wrapper!(
     /// The generated wrapper of one schema field and its implementations. The wrapper is generic
     /// over the model's parameters, so each specialization of a generic model has its own field
     /// types, e.g. for `email: Duration` on `User<T>`:
-    /// ```rust,ignore
+    /// ```text
     /// pub struct __4User5emailField<T>(pub Field, pub PhantomData<fn() -> (T,)>);
     ///
     /// impl<T: Bound> umbriel::SetterAssignable<Duration> for __4User5emailField<T> {}

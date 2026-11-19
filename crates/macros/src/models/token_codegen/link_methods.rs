@@ -255,7 +255,7 @@ create_tokenstream_wrapper!(
 /// the struct gatherer FieldsMeta fields
 /// Contains the default alias method for the foreign node type
 /// Example:
-/// ```rust, ignore
+/// ```text
 ///
 =>
 LinkFieldTraversalMethodToken
