@@ -468,10 +468,10 @@ pub async fn read<T: SurrealValue>(db: &Surreal<impl surrealdb::Connection>, sql
         .query(sql.to_owned())
         .await
         .and_then(surrealdb::IndexedResults::check)
-        .expect("query succeeds")
+        .unwrap_or_else(|error| panic!("`{sql}` fails: {error}"))
         .take(0)
-        .expect("a result");
-    T::from_value(value).expect("value decodes")
+        .unwrap_or_else(|error| panic!("`{sql}` has no result: {error}"));
+    T::from_value(value).unwrap_or_else(|error| panic!("`{sql}` doesn't decode: {error}"))
 }
 
 /// The `DEFINE` statement that `info` (e.g. `INFO FOR DB;`) lists for `name` under `kind`
