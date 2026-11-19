@@ -1,15 +1,18 @@
-//! Compile-pass and compile-fail checks for the exported macros and their diagnostics.
+//! Compile-fail checks for the exported macros and their diagnostics, and the standalone
+//! consumer crates.
 //!
 //! Each `tests/ui/fail` case has a `.stderr` file with the expected diagnostic. After changing a
 //! diagnostic on purpose, regenerate them with `TRYBUILD=overwrite` and review the diff.
+//!
+//! Code that must compile is in the integration binary (the `compiles_*` modules), not here:
+//! with only compile-fail cases, trybuild checks them all in one `cargo check` instead of
+//! building each case on its own.
 
 use std::process::Command;
 
 #[test]
 fn ui() {
-    let cases = trybuild::TestCases::new();
-    cases.pass("tests/ui/pass/*.rs");
-    cases.compile_fail("tests/ui/fail/*.rs");
+    trybuild::TestCases::new().compile_fail("tests/ui/fail/*.rs");
 }
 
 /// Checks the standalone consumer crate `fixtures/<fixture>`. A fixture is a separate crate

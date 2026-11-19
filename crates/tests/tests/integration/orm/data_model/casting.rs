@@ -148,3 +148,19 @@ async fn casts_convert_on_the_engine() {
         "the failed cast names the value: {error}"
     );
 }
+
+/// A dynamic cast is untyped, so it enters every typed expression unchecked: the documented
+/// escape hatch for kinds no marker names.
+mod compiles_dynamic_casts {
+use umbriel::{Field, NumberLike, StrandLike, cast_dynamic, types::Kind};
+
+#[test]
+fn compiles() {
+    let either = cast_dynamic(
+        Kind::Either(vec![Kind::Int, Kind::String]),
+        Field::new("value"),
+    );
+    let _ = NumberLike::from(either.clone());
+    let _ = StrandLike::from(either);
+}
+}
