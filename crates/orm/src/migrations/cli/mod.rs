@@ -26,8 +26,9 @@ pub use up::{FastForwardDelta, Up, UpdateStrategy};
 use crate::DbResources;
 use clap::{ArgAction, Parser};
 
-pub use self::config::{DatabaseConnection, Experimental};
+pub use self::config::{COMPARISON_PASSWORD_VARIABLE, DatabaseConnection, Experimental};
 use crate::migrations::{
+    Comparison,
     MigrationConfig, MockPrompter, Mode, Prompter, RealPrompter, RenameOrDelete,
 };
 
@@ -101,12 +102,16 @@ impl Migrator {
 
     /// Run migration cli
     /// # Example
-    /// ```rust, ignore
-    /// use umbriel_tests::migrations::Resources;
-    /// use umbriel::migrations::Migrator;
+    /// ```rust,no_run
+    /// use umbriel::{DbResources, migrations::Migrator};
     ///
-    /// #[tokio::main]
-    /// async fn main() {
+    /// /// The codebase's schema: its tables, functions and other definitions.
+    /// struct Resources;
+    ///
+    /// impl DbResources for Resources {}
+    ///
+    /// // A migrator binary awaits this in its `main`, on the runtime it uses.
+    /// async fn migrate() {
     ///     Migrator::run(Resources).await;
     /// }
     /// ```
@@ -230,6 +235,16 @@ impl Migrator {
         if self.db_connection.db_connection.is_none() {
             self.db_connection.setup().await;
         }
+    }
+
+    /// The comparison `init`, `generate` and `reset` generate migrations in (see
+    /// [`DatabaseConnection::comparison`]).
+    ///
+    /// # Panics
+    ///
+    /// As [`DatabaseConnection::comparison`].
+    pub async fn comparison(&mut self) -> Comparison<Any> {
+        self.db_connection.comparison().await
     }
 }
 
