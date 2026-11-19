@@ -1,8 +1,0 @@
----
-source: crates/tests/tests/migrations.rs
-assertion_line: 4054
-expression: "migs[1].content()"
----
-DEFINE FIELD labels ON planet TYPE array;
-UPDATE planet SET labels = tags;
-REMOVE FIELD tags ON TABLE planet;

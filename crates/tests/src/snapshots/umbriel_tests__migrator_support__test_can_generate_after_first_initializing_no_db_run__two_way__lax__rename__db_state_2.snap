@@ -1,9 +1,0 @@
----
-source: crates/tests/src/migrator_support.rs
-assertion_line: 234
-expression: db_miration_schema_state.snapshot()
----
-StateSnapshot {
-    definitions: [],
-    migration_meta: [],
-}

@@ -1,9 +1,0 @@
----
-source: crates/tests/tests/migrations.rs
-assertion_line: 4066
-expression: "migs[0].down.content"
----
-REMOVE TABLE migration;
-REMOVE TABLE eats;
-REMOVE TABLE crop;
-REMOVE TABLE animal;
