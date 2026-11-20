@@ -26,6 +26,8 @@ pub enum Arrow {
     Right,
     /// Left arrow
     Left,
+    /// `<->`: edges in both directions.
+    Both,
 }
 
 impl Render for Arrow {
@@ -33,6 +35,7 @@ impl Render for Arrow {
         out.push_str(match self {
             Arrow::Right => "->",
             Arrow::Left => "<-",
+            Arrow::Both => "<->",
         });
     }
 }

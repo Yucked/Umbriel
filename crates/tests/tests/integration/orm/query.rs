@@ -1,6 +1,7 @@
 //! `orm/src/query/`.
 
 mod arithmetic;
+mod arrow;
 mod clause;
 mod closure;
 mod data_types;
