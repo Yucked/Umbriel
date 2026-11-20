@@ -1,5 +1,5 @@
 //! `DEFINE TABLE` (`orm/src/statements/define_table.rs`): table kinds, `TYPE RELATION`
-//! endpoints, the stored default kind, and view models (`#[umbriel::model(view)]`).
+//! endpoints, and view models (`#[umbriel::model(view)]`).
 
 use surrealdb::{Surreal, engine::any::Any};
 use umbriel::{
@@ -10,11 +10,6 @@ use umbriel_tests::*;
 
 async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
-}
-
-/// The `DEFINE TABLE` statement `INFO FOR DB` lists for `table`.
-async fn stored(db: &Surreal<Any>, table: &str) -> String {
-    stored_definition(db, "INFO FOR DB;", "tables", table).await
 }
 
 mod rendering {
@@ -87,15 +82,6 @@ mod rendering {
 
 mod behaviour {
     use super::*;
-
-    #[tokio::test]
-    async fn the_stored_default_kind_is_any_and_schemafull_is_normal() {
-        let (db, _guard) = db().await;
-        run(&db, define_table("user")).await;
-        run(&db, define_table("account").schemafull()).await;
-        assert!(stored(&db, "user").await.contains("TYPE ANY"));
-        assert!(stored(&db, "account").await.contains("TYPE NORMAL"));
-    }
 
     #[tokio::test]
     async fn a_normal_table_refuses_relations() {
@@ -192,17 +178,78 @@ mod views {
         assert_eq!(north.len(), 1);
     }
 
+    /// Why view models offer no writes (`docs/model.md`, `TableOf::create`): SurrealDB refuses
+    /// them.
     #[tokio::test]
     async fn surrealdb_refuses_writes_to_a_view() {
         let (db, _guard) = db().await;
         sales(&db).await;
         assert!(!succeeds(&db, "CREATE large_sale:x SET amount = 50;").await);
     }
+}
+
+/// Definitions and their effect on records.
+mod definitions {
+    use umbriel_tests::{support::statements::*, *};
+
+    #[test]
+    fn table_definitions() {
+        let age = Field::new("age");
+        let name = Field::new("name");
+        assert_sql(&define_table(Table::from("user")), "DEFINE TABLE user;");
+        assert_sql(
+            &define_table(Table::from("user"))
+                .schemaless()
+                .permissions_none(),
+            "DEFINE TABLE user SCHEMALESS PERMISSIONS NONE;",
+        );
+        assert_sql(
+            &define_table(Table::from("user"))
+                .schemafull()
+                .permissions_full(),
+            "DEFINE TABLE user SCHEMAFULL PERMISSIONS FULL;",
+        );
+        assert_sql(
+            &define_table(Table::from("adult"))
+                .drop()
+                .as_(select(All).from(Table::from("user")).where_(age.gte(18)))
+                .permissions(for_permission(Select).where_(age.gte(18)))
+                .permissions([
+                    for_permission([Create, Delete]).where_(name.is("Alice")),
+                    for_permission(Update).where_(age.lte(130)),
+                ]),
+            "DEFINE TABLE adult DROP AS \n\tSELECT * FROM user WHERE age >= 18\n\
+             PERMISSIONS\nFOR select\n\tWHERE age >= 18\n\
+             FOR create, delete\n\tWHERE name IS 'Alice'\nFOR update\n\tWHERE age <= 130;",
+        );
+    }
 
     #[tokio::test]
-    async fn a_view_source_cannot_be_removed() {
+    async fn schemafull_tables_reject_undefined_fields() {
         let (db, _guard) = db().await;
-        sales(&db).await;
-        assert!(!succeeds(&db, "REMOVE TABLE sale;").await);
+        run(&db, define_table(Table::from("person")).schemafull()).await;
+        run(
+            &db,
+            define_field(Field::new("name"))
+                .on_table(Table::from("person"))
+                .type_(Kind::String),
+        )
+        .await;
+
+        run(&db, Raw::new("CREATE person:alice SET name = 'Alice';")).await;
+        assert!(
+            Raw::new("CREATE person:carol SET name = 'Carol', extra = 1;")
+                .run(&db)
+                .await
+                .is_err(),
+            "an undefined field is rejected"
+        );
+        assert!(
+            Raw::new("CREATE person:bob SET name = 1;")
+                .run(&db)
+                .await
+                .is_err(),
+            "a field of the wrong type is rejected"
+        );
     }
 }

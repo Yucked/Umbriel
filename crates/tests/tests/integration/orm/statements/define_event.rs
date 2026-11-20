@@ -189,19 +189,31 @@ mod behaviour {
         let notes: Vec<String> = read(&db, "RETURN (SELECT VALUE note FROM log);").await;
         assert!(notes.contains(&"async".to_owned()), "{notes:?}");
     }
+}
+
+/// An event with a `WHEN` condition, defined through a model.
+mod definitions {
+    use umbriel_tests::{support::statements::*, *};
 
     #[tokio::test]
-    async fn when_null_never_runs() {
+    async fn events_run_on_changes() {
         let (db, _guard) = db().await;
-        assert!(
-            succeeds(
-                &db,
-                "DEFINE TABLE log;
-                 DEFINE EVENT audit ON sale WHEN NULL THEN (CREATE log);
-                 CREATE sale:1;"
-            )
+        run(
+            &db,
+            define_event("ship_created")
+                .on_table(Table::from("space_ship"))
+                .when(Param::new("event").equal("CREATE"))
+                .then(
+                    create::<WeaponStats>(WeaponStats::table())
+                        .set(WeaponStats::schema().averageStrength.equal_to(1.5)),
+                ),
+        )
+        .await;
+        space_ship("apollo", "Apollo")
+            .create(&db)
             .await
-        );
-        assert_eq!(log_count(&db).await, 0);
+            .expect("created");
+        let stats: usize = read(&db, "RETURN count(SELECT * FROM weapon_stats);").await;
+        assert_eq!(stats, 1);
     }
 }

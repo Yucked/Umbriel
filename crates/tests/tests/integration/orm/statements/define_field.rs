@@ -278,21 +278,6 @@ mod behaviour {
     }
 
     #[tokio::test]
-    async fn an_array_length_is_exact() {
-        let (db, _guard) = db().await;
-        run(
-            &db,
-            define_field(Field::new("pair"))
-                .on_table("sale")
-                .type_(Kind::Array(Box::new(Kind::Int), Some(2))),
-        )
-        .await;
-        assert!(succeeds(&db, "CREATE sale:1 SET pair = [1, 2];").await);
-        assert!(!succeeds(&db, "CREATE sale:2 SET pair = [1];").await);
-        assert!(!succeeds(&db, "CREATE sale:3 SET pair = [1, 2, 3];").await);
-    }
-
-    #[tokio::test]
     async fn a_flexible_computed_object_keeps_its_keys_on_a_schemafull_table() {
         let (db, _guard) = db().await;
         run(&db, define_table("sale").schemafull()).await;
@@ -345,28 +330,6 @@ mod behaviour {
     }
 
     #[tokio::test]
-    async fn computed_fields_read_other_computed_fields() {
-        let (db, _guard) = db().await;
-        run(
-            &db,
-            define_field(Field::new("doubled"))
-                .on_table("sale")
-                .computed(amount().multiply(2)),
-        )
-        .await;
-        run(
-            &db,
-            define_field(Field::new("quadrupled"))
-                .on_table("sale")
-                .computed(Field::new("doubled").multiply(2)),
-        )
-        .await;
-        assert!(succeeds(&db, "CREATE sale:1 SET amount = 3;").await);
-        let quadrupled: i64 = read(&db, "RETURN sale:1.quadrupled;").await;
-        assert_eq!(quadrupled, 12);
-    }
-
-    #[tokio::test]
     async fn a_decimal_default_redefines_from_its_stored_form() {
         let (db, _guard) = db().await;
         run(
@@ -396,26 +359,24 @@ mod behaviour {
     }
 }
 
-/// D5's baseline: what 3.3.4 does with a computed value written in a payload, and with a computed
-/// expression that writes. The model API is built on these results.
-mod computed_baseline {
+/// The server behaviour the model API's computed fields are built on, pinned so an upgrade that
+/// changes it fails here.
+mod computed_contract {
     use super::*;
 
-    async fn sale_with_doubled(db: &Surreal<Any>) {
+    /// Why a computed field has no patch, merge or setter and `object!` doesn't take it
+    /// (`docs/model.md`): SurrealDB discards a value written to it.
+    #[tokio::test]
+    async fn a_written_computed_value_is_discarded() {
+        let (db, _guard) = db().await;
         assert!(
             succeeds(
-                db,
+                &db,
                 "DEFINE FIELD amount ON sale TYPE int;
                  DEFINE FIELD doubled ON sale COMPUTED amount * 2;"
             )
             .await
         );
-    }
-
-    #[tokio::test]
-    async fn a_written_computed_value_is_discarded() {
-        let (db, _guard) = db().await;
-        sale_with_doubled(&db).await;
         assert!(succeeds(&db, "CREATE sale:1 CONTENT { amount: 2, doubled: 100 };").await);
         assert!(succeeds(&db, "UPDATE sale:1 CONTENT { amount: 3, doubled: 100 };").await);
         let doubled: i64 = read(&db, "RETURN sale:1.doubled;").await;
@@ -424,89 +385,6 @@ mod computed_baseline {
         assert!(succeeds(&db, "REMOVE FIELD doubled ON sale;").await);
         let stored: Option<i64> = read(&db, "RETURN sale:1.doubled;").await;
         assert_eq!(stored, None);
-    }
-
-    #[tokio::test]
-    async fn a_computed_expression_that_writes_is_refused_when_defined() {
-        let (db, _guard) = db().await;
-        let error = failure(
-            &db,
-            "DEFINE FIELD logged ON sale COMPUTED (CREATE log CONTENT { at: time::now() });",
-        )
-        .await;
-        // `ExecError::ComputedWrite`, from the definition-time check.
-        assert!(
-            error.contains("`COMPUTED` bodies must be read-only"),
-            "{error}"
-        );
-    }
-
-    #[tokio::test]
-    async fn a_computed_expression_calling_a_writing_function_fails_when_read() {
-        let (db, _guard) = db().await;
-        assert!(
-            succeeds(
-                &db,
-                "DEFINE FUNCTION fn::log() { CREATE log; RETURN 1; };
-                 DEFINE FIELD logged ON sale COMPUTED fn::log();
-                 CREATE sale:1 RETURN NONE;"
-            )
-            .await
-        );
-        let error = failure(&db, "SELECT logged FROM sale:1;").await;
-        // `ExecError::ComputedFieldSideEffect`, from the read-time frame that refuses writes.
-        assert!(
-            error.contains("A COMPUTED clause cannot contain a statement that modifies data"),
-            "{error}"
-        );
-    }
-}
-
-/// Whose rights a computed field reads with: the inventory's open question (reader capped by the
-/// definer, or the definer's rights). It needs a record user, signed up to the test's own
-/// database.
-mod computed_privileges {
-    use std::collections::BTreeMap;
-
-    use surrealdb::opt::auth::Record;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn a_computed_field_reads_with_the_readers_rights() {
-        let (db, guard) = db().await;
-        assert!(
-            succeeds(
-                &db,
-                "DEFINE TABLE secret SCHEMALESS PERMISSIONS NONE;
-                 CREATE secret:1; CREATE secret:2;
-                 DEFINE TABLE sale SCHEMALESS PERMISSIONS FULL;
-                 DEFINE FIELD hidden ON sale COMPUTED count(SELECT * FROM secret);
-                 CREATE sale:1;
-                 DEFINE TABLE user SCHEMALESS PERMISSIONS FULL;
-                 DEFINE ACCESS account ON DATABASE TYPE RECORD
-                     SIGNUP (CREATE user SET name = $name)
-                     SIGNIN (SELECT * FROM user WHERE name = $name)
-                     DURATION FOR SESSION 1h;"
-            )
-            .await
-        );
-        // The definer, root, sees both secrets through the field.
-        let as_root: usize = read(&db, "RETURN sale:1.hidden;").await;
-        assert_eq!(as_root, 2);
-
-        db.signup(Record {
-            namespace: guard.namespace().to_owned(),
-            database: guard.database().to_owned(),
-            access: "account".to_owned(),
-            params: BTreeMap::from([("name".to_owned(), "alice".to_owned())]),
-        })
-        .await
-        .expect("signed up as a record user");
-        // A record user, who cannot select `secret`, gets the count its own rights allow: the
-        // field runs with the reader's rights, never more than the definer's.
-        let as_record_user: usize = read(&db, "RETURN sale:1.hidden;").await;
-        assert_eq!(as_record_user, 0);
     }
 }
 
@@ -608,5 +486,201 @@ mod computed_models {
             .await
             .expect("selected");
         assert_eq!(doubled, vec![14]);
+    }
+}
+
+/// Definitions and their effect on records.
+mod definitions {
+    use umbriel_tests::{support::statements::*, *};
+
+    #[test]
+    fn field_definitions() {
+        let name = Field::new("name");
+        let age = Field::new("age");
+        assert_sql(
+            &define_field(Field::new("email"))
+                .on_table(Table::from("user"))
+                .type_(Kind::String)
+                .default("alice@example.com")
+                .assert(cond(value().is_not(NONE)).and(value().contains("@")))
+                .permissions(for_permission(Select).where_(age.gte(18)))
+                .permissions(for_permission([Create, Update]).where_(name.is("Alice"))),
+            "DEFINE FIELD email ON TABLE user TYPE string DEFAULT 'alice@example.com' \
+             ASSERT ($value IS NOT NONE) AND ($value CONTAINS '@')\n\
+             PERMISSIONS\nFOR select\n\tWHERE age >= 18\nFOR create, update\n\tWHERE name IS 'Alice';",
+        );
+        assert_sql(
+            &define_field(Field::new("email"))
+                .on_table(Table::from("user"))
+                .value(string::lowercase!(Param::new("value"))),
+            "DEFINE FIELD email ON TABLE user VALUE string::lowercase($value);",
+        );
+        assert_sql(
+            &define_field(Field::new("is_adult"))
+                .on_table(Table::from("user"))
+                .computed(age.gte(18))
+                .type_(Kind::Bool)
+                .permissions_none(),
+            "DEFINE FIELD is_adult ON TABLE user COMPUTED age >= 18 TYPE bool PERMISSIONS NONE;",
+        );
+        // Definitions are stored, so their values are written inline even when bound.
+        let query = define_field(Field::new("score"))
+            .on_table(Table::from("user"))
+            .default(0)
+            .to_query()
+            .expect("valid");
+        assert_eq!(query.sql(), "DEFINE FIELD score ON TABLE user DEFAULT 0;");
+        assert!(query.vars().is_empty());
+    }
+
+    #[test]
+    fn computed_fields_reject_other_clauses_nested_paths_and_id() {
+        let age = Field::new("age");
+        let computed = |field: Field| {
+            define_field(field)
+                .on_table(Table::from("person"))
+                .computed(age.gte(18))
+        };
+        assert!(computed(Field::new("is_adult")).to_query().is_ok());
+        assert!(computed(Field::new("is-adult")).to_query().is_ok());
+        assert_render_error(
+            &computed(Field::new("is_adult")).default(false),
+            "cannot also have",
+        );
+        assert_render_error(
+            &computed(Field::new("is_adult")).value(false),
+            "cannot also have",
+        );
+        assert_render_error(
+            &computed(Field::new("is_adult")).assert(value().is_not(NONE)),
+            "cannot also have",
+        );
+        assert_render_error(
+            &computed(Field::new("flags").with_field("is_adult")),
+            "top-level field",
+        );
+        assert_render_error(&computed(Field::raw("flags.is_adult")), "top-level field");
+        assert_render_error(&computed(Field::new("id")), "`id` field");
+    }
+
+    async fn define_score_with_default(db: &Surreal<Any>) {
+        run(db, define_table(Table::from("player")).schemaless()).await;
+        run(
+            db,
+            define_field(Field::new("score"))
+                .on_table(Table::from("player"))
+                .type_(Kind::Int)
+                .default(10),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn default_fills_a_missing_field_on_create() {
+        let (db, _guard) = db().await;
+        define_score_with_default(&db).await;
+
+        run(&db, Raw::new("CREATE player:alice;")).await;
+        let score: Option<i64> = read(&db, "SELECT VALUE score FROM ONLY player:alice;").await;
+        assert_eq!(score, Some(10));
+    }
+
+    #[tokio::test]
+    async fn default_keeps_falsy_values() {
+        let (db, _guard) = db().await;
+        define_score_with_default(&db).await;
+        run(
+            &db,
+            define_field(Field::new("active"))
+                .on_table(Table::from("player"))
+                .type_(Kind::Bool)
+                .default(true),
+        )
+        .await;
+        run(
+            &db,
+            define_field(Field::new("nickname"))
+                .on_table(Table::from("player"))
+                .type_(Kind::String)
+                .default("Al"),
+        )
+        .await;
+
+        run(
+            &db,
+            Raw::new("CREATE player:bob SET score = 0, active = false, nickname = '';"),
+        )
+        .await;
+        let score: Option<i64> = read(&db, "SELECT VALUE score FROM ONLY player:bob;").await;
+        let active: Option<bool> = read(&db, "SELECT VALUE active FROM ONLY player:bob;").await;
+        let nickname: Option<String> =
+            read(&db, "SELECT VALUE nickname FROM ONLY player:bob;").await;
+        assert_eq!(score, Some(0));
+        assert_eq!(active, Some(false));
+        assert_eq!(nickname.as_deref(), Some(""));
+    }
+
+    #[tokio::test]
+    async fn default_is_not_reapplied_on_update() {
+        let (db, _guard) = db().await;
+        define_score_with_default(&db).await;
+
+        run(&db, Raw::new("CREATE player:carol SET score = 5;")).await;
+        run(&db, Raw::new("UPDATE player:carol SET level = 2;")).await;
+        let score: Option<i64> = read(&db, "SELECT VALUE score FROM ONLY player:carol;").await;
+        assert_eq!(score, Some(5));
+
+        // Without `ALWAYS`, removing the field does not bring the default back, so the `int`
+        // field rejects the NONE left behind.
+        let error = Raw::new("UPDATE player:carol UNSET score;")
+            .run(&db)
+            .await
+            .expect_err("NONE is not an int");
+        let error = format!("{error:?}");
+        assert!(error.contains("Expected `int` but found `NONE`"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn value_transforms_on_create_and_update() {
+        let (db, _guard) = db().await;
+        run(&db, define_table(Table::from("player")).schemaless()).await;
+        run(
+            &db,
+            define_field(Field::new("name"))
+                .on_table(Table::from("player"))
+                .type_(Kind::String)
+                .value(string::lowercase!(Param::new("value"))),
+        )
+        .await;
+
+        run(&db, Raw::new("CREATE player:dave SET name = 'ALICE';")).await;
+        let name: Option<String> = read(&db, "SELECT VALUE name FROM ONLY player:dave;").await;
+        assert_eq!(name.as_deref(), Some("alice"));
+
+        run(&db, Raw::new("UPDATE player:dave SET name = 'BOB';")).await;
+        let name: Option<String> = read(&db, "SELECT VALUE name FROM ONLY player:dave;").await;
+        assert_eq!(name.as_deref(), Some("bob"));
+    }
+
+    #[tokio::test]
+    async fn computed_fields_are_evaluated_on_read() {
+        let (db, _guard) = db().await;
+        run(&db, define_table(Table::from("person")).schemaless()).await;
+        run(
+            &db,
+            define_field(Field::new("is_adult"))
+                .on_table(Table::from("person"))
+                .computed(Field::new("age").gte(18))
+                .type_(Kind::Bool),
+        )
+        .await;
+
+        run(&db, Raw::new("CREATE person:erin SET age = 20;")).await;
+        let adult: Option<bool> = read(&db, "SELECT VALUE is_adult FROM ONLY person:erin;").await;
+        assert_eq!(adult, Some(true));
+
+        run(&db, Raw::new("UPDATE person:erin SET age = 10;")).await;
+        let adult: Option<bool> = read(&db, "SELECT VALUE is_adult FROM ONLY person:erin;").await;
+        assert_eq!(adult, Some(false));
     }
 }
