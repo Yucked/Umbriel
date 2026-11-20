@@ -1,26 +1,52 @@
 use std::fmt::{self, Display};
 
-use crate::{Ident, Name, Renderer};
+use crate::{Ident, Name, Renderer, render::push_path};
 
 use super::{DefineOptions, Statement, impl_define_options, impl_definition};
 
 /// A full-text analyzer tokenizer.
-#[expect(missing_docs, reason = "each variant is the tokenizer's own name")]
 #[derive(Debug, Clone)]
 pub enum Tokenizer {
+    /// `blank`: splits on whitespace.
     Blank,
+    /// `camel`: splits on case changes.
     Camel,
+    /// `class`: splits where the character class changes.
     Class,
+    /// `punct`: splits on punctuation.
     Punct,
+    /// `segment(language)`: dictionary word segmentation of Chinese, Japanese or Korean text.
+    /// SurrealDB needs to be built with its `cjk` feature, which WebAssembly builds lack.
+    Segment(SegmentLanguage),
 }
 
 impl Display for Tokenizer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Tokenizer::Blank => f.write_str("Blank"),
+            Tokenizer::Camel => f.write_str("Camel"),
+            Tokenizer::Class => f.write_str("Class"),
+            Tokenizer::Punct => f.write_str("Punct"),
+            Tokenizer::Segment(language) => write!(f, "Segment({language})"),
+        }
+    }
+}
+
+/// A language for the `segment` tokenizer.
+#[expect(missing_docs, reason = "each variant is the language's own name")]
+#[derive(Debug, Clone)]
+pub enum SegmentLanguage {
+    Chinese,
+    Japanese,
+    Korean,
+}
+
+impl Display for SegmentLanguage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Tokenizer::Blank => "Blank",
-            Tokenizer::Camel => "Camel",
-            Tokenizer::Class => "Class",
-            Tokenizer::Punct => "Punct",
+            SegmentLanguage::Chinese => "CHINESE",
+            SegmentLanguage::Japanese => "JAPANESE",
+            SegmentLanguage::Korean => "KOREAN",
         })
     }
 }
@@ -81,6 +107,12 @@ pub enum AnalyzerFilter {
     Edgengram(u32, u32),
     /// `lowercase`
     Lowercase,
+    /// `mapper(path)`: replaces terms through the mapping file at `path` on the server, one
+    /// tab-separated `replacement term` pair per line. The server reads it only from a
+    /// directory on its file allowlist.
+    Mapper(String),
+    /// `ngram(min, max)`: every substring of `min` to `max` characters.
+    Ngram(u32, u32),
     /// `snowball(language)`
     Snowball(SnowballLanguage),
     /// `uppercase`
@@ -93,6 +125,18 @@ impl Display for AnalyzerFilter {
             AnalyzerFilter::Ascii => f.write_str("ascii"),
             AnalyzerFilter::Edgengram(min, max) => write!(f, "edgengram({min}, {max})"),
             AnalyzerFilter::Lowercase => f.write_str("lowercase"),
+            AnalyzerFilter::Mapper(path) => {
+                f.write_str("mapper('")?;
+                for c in path.chars() {
+                    match c {
+                        '\\' => f.write_str("\\\\")?,
+                        '\'' => f.write_str("\\'")?,
+                        c => fmt::Write::write_char(f, c)?,
+                    }
+                }
+                f.write_str("')")
+            }
+            AnalyzerFilter::Ngram(min, max) => write!(f, "ngram({min}, {max})"),
             AnalyzerFilter::Snowball(language) => write!(f, "snowball({language})"),
             AnalyzerFilter::Uppercase => f.write_str("uppercase"),
         }
@@ -104,6 +148,7 @@ impl Display for AnalyzerFilter {
 pub struct DefineAnalyzerStatement {
     name: Name<Ident>,
     options: DefineOptions,
+    function: Option<String>,
     tokenizers: Vec<Tokenizer>,
     filters: Vec<AnalyzerFilter>,
 }
@@ -126,6 +171,7 @@ pub struct DefineAnalyzerStatement {
 pub fn define_analyzer(name: impl Into<Name<Ident>>) -> DefineAnalyzerStatement {
     DefineAnalyzerStatement {
         name: name.into(),
+        function: None,
         tokenizers: vec![],
         filters: vec![],
         options: DefineOptions::default(),
@@ -133,6 +179,28 @@ pub fn define_analyzer(name: impl Into<Name<Ident>>) -> DefineAnalyzerStatement 
 }
 
 impl DefineAnalyzerStatement {
+    /// `FUNCTION @path`: a function the analyzer passes the text through before tokenizing it.
+    /// `path` is the full name of a defined function, `fn::…`, each `::`-separated part an
+    /// identifier; anything else fails the query when it is rendered. A module's function
+    /// (`mod::…`) is not supported yet and fails too.
+    ///
+    /// ```rust
+    /// use umbriel::{*, statements::{Tokenizer, define_analyzer}};
+    ///
+    /// let analyzer = define_analyzer("cleaned")
+    ///     .function("fn::strip_tags")
+    ///     .tokenizers([Tokenizer::Blank]);
+    /// assert_eq!(
+    ///     analyzer.to_debug_sql(),
+    ///     "DEFINE ANALYZER cleaned FUNCTION fn::strip_tags TOKENIZERS Blank;"
+    /// );
+    /// assert!(define_analyzer("cleaned").function("strip_tags").to_query().is_err());
+    /// ```
+    pub fn function(mut self, path: impl Into<String>) -> Self {
+        self.function = Some(path.into());
+        self
+    }
+
     /// Add a tokenizer to the analyzer
     pub fn tokenizers(mut self, tokenizers: impl IntoIterator<Item = Tokenizer>) -> Self {
         self.tokenizers.extend(tokenizers);
@@ -161,6 +229,25 @@ impl Statement for DefineAnalyzerStatement {
         out.push_str("DEFINE ANALYZER");
         self.options.render_kind(out);
         out.push_str(" ").push(&self.name);
+
+        if let Some(path) = &self.function {
+            out.push_str(" FUNCTION ");
+            match path.strip_prefix("fn::") {
+                Some(name) => {
+                    push_path(out, "fn", name);
+                }
+                None if path.starts_with("mod::") => {
+                    out.push_error(format!(
+                        "analyzer function `{path}`: module functions are not supported yet"
+                    ));
+                }
+                None => {
+                    out.push_error(format!(
+                        "invalid analyzer function `{path}`: write the full name, `fn::…`"
+                    ));
+                }
+            }
+        }
 
         if !self.tokenizers.is_empty() {
             out.push_str(" TOKENIZERS ");
