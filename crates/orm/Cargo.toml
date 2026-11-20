@@ -46,6 +46,7 @@ migrations = [
   "dep:clap",
   "dep:log",
   "dep:pretty_env_logger",
+  "dep:tokio",
 ]
 
 [dependencies]
@@ -66,3 +67,5 @@ inquire = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 pretty_env_logger = { workspace = true, optional = true }
+# Bounds the generator's cleanup of its comparison databases.
+tokio = { workspace = true, optional = true, features = ["time"] }

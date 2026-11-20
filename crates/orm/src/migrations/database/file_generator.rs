@@ -1,33 +1,43 @@
-use std::collections::BTreeSet;
+use std::{future::Future, time::Duration};
 
-use surrealdb::{Connection, Surreal};
+use surrealdb::{Connection, Surreal, opt::auth};
 
 use crate::{
     DbResources, Raw, Runnable,
-    statements::{define_database, remove_database},
+    statements::{UserRole, define_database, define_user, remove_database},
 };
 
 use crate::migrations::{resources::SchemaDiff, *};
 
-/// The prefix of every comparison database's name, so the leftovers of an interrupted generation
-/// can be found.
+/// The prefix of every comparison database's name, and of the generator's user in it, so the
+/// leftovers of an interrupted generation can be found.
 pub const COMPARISON_PREFIX: &str = "umbriel_cmp_";
+
+/// How long the generator waits for the server to confirm each comparison database's removal.
+pub const COMPARISON_REMOVAL_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Where migrations are generated: a connection, and a namespace set aside for the generator.
 ///
-/// Each generation creates two databases in the namespace, `umbriel_cmp_<uuid>_left` and
-/// `umbriel_cmp_<uuid>_right`. It replays the migration directory into the first and applies the
-/// codebase's definitions to the second, then removes both by name, whether it succeeded or
-/// failed. It reads nothing else in the namespace except `INFO FOR NS`, to reject namespace-level
-/// definitions the comparison added. An interrupted generation leaves its two databases behind,
+/// Each generation creates two databases in the namespace, `umbriel_cmp_<run>_left` and
+/// `umbriel_cmp_<run>_right`, and defines the database user `umbriel_cmp_<run>` in each, with the
+/// `OWNER` role and a random password. It replays the migration directory into the first and
+/// applies the codebase's definitions to the second, each signed in as that user, so SurrealDB
+/// refuses any statement outside that database: a migration cannot add, change or remove a
+/// namespace-level definition. The generator's user is left out of both schemas it compares.
+/// Both databases, with the users in them, are removed by name on the given connection, whether
+/// the generation succeeded or failed. An interrupted generation leaves its two databases behind,
 /// and nothing removes them automatically.
 ///
-/// The connection must be signed in as a user that may define and remove databases in the
-/// namespace: a namespace owner or editor, or a root user. It is cloned for each database, and a
-/// clone's session is its own, so the connection's own selection never changes. The server must
-/// allow every resource kind the codebase defines, such as the experimental `files` and
-/// `surrealism` features for buckets and modules. Waits are bounded only by the connection's own
-/// configuration.
+/// The connection must be signed in as a user that may define and remove databases, and define
+/// database users, in the namespace: a namespace owner or a root user. It is cloned for each
+/// database, and a clone's session is its own, so the connection's own selection never changes.
+/// The server must allow every resource kind the codebase defines, such as the experimental
+/// `files` and `surrealism` features for buckets and modules.
+///
+/// Each removal waits at most [`COMPARISON_REMOVAL_TIMEOUT`]. Every other wait (creating the
+/// databases and users, signing in, replaying, inspecting) is bounded only by the connection's own
+/// configuration. Generation must run inside a Tokio runtime with timers enabled: the removal
+/// bound panics without one.
 #[derive(Debug, Clone)]
 pub struct Comparison<C: Connection> {
     db: Surreal<C>,
@@ -55,79 +65,48 @@ impl<C: Connection> Comparison<C> {
 pub struct ComparisonDatabase<C: Connection> {
     left: LeftDatabase<C>,
     right: RightDatabase<C>,
-    /// The namespace-level definitions before the comparison ran.
-    namespace_before: BTreeSet<(String, String)>,
+    /// The generator's user, defined in both databases.
+    user: String,
 }
 
 impl<C: Connection> ComparisonDatabase<C> {
-    /// Creates both databases in `comparison`'s namespace. When the second cannot be created, the
-    /// first is removed.
+    /// Creates both databases in `comparison`'s namespace and signs a clone of the connection in
+    /// to each as the generator's user (see [`Comparison`]). Whatever was created is removed when
+    /// a later step fails.
     ///
     /// # Errors
     ///
-    /// The database's error when a database cannot be created, or
-    /// [`MigrationError::ComparisonNotRemoved`] when one was created but cannot be removed again.
+    /// The database's error when a database or user cannot be defined or the sign-in fails, or
+    /// [`MigrationError::ComparisonNotRemoved`] when a database was created but cannot be removed
+    /// again.
     pub async fn init(comparison: &Comparison<C>) -> MigrationResult<Self> {
-        let run = uuid::Uuid::new_v4().simple();
-        let left =
-            MigratorDatabase::create(comparison, format!("{COMPARISON_PREFIX}{run}_left")).await?;
-        let created = async {
-            let right =
-                MigratorDatabase::create(comparison, format!("{COMPARISON_PREFIX}{run}_right"))
-                    .await?;
-            Ok((right, Schema::namespace_definitions(left.db()).await?))
-        }
-        .await;
-        match created {
-            Ok((right, namespace_before)) => Ok(Self {
-                left: LeftDatabase(left),
-                right: RightDatabase(right),
-                namespace_before,
-            }),
-            Err(error) => {
-                let namespace = left.namespace.clone();
-                let name = left.name.clone();
-                Err(match left.remove().await {
-                    Ok(()) => error,
-                    Err(cleanup) => MigrationError::ComparisonNotRemoved {
-                        namespace,
-                        databases: vec![name],
-                        cleanup: Box::new(cleanup),
-                        generation: Some(Box::new(error)),
-                    },
-                })
-            }
-        }
+        init_comparison_with(comparison, Self::sign_in).await
     }
 
-    /// Removes both databases, by name, and returns `outcome` unless a removal failed. When one
-    /// did, the error names the databases left behind and keeps `outcome`'s own failure as its
-    /// cause.
+    /// Defines the generator's user in both databases, with a new random password, and replaces
+    /// each database's connection with a clone signed in as it.
+    async fn sign_in(&mut self) -> MigrationResult<()> {
+        let password = uuid::Uuid::new_v4().simple().to_string();
+        for database in [&mut self.left.0, &mut self.right.0] {
+            database.sign_in(&self.user, &password).await?;
+        }
+        Ok(())
+    }
+
+    /// Removes both databases, by name, and returns `outcome` unless a removal failed (see
+    /// [`remove_comparison`]).
     async fn finish<T>(self, outcome: MigrationResult<T>) -> MigrationResult<T> {
         let namespace = self.left.namespace.clone();
-        let mut left_behind = Vec::new();
-        let mut cleanup = None;
-        for database in [self.left.0, self.right.0] {
-            let name = database.name.clone();
-            if let Err(error) = database.remove().await {
-                left_behind.push(name);
-                cleanup.get_or_insert(error);
-            }
-        }
-        let Some(cleanup) = cleanup else {
-            return outcome;
-        };
-        Err(MigrationError::ComparisonNotRemoved {
-            namespace,
-            databases: left_behind,
-            cleanup: Box::new(cleanup),
-            generation: outcome.err().map(Box::new),
-        })
+        remove_comparison(
+            &namespace,
+            [self.left.0.removal(), self.right.0.removal()],
+            outcome,
+        )
+        .await
     }
 
     /// The schema the migration directory produces, or an empty one unless `replay_directory`,
-    /// and the codebase's. Namespace-level definitions the comparison added, which migrations do
-    /// not manage, are rejected.
+    /// and the codebase's, both without the generator's user.
     async fn schemas(
         &self,
         file_manager: &MigrationConfig,
@@ -150,16 +129,104 @@ impl<C: Connection> ComparisonDatabase<C> {
         self.right
             .run_codebase_schema_queries(codebase_resources, migration_flag)
             .await?;
-        let namespace_after = Schema::namespace_definitions(self.left.db()).await?;
-        Schema::reject_added_namespace_definitions(&self.namespace_before, &namespace_after)?;
-        Ok((self.left.schema().await?, self.right.schema().await?))
+        // Its password hash differs between the databases, so it would compare as a changed
+        // secret.
+        let user = ResourceKey {
+            kind: ResourceKind::User,
+            table: None,
+            name: self.user.clone(),
+        };
+        Ok((
+            self.left.schema().await?.without(&user),
+            self.right.schema().await?.without(&user),
+        ))
     }
+}
+
+/// Creates both comparison databases in `comparison`'s namespace, then runs `prepare` on them.
+/// When the second database cannot be created, or `prepare` fails, the databases created so far
+/// are removed ([`remove_comparison`]). [`ComparisonDatabase::init`] prepares by signing in as the
+/// generator's user.
+///
+/// # Errors
+///
+/// As [`ComparisonDatabase::init`], with `prepare`'s own error in place of the sign-in's.
+#[doc(hidden)]
+pub async fn init_comparison_with<C: Connection>(
+    comparison: &Comparison<C>,
+    prepare: impl AsyncFnOnce(&mut ComparisonDatabase<C>) -> MigrationResult<()>,
+) -> MigrationResult<ComparisonDatabase<C>> {
+    let run = uuid::Uuid::new_v4().simple();
+    let left =
+        MigratorDatabase::create(comparison, format!("{COMPARISON_PREFIX}{run}_left")).await?;
+    let right =
+        match MigratorDatabase::create(comparison, format!("{COMPARISON_PREFIX}{run}_right")).await
+        {
+            Ok(right) => right,
+            Err(error) => {
+                return remove_comparison(&comparison.namespace, [left.removal()], Err(error))
+                    .await;
+            }
+        };
+    let mut databases = ComparisonDatabase {
+        left: LeftDatabase(left),
+        right: RightDatabase(right),
+        user: format!("{COMPARISON_PREFIX}{run}"),
+    };
+    match prepare(&mut databases).await {
+        Ok(()) => Ok(databases),
+        Err(error) => databases.finish(Err(error)).await,
+    }
+}
+
+/// Runs each removal of a comparison database in `namespace`, given with the database's name,
+/// each bounded by [`COMPARISON_REMOVAL_TIMEOUT`], and returns `outcome` unless one failed. Every
+/// removal is attempted, even after one failed or timed out.
+///
+/// # Errors
+///
+/// [`MigrationError::ComparisonNotRemoved`] when a removal failed: it names the databases left
+/// behind, has the first removal's failure as its cause ([`MigrationError::ComparisonTimedOut`]
+/// for a timeout), and keeps `outcome`'s own failure. Otherwise `outcome`'s.
+#[doc(hidden)]
+pub async fn remove_comparison<T>(
+    namespace: &str,
+    removals: impl IntoIterator<Item = (String, impl Future<Output = MigrationResult<()>>)>,
+    outcome: MigrationResult<T>,
+) -> MigrationResult<T> {
+    let mut left_behind = Vec::new();
+    let mut cleanup = None;
+    for (database, removal) in removals {
+        let removed = tokio::time::timeout(COMPARISON_REMOVAL_TIMEOUT, removal)
+            .await
+            .unwrap_or_else(|_| {
+                Err(MigrationError::ComparisonTimedOut {
+                    database: database.clone(),
+                })
+            });
+        if let Err(error) = removed {
+            left_behind.push(database);
+            cleanup.get_or_insert(error);
+        }
+    }
+    let Some(cleanup) = cleanup else {
+        return outcome;
+    };
+    Err(MigrationError::ComparisonNotRemoved {
+        namespace: namespace.to_owned(),
+        databases: left_behind,
+        cleanup: Box::new(cleanup),
+        generation: outcome.err().map(Box::new),
+    })
 }
 
 /// A comparison database the generator created.
 #[derive(Debug, Clone)]
 pub struct MigratorDatabase<C: Connection> {
+    /// The connection statements run on: signed in as the generator's user once prepared.
     db: Surreal<C>,
+    /// The caller's connection, selecting the database, which removes it.
+    admin: Surreal<C>,
     namespace: String,
     name: String,
 }
@@ -169,36 +236,60 @@ impl<C: Connection> MigratorDatabase<C> {
     /// that selects it. Without `IF NOT EXISTS` or `OVERWRITE`, `DEFINE DATABASE` refuses a name
     /// that exists, so the generator never takes over a database it didn't create.
     async fn create(comparison: &Comparison<C>, name: String) -> MigrationResult<Self> {
-        let db = comparison.db.clone();
-        db.use_ns(comparison.namespace.as_str()).await?;
-        define_database(name.as_str()).run(&db).await?;
+        let admin = comparison.db.clone();
+        admin.use_ns(comparison.namespace.as_str()).await?;
+        define_database(name.as_str()).run(&admin).await?;
+        let selected = admin.use_db(name.as_str()).await;
         let database = Self {
-            db,
+            db: admin.clone(),
+            admin,
             namespace: comparison.namespace.clone(),
             name,
         };
-        if let Err(error) = database.db.use_db(database.name.as_str()).await {
-            let (namespace, name) = (database.namespace.clone(), database.name.clone());
-            return Err(match database.remove().await {
-                Ok(()) => error.into(),
-                Err(cleanup) => MigrationError::ComparisonNotRemoved {
-                    namespace,
-                    databases: vec![name],
-                    cleanup: Box::new(cleanup),
-                    generation: Some(Box::new(error.into())),
-                },
-            });
+        if let Err(error) = selected {
+            return remove_comparison(
+                &comparison.namespace,
+                [database.removal()],
+                Err(error.into()),
+            )
+            .await;
         }
         Ok(database)
     }
 
-    /// Removes the database, by name.
-    async fn remove(self) -> MigrationResult<()> {
-        remove_database(self.name.as_str()).run(&self.db).await?;
+    /// Defines `user` in the database, with the `OWNER` role, and replaces the database's
+    /// connection with a clone of the caller's signed in as it. SurrealDB takes the password only
+    /// as a string literal, so it is written into the definition.
+    async fn sign_in(&mut self, user: &str, password: &str) -> MigrationResult<()> {
+        define_user(user)
+            .on_database()
+            .password(password)
+            .role(UserRole::Owner)
+            .run(&self.admin)
+            .await?;
+        let db = self.admin.clone();
+        db.signin(auth::Database {
+            namespace: self.namespace.clone(),
+            database: self.name.clone(),
+            username: user.to_owned(),
+            password: password.to_owned(),
+        })
+        .await?;
+        self.db = db;
         Ok(())
     }
 
-    /// The connection to the database.
+    /// The database's name and the removal of the database, by name, on the caller's connection.
+    fn removal(self) -> (String, impl Future<Output = MigrationResult<()>>) {
+        let name = self.name.clone();
+        let removal = async move {
+            remove_database(self.name.as_str()).run(&self.admin).await?;
+            Ok(())
+        };
+        (name, removal)
+    }
+
+    /// The connection to the database, signed in as the generator's user once prepared.
     pub fn db(&self) -> &Surreal<C> {
         &self.db
     }

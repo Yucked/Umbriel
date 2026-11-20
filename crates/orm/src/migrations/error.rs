@@ -435,6 +435,15 @@ There are {one_way_filecount} up only files and {two_way_filecount} up and down 
         #[source]
         generation: Option<Box<MigrationError>>,
     },
+
+    /// The server did not confirm a comparison database's removal within
+    /// [`COMPARISON_REMOVAL_TIMEOUT`](crate::migrations::COMPARISON_REMOVAL_TIMEOUT). It may still
+    /// exist.
+    #[error("The comparison database `{database}` was not removed in time")]
+    ComparisonTimedOut {
+        /// The database.
+        database: String,
+    },
 }
 
 /// The result type of migrations.

@@ -156,8 +156,9 @@ pub struct DatabaseConnection {
     #[builder(default, setter(strip_option))]
     pub(crate) comparison_ns: Option<String>,
 
-    /// The namespace-level user the generator signs in as, on the same URL. Its password is read
-    /// from `UMBRIEL_COMPARISON_PASS`.
+    /// The namespace-level user the generator signs in as, on the same URL: an `OWNER`, since the
+    /// generator defines a user of its own in each comparison database (see [`Comparison`]). Its
+    /// password is read from `UMBRIEL_COMPARISON_PASS`.
     #[arg(
         global = true,
         long,
@@ -250,8 +251,9 @@ impl DatabaseConnection {
             .comparison_user
             .clone()
             .expect("--comparison-user names the namespace user the generator signs in as");
-        let password = std::env::var(COMPARISON_PASSWORD_VARIABLE)
-            .unwrap_or_else(|_| panic!("{COMPARISON_PASSWORD_VARIABLE} holds the comparison user's password"));
+        let password = std::env::var(COMPARISON_PASSWORD_VARIABLE).unwrap_or_else(|_| {
+            panic!("{COMPARISON_PASSWORD_VARIABLE} holds the comparison user's password")
+        });
         let db = connect(self.url.to_string())
             .await
             .expect("Failed to connect for the comparison");

@@ -220,7 +220,8 @@ pub mod test_support {
     #[cfg(feature = "migrations")]
     pub use crate::migrations::{
         database::{
-            db_runner::apply_after_reading, file_generator::generate_from_schemas,
+            db_runner::apply_after_reading,
+            file_generator::{generate_from_schemas, init_comparison_with, remove_comparison},
             migration_model::history_or_empty,
         },
         resources::bucket_backend::credential_in_backend,

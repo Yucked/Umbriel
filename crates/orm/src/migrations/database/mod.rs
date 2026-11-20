@@ -19,7 +19,9 @@ pub use db_right_codebase::*;
 pub use db_runner::{MigrationRunner, RollbackOptions};
 pub use embedded_migration::*;
 pub use file_content::*;
-pub use file_generator::{COMPARISON_PREFIX, Comparison, ComparisonDatabase, MigratorDatabase};
+pub use file_generator::{
+    COMPARISON_PREFIX, COMPARISON_REMOVAL_TIMEOUT, Comparison, ComparisonDatabase, MigratorDatabase,
+};
 pub use file_manager::*;
 pub use file_metadata::*;
 pub use file_name::*;
