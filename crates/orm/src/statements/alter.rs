@@ -13,7 +13,7 @@ use std::ops::Deref;
 use surrealdb::types::{Duration, Kind, Table, Value};
 
 use crate::{
-    Block, Conditional, Event, Field, Filter, Ident, Name, Param, Renderer, ValueLike,
+    Block, Conditional, Event, Field, Filter, Ident, Name, Param, Renderer, TableIndex, ValueLike,
     render::push_function_path,
 };
 
@@ -119,9 +119,8 @@ macro_rules! impl_alter_common {
 
 /// Alters a table: `ALTER TABLE [IF EXISTS] @name …`.
 ///
-/// It changes the comment, the kind, `SCHEMAFULL`/`SCHEMALESS`, the changefeed and the
-/// permissions; the rest of the definition is kept. Inline edges are altered with their own
-/// feature.
+/// It changes the comment, the kind, `SCHEMAFULL`/`SCHEMALESS`, the changefeed, the inline
+/// caches and the permissions; the rest of the definition is kept.
 ///
 /// ```rust
 /// use umbriel::{*, statements::alter_table};
@@ -144,6 +143,8 @@ pub fn alter_table(table: impl Into<Name<Table>>) -> AlterTableStatement {
         changefeed: Change::default(),
         include_original: false,
         comment: Change::default(),
+        inline_edges: Change::default(),
+        inline_references: Change::default(),
         permissions: PermissionsClause::default(),
     }
 }
@@ -157,10 +158,38 @@ pub struct AlterTableStatement {
     changefeed: Change<Duration>,
     include_original: bool,
     comment: Change<String>,
+    inline_edges: Change<u32>,
+    inline_references: Change<u32>,
     permissions: PermissionsClause,
 }
 
 impl AlterTableStatement {
+    /// `INLINE EDGES @cap`: each record caches up to `cap` of its edges. SurrealDB rejects a cap
+    /// above its maximum.
+    pub fn inline_edges(mut self, cap: u32) -> Self {
+        self.inline_edges.set = Some(cap);
+        self
+    }
+
+    /// `DROP INLINE EDGES`.
+    pub fn drop_inline_edges(mut self) -> Self {
+        self.inline_edges.drop = true;
+        self
+    }
+
+    /// `INLINE REFERENCES @cap`: each record caches up to `cap` of the references to it.
+    /// SurrealDB rejects a cap above its maximum.
+    pub fn inline_references(mut self, cap: u32) -> Self {
+        self.inline_references.set = Some(cap);
+        self
+    }
+
+    /// `DROP INLINE REFERENCES`.
+    pub fn drop_inline_references(mut self) -> Self {
+        self.inline_references.drop = true;
+        self
+    }
+
     /// `CHANGEFEED @expiry`: replaces the table's changefeed. SurrealDB takes the duration only
     /// as a literal.
     pub fn changefeed(mut self, expiry: impl Into<Duration>) -> Self {
@@ -254,6 +283,13 @@ impl Statement for AlterTableStatement {
             push_changefeed(out, Some(expiry), self.include_original);
         });
         render_comment(&self.comment, out);
+        self.inline_edges.render(out, "INLINE EDGES", |cap, out| {
+            out.push_str(" INLINE EDGES ").push_display(cap);
+        });
+        self.inline_references
+            .render(out, "INLINE REFERENCES", |cap, out| {
+                out.push_str(" INLINE REFERENCES ").push_display(cap);
+            });
         out.push(&self.permissions);
     }
 }
@@ -296,6 +332,7 @@ pub fn alter_field(field: impl Into<Field>) -> AlterFieldStatement {
         assert: Change::default(),
         default: Change::default(),
         comment: Change::default(),
+        inline: Change::default(),
         permissions: PermissionsClause::default(),
     }
 }
@@ -308,6 +345,7 @@ pub struct AlterFieldStatement {
     type_: Change<Kind>,
     flexible: Change<()>,
     readonly: Change<()>,
+    inline: Change<()>,
     value: Change<ValueLike>,
     assert: Change<Filter>,
     default: Change<FieldDefault>,
@@ -355,6 +393,20 @@ impl AlterFieldStatement {
     /// `DROP READONLY`.
     pub fn drop_readonly(mut self) -> Self {
         self.readonly.drop = true;
+        self
+    }
+
+    /// `INLINE`: the field's value is stored with the edge's adjacency, so traversals read it
+    /// without loading the edge. Only on top-level fields of `TYPE RELATION` tables, other than
+    /// `id`, `in`, `out` and computed fields.
+    pub fn inline(mut self) -> Self {
+        self.inline.set = Some(());
+        self
+    }
+
+    /// `DROP INLINE`.
+    pub fn drop_inline(mut self) -> Self {
+        self.inline.drop = true;
         self
     }
 
@@ -442,6 +494,9 @@ impl Statement for AlterFieldStatement {
         self.readonly.render(out, "READONLY", |(), out| {
             out.push_str(" READONLY");
         });
+        self.inline.render(out, "INLINE", |(), out| {
+            out.push_str(" INLINE");
+        });
         self.value.render(out, "VALUE", |value, out| {
             out.push_str(" VALUE ").push(value);
         });
@@ -456,6 +511,79 @@ impl Statement for AlterFieldStatement {
 
 impl_alter_common!(AlterFieldStatement);
 impl_definition!(AlterFieldStatement);
+
+/// Alters an index: `ALTER INDEX [IF EXISTS] @name ON TABLE @table [PREPARE REMOVE]
+/// [COMMENT …]`.
+///
+/// Unlike `DEFINE INDEX OVERWRITE`, which rebuilds the index, it keeps the index's data. It
+/// changes only the comment and [`prepare_remove`](AlterIndexStatement::prepare_remove); the
+/// table is required, and a statement without one fails to render.
+///
+/// ```rust
+/// use umbriel::{*, statements::alter_index};
+///
+/// let statement = alter_index("post_content").on_table("post").comment("Search");
+/// assert_eq!(statement.to_debug_sql(), "ALTER INDEX post_content ON TABLE post COMMENT 'Search';");
+///
+/// let statement = alter_index("post_content").on_table("post").if_exists().prepare_remove();
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "ALTER INDEX IF EXISTS post_content ON TABLE post PREPARE REMOVE;"
+/// );
+/// ```
+pub fn alter_index(index: impl Into<Name<TableIndex>>) -> AlterIndexStatement {
+    AlterIndexStatement {
+        index: index.into(),
+        table: None,
+        if_exists: false,
+        prepare_remove: false,
+        comment: Change::default(),
+    }
+}
+
+/// An `ALTER INDEX` statement.
+pub struct AlterIndexStatement {
+    index: Name<TableIndex>,
+    table: Option<Name<Table>>,
+    if_exists: bool,
+    prepare_remove: bool,
+    comment: Change<String>,
+}
+
+impl AlterIndexStatement {
+    /// The table the index is on. The name may come from a parameter.
+    pub fn on_table(mut self, table: impl Into<Name<Table>>) -> Self {
+        self.table = Some(table.into());
+        self
+    }
+
+    /// `PREPARE REMOVE`: takes the index out of service ahead of its removal. Writes stop
+    /// maintaining it, queries stop using it, and a build in progress is cancelled. Nothing but
+    /// a redefinition (`DEFINE INDEX OVERWRITE`, which rebuilds it) or `REMOVE INDEX` undoes it,
+    /// and `REBUILD INDEX` fails on it.
+    pub fn prepare_remove(mut self) -> Self {
+        self.prepare_remove = true;
+        self
+    }
+}
+
+impl Statement for AlterIndexStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "INDEX", self.if_exists);
+        out.push(&self.index);
+        if self.table.is_none() {
+            out.push_error("ALTER INDEX needs the index's table: call `on_table`");
+        }
+        push_table(out, self.table.as_ref());
+        if self.prepare_remove {
+            out.push_str(" PREPARE REMOVE");
+        }
+        render_comment(&self.comment, out);
+    }
+}
+
+impl_alter_common!(AlterIndexStatement);
+impl_definition!(AlterIndexStatement);
 
 /// Alters an event: `ALTER EVENT [IF EXISTS] @name ON [TABLE] @table …`.
 ///

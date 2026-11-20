@@ -6,8 +6,9 @@ use umbriel::{
     All, Field, NONE, Operatable, Param, Render, Runnable, Table, chain,
     statements::{
         AnalyzerFilter, FunctionArgument, Tokenizer, alter_analyzer, alter_event, alter_field,
-        alter_function, alter_param, alter_table, define_analyzer, define_event, define_field,
-        define_function, define_param, define_table, return_, select, table_relation,
+        alter_function, alter_index, alter_param, alter_table, define_analyzer, define_event,
+        define_field, define_function, define_param, define_table, info_for, return_, select,
+        table_relation,
     },
     value,
 };
@@ -257,6 +258,139 @@ mod rendering {
             assert_render_error(&analyzer, "invalid function name");
             assert!(!analyzer.to_debug_sql().contains("REMOVE"), "{hostile}");
         }
+    }
+
+    #[test]
+    fn alter_index_renders_every_option() {
+        let cases = [
+            (
+                alter_index("note_body").on_table("note").comment("Bodies"),
+                "ALTER INDEX note_body ON TABLE note COMMENT 'Bodies';",
+            ),
+            (
+                alter_index("note_body").on_table("note").drop_comment(),
+                "ALTER INDEX note_body ON TABLE note DROP COMMENT;",
+            ),
+            (
+                alter_index("note_body")
+                    .on_table("note")
+                    .if_exists()
+                    .prepare_remove()
+                    .comment("Leaving"),
+                "ALTER INDEX IF EXISTS note_body ON TABLE note PREPARE REMOVE COMMENT 'Leaving';",
+            ),
+        ];
+        for (statement, expected) in cases {
+            assert_sql(&statement, expected);
+        }
+        assert!(
+            alter_index("note_body")
+                .comment("Bodies")
+                .to_query()
+                .is_err(),
+            "the table is required"
+        );
+    }
+
+    #[test]
+    fn alter_table_and_field_inline_render() {
+        assert_sql(
+            &alter_table("person").inline_edges(16).inline_references(8),
+            "ALTER TABLE person INLINE EDGES 16 INLINE REFERENCES 8;",
+        );
+        assert_sql(
+            &alter_table("person")
+                .drop_inline_edges()
+                .drop_inline_references(),
+            "ALTER TABLE person DROP INLINE EDGES DROP INLINE REFERENCES;",
+        );
+        assert_sql(
+            &alter_field(Field::new("since")).on_table("knows").inline(),
+            "ALTER FIELD since ON TABLE knows INLINE;",
+        );
+        assert_sql(
+            &alter_field(Field::new("since"))
+                .on_table("knows")
+                .drop_inline(),
+            "ALTER FIELD since ON TABLE knows DROP INLINE;",
+        );
+        assert!(
+            alter_field(Field::new("since"))
+                .on_table("knows")
+                .inline()
+                .drop_inline()
+                .to_query()
+                .is_err()
+        );
+    }
+}
+
+mod index_alterations {
+    use super::*;
+    use umbriel::statements::IndexStatus;
+
+    /// Two notes under a full-text index, `note_body`, over an analyzer that keeps case.
+    async fn notes(db: &Surreal<Any>) {
+        run(
+            db,
+            umbriel::Raw::new(
+                "DEFINE ANALYZER words TOKENIZERS blank; \
+                 DEFINE INDEX note_body ON note FIELDS body FULLTEXT ANALYZER words BM25; \
+                 CREATE note:one SET body = 'Hello'; \
+                 CREATE note:two SET body = 'Hello there';",
+            ),
+        )
+        .await;
+    }
+
+    async fn status(db: &Surreal<Any>) -> IndexStatus {
+        info_for()
+            .index("note_body", "note")
+            .execute(db)
+            .await
+            .expect("decoded")
+    }
+
+    #[tokio::test]
+    async fn altering_an_index_comment_keeps_its_build() {
+        let (db, _guard) = db().await;
+        notes(&db).await;
+        let before = status(&db).await;
+        run(
+            &db,
+            alter_index("note_body").on_table("note").comment("Bodies"),
+        )
+        .await;
+        assert_eq!(status(&db).await, before, "no new build");
+        let comment: String = read(
+            &db,
+            "RETURN (INFO FOR TABLE note STRUCTURE).indexes[0].comment;",
+        )
+        .await;
+        assert_eq!(comment, "Bodies");
+    }
+
+    #[tokio::test]
+    async fn an_index_marked_for_removal_is_no_longer_used() {
+        let (db, _guard) = db().await;
+        notes(&db).await;
+        // The query plan, as text: whether it names the index.
+        let plan = "RETURN <string> (SELECT id FROM note WHERE body @@ 'Hello' EXPLAIN);";
+        let before: String = read(&db, plan).await;
+        assert!(
+            before.contains("note_body"),
+            "the index is planned: {before}"
+        );
+        run(
+            &db,
+            alter_index("note_body").on_table("note").prepare_remove(),
+        )
+        .await;
+        let after: String = read(&db, plan).await;
+        assert!(
+            !after.contains("note_body"),
+            "the marked index is still planned: {after}"
+        );
     }
 }
 
