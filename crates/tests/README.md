@@ -12,6 +12,9 @@ No test starts a SurrealDB of its own. Tests that need a database run against se
 | `UMBRIEL_TEST_RESTRICTED_URL` | WebSocket, with the server's default capabilities. Used by the tests that check a capability is refused when it is off. |
 | `UMBRIEL_TEST_HTTP_URL` | HTTP (`http://` or `https://`). May be the same server as `UMBRIEL_TEST_URL`. |
 | `UMBRIEL_TEST_USER`, `UMBRIEL_TEST_PASS` | A root user on every server above. |
+| `UMBRIEL_TEST_MAPPER` | The absolute path, on the `UMBRIEL_TEST_URL` server, of an analyzer mapper file in a directory listed in that server's `SURREAL_FILE_ALLOWLIST` (`SURREAL_BUCKET_FOLDER_ALLOWLIST` covers buckets only), holding the one line `hi<TAB>hello` (a tab between the words). |
+
+The `UMBRIEL_TEST_URL` server must also be built with SurrealDB's `cjk` feature, for the `segment` tokenizer, on a 64-bit, non-WebAssembly target, for DiskANN indexes.
 
 A missing variable fails the tests that need it, naming the variable. Nothing is skipped.
 
