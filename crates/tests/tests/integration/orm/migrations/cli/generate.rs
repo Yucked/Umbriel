@@ -34,7 +34,9 @@ async fn generate_before_init_is_refused() {
 async fn generation_applies_only_when_asked() {
     for flag in FLAGS {
         let project = Project::new(flag, Mode::Strict).await;
-        project.run(init(&project, false), Resources, allow_empty()).await;
+        project
+            .run(init(&project, false), Resources, allow_empty())
+            .await;
         project
             .run(generate("migration gen 1", false), Resources, allow_empty())
             .await;
@@ -43,7 +45,9 @@ async fn generation_applies_only_when_asked() {
             .await;
 
         let project = Project::new(flag, Mode::Strict).await;
-        project.run(init(&project, true), Resources, allow_empty()).await;
+        project
+            .run(init(&project, true), Resources, allow_empty())
+            .await;
         project
             .run(generate("migration gen 1", false), Resources, allow_empty())
             .await;
@@ -113,8 +117,14 @@ async fn renames_and_deletions_are_generated_in_both_directions() {
             ),
             "{case}: the explicit rename:\n{up}"
         );
-        assert!(up.contains("REMOVE FIELD createdAt ON TABLE animal;"), "{case}");
-        assert!(up.contains("REMOVE FIELD updatedAt ON TABLE animal;"), "{case}");
+        assert!(
+            up.contains("REMOVE FIELD createdAt ON TABLE animal;"),
+            "{case}"
+        );
+        assert!(
+            up.contains("REMOVE FIELD updatedAt ON TABLE animal;"),
+            "{case}"
+        );
         match strategy {
             RenameOrDelete::Rename => assert!(
                 up.contains(
@@ -133,7 +143,10 @@ async fn renames_and_deletions_are_generated_in_both_directions() {
                         "REMOVE FIELD firstName ON TABLE planet;",
                     ],
                 );
-                assert!(!up.contains("UPDATE planet SET newName = firstName;"), "{case}");
+                assert!(
+                    !up.contains("UPDATE planet SET newName = firstName;"),
+                    "{case}"
+                );
             }
         }
 
@@ -177,7 +190,9 @@ async fn an_empty_migration_is_written_only_when_allowed() {
     };
     for flag in FLAGS {
         let project = Project::new(flag, Mode::Strict).await;
-        project.run(init(&project, true), Resources, refuse_empty()).await;
+        project
+            .run(init(&project, true), Resources, refuse_empty())
+            .await;
         for _ in 0..2 {
             project
                 .run(generate("no change", true), Resources, refuse_empty())

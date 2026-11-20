@@ -13,8 +13,9 @@ use clap::Parser;
 use pretty_assertions::assert_eq;
 use umbriel::migrations::{Init, MigrationFlag, Migrator, Mode};
 use umbriel_tests::{
-    Endpoint, succeeds,
+    Endpoint,
     migrations::{Resources, helpers::*},
+    succeeds,
 };
 
 fn migrator(args: &[&str]) -> Migrator {
@@ -67,7 +68,9 @@ async fn up_connects_as_a_database_user_and_applies_the_migrations() {
     ]);
     up.run_test(None::<Resources>, allow_empty()).await;
     assert_eq!(applied(up.db()).await.len(), 1);
-    project.assert_state(&["test_migration_1"], &["test_migration_1"]).await;
+    project
+        .assert_state(&["test_migration_1"], &["test_migration_1"])
+        .await;
 }
 
 #[test]

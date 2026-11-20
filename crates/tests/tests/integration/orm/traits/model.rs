@@ -320,7 +320,6 @@ mod record_operations {
     }
 }
 
-
 mod relations {
     use super::*;
 
@@ -378,4 +377,3 @@ mod relations {
         assert!(stored);
     }
 }
-

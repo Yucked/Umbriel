@@ -140,7 +140,10 @@ mod scenarios {
             .expect("ran");
         assert_eq!(results.take::<Option<i64>>(0).expect("int"), Some(1));
         assert_eq!(
-            results.take::<Option<String>>(1).expect("string").as_deref(),
+            results
+                .take::<Option<String>>(1)
+                .expect("string")
+                .as_deref(),
             Some(NAMESPACE)
         );
         let database = results

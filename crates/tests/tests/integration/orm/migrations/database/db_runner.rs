@@ -125,7 +125,11 @@ mod up {
         let failed = run_once(&dir, &db).await;
         assert!(failed.is_err(), "{failed:?}");
         assert_eq!(applied(&db).await, std::slice::from_ref(&first));
-        assert_eq!(tables(&db).await, ["first", "migration"], "the table is rolled back");
+        assert_eq!(
+            tables(&db).await,
+            ["first", "migration"],
+            "the table is rolled back"
+        );
         let kept: bool =
             umbriel_tests::read(&db, "RETURN file::exists(f\"avatars:/alice.txt\");").await;
         assert!(kept, "the file write is not rolled back");
@@ -149,8 +153,7 @@ mod up {
         let (left, right) = tokio::join!(run_once(&dir, &db), run_once(&dir, &db));
         assert!(left.is_ok() || right.is_ok(), "{left:?}\n{right:?}");
         assert_eq!(applied(&db).await, [first.clone(), second.clone()]);
-        let written: i64 =
-            umbriel_tests::read(&db, "RETURN count(SELECT * FROM second);").await;
+        let written: i64 = umbriel_tests::read(&db, "RETURN count(SELECT * FROM second);").await;
         assert_eq!(written, 1, "the second migration committed once");
 
         // Whichever runner lost, running again finds nothing pending.

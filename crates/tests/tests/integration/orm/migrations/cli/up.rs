@@ -52,7 +52,11 @@ async fn up_applies_every_pending_migration() {
             project.run(Up::default(), Resources, allow_empty()).await;
             assert_applied(&project, 12).await;
             project
-                .run(up(FastForwardDelta::builder().latest(true).build()), Resources, allow_empty())
+                .run(
+                    up(FastForwardDelta::builder().latest(true).build()),
+                    Resources,
+                    allow_empty(),
+                )
                 .await;
             assert_applied(&project, 12).await;
         }
@@ -67,7 +71,9 @@ async fn up_by_number_applies_that_many() {
         let project = Project::new(flag, Mode::Strict).await;
         generate_twelve(&project).await;
         for (number, applied) in [(1, 1), (5, 6), (0, 6), (1, 7), (5, 12), (1000, 12)] {
-            project.run(by_number(number), Resources, allow_empty()).await;
+            project
+                .run(by_number(number), Resources, allow_empty())
+                .await;
             assert_applied(&project, applied).await;
         }
     }
@@ -81,7 +87,11 @@ async fn up_till_applies_through_the_named_migration() {
         generate_twelve(&project).await;
         for position in [5, 9, 12] {
             project
-                .run(till(project.filename_at(position)), Resources, allow_empty())
+                .run(
+                    till(project.filename_at(position)),
+                    Resources,
+                    allow_empty(),
+                )
                 .await;
             assert_applied(&project, position).await;
         }
@@ -107,7 +117,11 @@ async fn up_targets_combine() {
             .await;
         assert_applied(&project, 9).await;
         project
-            .run(up(FastForwardDelta::builder().latest(true).build()), Resources, allow_empty())
+            .run(
+                up(FastForwardDelta::builder().latest(true).build()),
+                Resources,
+                allow_empty(),
+            )
             .await;
         assert_applied(&project, 12).await;
     }
@@ -122,7 +136,11 @@ mod till_refuses {
         let project = Project::new(MigrationFlag::OneWay, Mode::Strict).await;
         generate_twelve(&project).await;
         project
-            .run(till(project.filename_at(position)), Resources, allow_empty())
+            .run(
+                till(project.filename_at(position)),
+                Resources,
+                allow_empty(),
+            )
             .await;
         project
     }

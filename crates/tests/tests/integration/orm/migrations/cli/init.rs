@@ -4,8 +4,8 @@
 use pretty_assertions::assert_eq;
 use umbriel::{DbResources, Raw, migrations::*};
 use umbriel_tests::{
-    succeeds,
     migrations::{helpers::*, *},
+    succeeds,
 };
 
 fn init(run: bool, reversible: bool) -> Init {
@@ -99,9 +99,7 @@ async fn init_writes_the_first_migration_and_up_applies_it() {
             }
         }
 
-        project
-            .run(Up::default(), Resources, allow_empty())
-            .await;
+        project.run(Up::default(), Resources, allow_empty()).await;
         project
             .assert_state(&["migration_init"], &["migration_init"])
             .await;
@@ -139,7 +137,9 @@ async fn init_with_run_applies_the_first_migration() {
 )]
 async fn a_second_init_is_refused() {
     let project = Project::new(MigrationFlag::OneWay, Mode::Strict).await;
-    project.run(init(false, false), Resources, allow_empty()).await;
+    project
+        .run(init(false, false), Resources, allow_empty())
+        .await;
     project
         .run(
             Init::builder()

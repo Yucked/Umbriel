@@ -11,7 +11,10 @@ fn down(strategy: RollbackStrategyStruct, prune: bool) -> Down {
 }
 
 fn previous(prune: bool) -> Down {
-    down(RollbackStrategyStruct::builder().previous(true).build(), prune)
+    down(
+        RollbackStrategyStruct::builder().previous(true).build(),
+        prune,
+    )
 }
 
 fn by_default(prune: bool) -> Down {
@@ -19,11 +22,17 @@ fn by_default(prune: bool) -> Down {
 }
 
 fn by_number(number: u32, prune: bool) -> Down {
-    down(RollbackStrategyStruct::builder().number(number).build(), prune)
+    down(
+        RollbackStrategyStruct::builder().number(number).build(),
+        prune,
+    )
 }
 
 fn till(filename: MigrationFilename, prune: bool) -> Down {
-    down(RollbackStrategyStruct::builder().till(filename).build(), prune)
+    down(
+        RollbackStrategyStruct::builder().till(filename).build(),
+        prune,
+    )
 }
 
 /// Asserts the first `files` of the twelve migrations are on disk and the first `applied` are
@@ -57,7 +66,9 @@ async fn rolling_back_the_previous_migration() {
         let project = applied(mode).await;
         project.run(previous(false), Resources, allow_empty()).await;
         assert_at(&project, 12, 11).await;
-        project.run(by_default(false), Resources, allow_empty()).await;
+        project
+            .run(by_default(false), Resources, allow_empty())
+            .await;
         assert_at(&project, 12, 10).await;
         project.run(previous(false), Resources, allow_empty()).await;
         assert_at(&project, 12, 9).await;
@@ -66,23 +77,37 @@ async fn rolling_back_the_previous_migration() {
         assert_at(&project, 12, 12).await;
         project.run(previous(true), Resources, allow_empty()).await;
         assert_at(&project, 11, 11).await;
-        project.run(by_default(false), Resources, allow_empty()).await;
+        project
+            .run(by_default(false), Resources, allow_empty())
+            .await;
         assert_at(&project, 11, 10).await;
         project.run(previous(false), Resources, allow_empty()).await;
         assert_at(&project, 11, 9).await;
-        project.run(by_default(true), Resources, allow_empty()).await;
+        project
+            .run(by_default(true), Resources, allow_empty())
+            .await;
         assert_at(&project, 8, 8).await;
         for applied in (3..8).rev() {
-            project.run(by_default(false), Resources, allow_empty()).await;
+            project
+                .run(by_default(false), Resources, allow_empty())
+                .await;
             assert_at(&project, 8, applied).await;
         }
-        project.run(by_default(true), Resources, allow_empty()).await;
+        project
+            .run(by_default(true), Resources, allow_empty())
+            .await;
         assert_at(&project, 2, 2).await;
-        project.run(by_default(true), Resources, allow_empty()).await;
+        project
+            .run(by_default(true), Resources, allow_empty())
+            .await;
         assert_at(&project, 1, 1).await;
-        project.run(by_default(false), Resources, allow_empty()).await;
+        project
+            .run(by_default(false), Resources, allow_empty())
+            .await;
         assert_at(&project, 1, 0).await;
-        project.run(by_default(true), Resources, allow_empty()).await;
+        project
+            .run(by_default(true), Resources, allow_empty())
+            .await;
         assert_at(&project, 0, 0).await;
     }
 }
@@ -91,25 +116,39 @@ async fn rolling_back_the_previous_migration() {
 #[tokio::test]
 async fn rolling_back_by_number() {
     let project = applied(Mode::Strict).await;
-    project.run(by_number(1, false), Resources, allow_empty()).await;
+    project
+        .run(by_number(1, false), Resources, allow_empty())
+        .await;
     assert_at(&project, 12, 11).await;
-    project.run(by_default(false), Resources, allow_empty()).await;
+    project
+        .run(by_default(false), Resources, allow_empty())
+        .await;
     assert_at(&project, 12, 10).await;
-    project.run(by_number(1, false), Resources, allow_empty()).await;
+    project
+        .run(by_number(1, false), Resources, allow_empty())
+        .await;
     assert_at(&project, 12, 9).await;
 
     project.run(Up::default(), Resources, allow_empty()).await;
     assert_at(&project, 12, 12).await;
-    project.run(by_number(5, false), Resources, allow_empty()).await;
+    project
+        .run(by_number(5, false), Resources, allow_empty())
+        .await;
     assert_at(&project, 12, 7).await;
-    project.run(by_number(3, true), Resources, allow_empty()).await;
+    project
+        .run(by_number(3, true), Resources, allow_empty())
+        .await;
     assert_at(&project, 4, 4).await;
-    project.run(by_number(4, false), Resources, allow_empty()).await;
+    project
+        .run(by_number(4, false), Resources, allow_empty())
+        .await;
     assert_at(&project, 4, 0).await;
 
     project.run(Up::default(), Resources, allow_empty()).await;
     assert_at(&project, 4, 4).await;
-    project.run(by_number(400, true), Resources, allow_empty()).await;
+    project
+        .run(by_number(400, true), Resources, allow_empty())
+        .await;
     assert_at(&project, 0, 0).await;
 }
 
@@ -118,22 +157,38 @@ async fn rolling_back_by_number() {
 async fn rolling_back_till_a_migration() {
     let project = applied(Mode::Strict).await;
     project
-        .run(till(project.filename_at(12), false), Resources, allow_empty())
+        .run(
+            till(project.filename_at(12), false),
+            Resources,
+            allow_empty(),
+        )
         .await;
     assert_at(&project, 12, 11).await;
     project
-        .run(till(project.filename_at(11), false), Resources, allow_empty())
+        .run(
+            till(project.filename_at(11), false),
+            Resources,
+            allow_empty(),
+        )
         .await;
     assert_at(&project, 12, 10).await;
     project
-        .run(till(project.filename_at(6), false), Resources, allow_empty())
+        .run(
+            till(project.filename_at(6), false),
+            Resources,
+            allow_empty(),
+        )
         .await;
     assert_at(&project, 12, 5).await;
 
     project.run(Up::default(), Resources, allow_empty()).await;
     assert_at(&project, 12, 12).await;
     project
-        .run(till(project.filename_at(12), true), Resources, allow_empty())
+        .run(
+            till(project.filename_at(12), true),
+            Resources,
+            allow_empty(),
+        )
         .await;
     assert_at(&project, 11, 11).await;
     project
@@ -156,7 +211,9 @@ async fn rolling_back_till_a_rolled_back_migration_fails() {
         .run(till(newest.clone(), false), Resources, allow_empty())
         .await;
     assert_at(&project, 12, 11).await;
-    project.run(till(newest, false), Resources, allow_empty()).await;
+    project
+        .run(till(newest, false), Resources, allow_empty())
+        .await;
 }
 
 #[tokio::test]
@@ -167,5 +224,7 @@ async fn rolling_back_till_a_migration_that_does_not_exist_fails() {
         "20231220050955_this_migration_does_not_exist.up.surql".to_owned(),
     )
     .expect("a migration file name");
-    project.run(till(missing, false), Resources, allow_empty()).await;
+    project
+        .run(till(missing, false), Resources, allow_empty())
+        .await;
 }

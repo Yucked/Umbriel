@@ -50,10 +50,7 @@ async fn a_reset_before_init_writes_the_first_migration() {
         project.assert_state(&[], &[]).await;
         reset_and_assert(&project, run, &[]).await;
         if run {
-            assert_eq!(
-                project.schema().await,
-                schema_of(&ResourcesV3, flag).await
-            );
+            assert_eq!(project.schema().await, schema_of(&ResourcesV3, flag).await);
         }
     }
 }

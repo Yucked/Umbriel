@@ -26,8 +26,18 @@ async fn five_of_twelve(flag: MigrationFlag, mode: Mode) -> Project {
 async fn listed(project: &Project, status: Status) -> Vec<MigrationFilename> {
     let config = config(&project.dir);
     match project.flag {
-        MigrationFlag::TwoWay => config.two_way().list_migrations(&project.db, status, project.mode).await,
-        MigrationFlag::OneWay => config.one_way().list_migrations(&project.db, status, project.mode).await,
+        MigrationFlag::TwoWay => {
+            config
+                .two_way()
+                .list_migrations(&project.db, status, project.mode)
+                .await
+        }
+        MigrationFlag::OneWay => {
+            config
+                .one_way()
+                .list_migrations(&project.db, status, project.mode)
+                .await
+        }
     }
     .expect("the migrations are listed")
 }
@@ -50,7 +60,11 @@ async fn listing_changes_nothing() {
         let project = five_of_twelve(flag, Mode::Strict).await;
         for status in [Status::All, Status::Pending, Status::Applied] {
             project
-                .run(List::builder().status(status).build(), Resources, allow_empty())
+                .run(
+                    List::builder().status(status).build(),
+                    Resources,
+                    allow_empty(),
+                )
                 .await;
         }
         project.assert_state(&TWELVE, first(5)).await;

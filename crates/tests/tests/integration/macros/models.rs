@@ -419,7 +419,6 @@ DEFINE FIELD celsius ON TABLE reading TYPE float;"
     }
 }
 
-
 mod schema {
     use super::*;
 
@@ -529,7 +528,6 @@ mod schema {
     }
 }
 
-
 mod declared_in_functions {
     use super::*;
 
@@ -554,7 +552,6 @@ mod declared_in_functions {
         assert_eq!(Pet::schema().name.to_debug_sql(), "name");
     }
 }
-
 
 mod conversions {
     use super::*;
@@ -614,187 +611,190 @@ mod conversions {
     reason = "compile-only declarations, some named in camel case on purpose"
 )]
 mod compiles_declarations {
-use umbriel::{E, LinkOne, Model, Node, RecordId, Relate, SchemaGetter, model};
+    use umbriel::{E, LinkOne, Model, Node, RecordId, Relate, SchemaGetter, model};
 
-#[model(node, table = "user")]
-#[surreal(rename_all = "camelCase")]
-pub struct User {
-    pub id: RecordId<Self>,
-    pub display_name: String,
-    pub profile_name: String,
-    #[orm(link_one = "Team")]
-    pub team: LinkOne<Team>,
-}
-
-// Its `name` and `User`'s `profile_name` are distinct generated items.
-#[model(node, table = "user_profile")]
-pub struct UserProfile {
-    pub id: RecordId<Self>,
-    pub name: String,
-}
-
-// Shares `UserProfile`'s name in snake case.
-#[allow(non_camel_case_types)]
-#[model(node, table = "user_profile")]
-pub struct User_Profile {
-    pub id: RecordId<Self>,
-    pub name: String,
-}
-
-// Fields and edges whose names differ only in case convention.
-#[model(node, table = "task")]
-#[allow(non_snake_case)]
-pub struct Task {
-    pub id: RecordId<Self>,
-    pub page_views: i64,
-    pub pageViews: i64,
-    #[orm(relate(model = "TaskAssignedToTeam", connection = "->assigned_to->team"))]
-    pub assignees: Relate<Team>,
-    #[orm(relate(model = "TaskAssignedToCamelTeam", connection = "->assignedTo->team"))]
-    pub camel_assignees: Relate<Team>,
-}
-
-#[model(edge, table = "assigned_to")]
-pub struct AssignedTo<In: Node, Out: Node> {
-    pub id: RecordId<Self>,
-    #[orm(link_one = "In")]
-    pub r#in: LinkOne<In>,
-    #[orm(link_one = "Out")]
-    pub out: LinkOne<Out>,
-}
-
-#[model(edge, table = "assignedTo")]
-#[orm(relax_table)]
-pub struct AssignedToCamel<In: Node, Out: Node> {
-    pub id: RecordId<Self>,
-    #[orm(link_one = "In")]
-    pub r#in: LinkOne<In>,
-    #[orm(link_one = "Out")]
-    pub out: LinkOne<Out>,
-}
-
-pub type TaskAssignedToTeam = AssignedTo<Task, Team>;
-pub type TaskAssignedToCamelTeam = AssignedToCamel<Task, Team>;
-
-#[model(node, table = "team")]
-pub struct Team {
-    pub id: RecordId<Self>,
-    pub name: String,
-}
-
-#[model(edge, table = "member_of")]
-pub struct MemberOf<In: Node, Out: Node> {
-    pub id: RecordId<Self>,
-    #[orm(link_one = "In")]
-    pub r#in: LinkOne<In>,
-    #[orm(link_one = "Out")]
-    pub out: LinkOne<Out>,
-}
-
-#[model(object)]
-pub struct Address {
-    pub city: String,
-}
-
-#[test]
-fn compiles() {
-    // A model can also be declared inside a function.
-    #[model(node, table = "pet")]
-    struct Pet {
-        id: RecordId<Self>,
+    #[model(node, table = "user")]
+    #[surreal(rename_all = "camelCase")]
+    pub struct User {
+        pub id: RecordId<Self>,
+        pub display_name: String,
+        pub profile_name: String,
+        #[orm(link_one = "Team")]
+        pub team: LinkOne<Team>,
     }
-    let _ = Pet { id: Pet::id("rex") };
-    let _ = User::table();
-    // Each name reaches its own generated item.
-    let task = Task::schema();
-    let _ = (task.assigned_to__(E), task.assignedTo__(E));
-    let _ = (task.page_views, task.pageViews);
-}
+
+    // Its `name` and `User`'s `profile_name` are distinct generated items.
+    #[model(node, table = "user_profile")]
+    pub struct UserProfile {
+        pub id: RecordId<Self>,
+        pub name: String,
+    }
+
+    // Shares `UserProfile`'s name in snake case.
+    #[allow(non_camel_case_types)]
+    #[model(node, table = "user_profile")]
+    pub struct User_Profile {
+        pub id: RecordId<Self>,
+        pub name: String,
+    }
+
+    // Fields and edges whose names differ only in case convention.
+    #[model(node, table = "task")]
+    #[allow(non_snake_case)]
+    pub struct Task {
+        pub id: RecordId<Self>,
+        pub page_views: i64,
+        pub pageViews: i64,
+        #[orm(relate(model = "TaskAssignedToTeam", connection = "->assigned_to->team"))]
+        pub assignees: Relate<Team>,
+        #[orm(relate(model = "TaskAssignedToCamelTeam", connection = "->assignedTo->team"))]
+        pub camel_assignees: Relate<Team>,
+    }
+
+    #[model(edge, table = "assigned_to")]
+    pub struct AssignedTo<In: Node, Out: Node> {
+        pub id: RecordId<Self>,
+        #[orm(link_one = "In")]
+        pub r#in: LinkOne<In>,
+        #[orm(link_one = "Out")]
+        pub out: LinkOne<Out>,
+    }
+
+    #[model(edge, table = "assignedTo")]
+    #[orm(relax_table)]
+    pub struct AssignedToCamel<In: Node, Out: Node> {
+        pub id: RecordId<Self>,
+        #[orm(link_one = "In")]
+        pub r#in: LinkOne<In>,
+        #[orm(link_one = "Out")]
+        pub out: LinkOne<Out>,
+    }
+
+    pub type TaskAssignedToTeam = AssignedTo<Task, Team>;
+    pub type TaskAssignedToCamelTeam = AssignedToCamel<Task, Team>;
+
+    #[model(node, table = "team")]
+    pub struct Team {
+        pub id: RecordId<Self>,
+        pub name: String,
+    }
+
+    #[model(edge, table = "member_of")]
+    pub struct MemberOf<In: Node, Out: Node> {
+        pub id: RecordId<Self>,
+        #[orm(link_one = "In")]
+        pub r#in: LinkOne<In>,
+        #[orm(link_one = "Out")]
+        pub out: LinkOne<Out>,
+    }
+
+    #[model(object)]
+    pub struct Address {
+        pub city: String,
+    }
+
+    #[test]
+    fn compiles() {
+        // A model can also be declared inside a function.
+        #[model(node, table = "pet")]
+        struct Pet {
+            id: RecordId<Self>,
+        }
+        let _ = Pet { id: Pet::id("rex") };
+        let _ = User::table();
+        // Each name reaches its own generated item.
+        let task = Task::schema();
+        let _ = (task.assigned_to__(E), task.assignedTo__(E));
+        let _ = (task.page_views, task.pageViews);
+    }
 }
 
 /// Every field clause, a view read through every read method, and `Models` unions of views and
 /// of writable models.
-#[expect(dead_code, reason = "compile-only declarations: compiling them is the test")]
+#[expect(
+    dead_code,
+    reason = "compile-only declarations: compiling them is the test"
+)]
 mod compiles_views_and_unions {
-use umbriel::{
-    All, Field, LinkOne, Models, Node, Operatable, RecordId, SchemaGetter, SurrealRead, Table,
-    TableOf, model,
-    statements::{SelectStatement, insert_any, select},
-};
+    use umbriel::{
+        All, Field, LinkOne, Models, Node, Operatable, RecordId, SchemaGetter, SurrealRead, Table,
+        TableOf, model,
+        statements::{SelectStatement, insert_any, select},
+    };
 
-// Every field clause the derive offers.
-#[model(node, table = "sale")]
-#[orm(kind = "normal", comment = "Acme Corp sales")]
-pub struct Sale {
-    pub id: RecordId<Self>,
-    pub amount: i64,
-    #[orm(computed = Field::new("amount"))]
-    pub doubled: i64,
-    #[orm(default_always = 0)]
-    pub refunds: i64,
-    #[orm(value_expr = Field::new("amount"))]
-    pub recorded: i64,
-    #[orm(readonly, comment = "set once")]
-    pub created_by: String,
-    #[orm(ty = "object", flexible)]
-    pub meta: umbriel::types::Object,
-}
+    // Every field clause the derive offers.
+    #[model(node, table = "sale")]
+    #[orm(kind = "normal", comment = "Acme Corp sales")]
+    pub struct Sale {
+        pub id: RecordId<Self>,
+        pub amount: i64,
+        #[orm(computed = Field::new("amount"))]
+        pub doubled: i64,
+        #[orm(default_always = 0)]
+        pub refunds: i64,
+        #[orm(value_expr = Field::new("amount"))]
+        pub recorded: i64,
+        #[orm(readonly, comment = "set once")]
+        pub created_by: String,
+        #[orm(ty = "object", flexible)]
+        pub meta: umbriel::types::Object,
+    }
 
-#[model(node, table = "customer")]
-pub struct Customer {
-    pub id: RecordId<Self>,
-    pub name: String,
-}
+    #[model(node, table = "customer")]
+    pub struct Customer {
+        pub id: RecordId<Self>,
+        pub name: String,
+    }
 
-pub fn sales() -> SelectStatement {
-    select(All).from(Table::new("sale"))
-}
+    pub fn sales() -> SelectStatement {
+        select(All).from(Table::new("sale"))
+    }
 
-// A view: read through every read method, written through none.
-#[model(view, table = "sale_copy")]
-#[orm(as_ = sales)]
-pub struct SaleCopy {
-    pub id: RecordId<Self>,
-    pub amount: i64,
-}
+    // A view: read through every read method, written through none.
+    #[model(view, table = "sale_copy")]
+    #[orm(as_ = sales)]
+    pub struct SaleCopy {
+        pub id: RecordId<Self>,
+        pub amount: i64,
+    }
 
-// A union holding a view decodes reads.
-#[derive(Models)]
-#[models(read_only)]
-pub enum Reports {
-    Sale(Sale),
-    Copy(SaleCopy),
-}
+    // A union holding a view decodes reads.
+    #[derive(Models)]
+    #[models(read_only)]
+    pub enum Reports {
+        Sale(Sale),
+        Copy(SaleCopy),
+    }
 
-#[model(edge, table = "bought")]
-pub struct Bought<In: Node, Out: Node> {
-    pub id: RecordId<Self>,
-    #[orm(link_one = "In")]
-    pub r#in: LinkOne<In>,
-    #[orm(link_one = "Out")]
-    pub out: LinkOne<Out>,
-}
+    #[model(edge, table = "bought")]
+    pub struct Bought<In: Node, Out: Node> {
+        pub id: RecordId<Self>,
+        #[orm(link_one = "In")]
+        pub r#in: LinkOne<In>,
+        #[orm(link_one = "Out")]
+        pub out: LinkOne<Out>,
+    }
 
-// A union of writable models, a node and an edge, is inserted as before.
-#[derive(Models)]
-pub enum Records {
-    Customer(Customer),
-    Bought(Bought<Customer, Sale>),
-}
+    // A union of writable models, a node and an edge, is inserted as before.
+    #[derive(Models)]
+    pub enum Records {
+        Customer(Customer),
+        Bought(Bought<Customer, Sale>),
+    }
 
-fn insert(records: Vec<Records>) {
-    let _ = insert_any(records);
-}
+    fn insert(records: Vec<Records>) {
+        let _ = insert_any(records);
+    }
 
-#[test]
-fn compiles() {
-    let _ = SaleCopy::select();
-    let _ = SaleCopy::find_where(Field::new("amount").gte(1));
-    let _ = SaleCopy::count_all();
-    let _ = SaleCopy::select_value(SaleCopy::schema().amount);
-    let _ = TableOf::<SaleCopy>::default().select();
-    let _ = Sale::select_value(Sale::schema().doubled);
-    let _: SelectStatement<Reports> = select(All).from(Table::new("sale")).decode();
-    insert(vec![]);
-}
+    #[test]
+    fn compiles() {
+        let _ = SaleCopy::select();
+        let _ = SaleCopy::find_where(Field::new("amount").gte(1));
+        let _ = SaleCopy::count_all();
+        let _ = SaleCopy::select_value(SaleCopy::schema().amount);
+        let _ = TableOf::<SaleCopy>::default().select();
+        let _ = Sale::select_value(Sale::schema().doubled);
+        let _: SelectStatement<Reports> = select(All).from(Table::new("sale")).decode();
+        insert(vec![]);
+    }
 }
