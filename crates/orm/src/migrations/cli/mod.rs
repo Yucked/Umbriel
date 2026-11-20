@@ -28,8 +28,7 @@ use clap::{ArgAction, Parser};
 
 pub use self::config::{COMPARISON_PASSWORD_VARIABLE, DatabaseConnection, Experimental};
 use crate::migrations::{
-    Comparison,
-    MigrationConfig, MockPrompter, Mode, Prompter, RealPrompter, RenameOrDelete,
+    Comparison, MigrationConfig, MockPrompter, Mode, Prompter, RealPrompter, RenameOrDelete,
 };
 
 /// Umbriel CLI

@@ -7,6 +7,7 @@ pub use std::{
     time::Duration,
 };
 
+use crate::*;
 pub use chrono::{DateTime, Utc};
 pub use surrealdb::{Surreal, engine::any::Any};
 pub use umbriel::{
@@ -19,7 +20,6 @@ pub use umbriel::{
     types::{self, Kind, RecordIdKey, SurrealValue, Value},
     value,
 };
-use crate::*;
 
 /// The definitions of `field`, in order.
 pub fn definitions_of(definitions: &[Raw], field: &str) -> Vec<String> {
@@ -230,4 +230,3 @@ pub struct Reading {
     pub id: RecordId<Self>,
     pub celsius: f64,
 }
-

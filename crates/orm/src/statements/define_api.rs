@@ -195,16 +195,18 @@ pub enum BodyStrategy {
 impl BodyStrategy {
     /// The name SurrealDB reads, as a string value.
     fn value(self) -> ValueLike {
-        ValueLike::value(match self {
-            Self::Auto => "auto",
-            Self::Json => "json",
-            Self::Cbor => "cbor",
-            Self::Flatbuffers => "flatbuffers",
-            Self::Plain => "plain",
-            Self::Bytes => "bytes",
-            Self::Native => "native",
-        }
-        .to_owned())
+        ValueLike::value(
+            match self {
+                Self::Auto => "auto",
+                Self::Json => "json",
+                Self::Cbor => "cbor",
+                Self::Flatbuffers => "flatbuffers",
+                Self::Plain => "plain",
+                Self::Bytes => "bytes",
+                Self::Native => "native",
+            }
+            .to_owned(),
+        )
     }
 }
 

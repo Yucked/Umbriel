@@ -1115,4 +1115,3 @@ mod clauses_and_results {
         assert!(matches!(fetched.get("account"), Some(Value::Object(_))));
     }
 }
-

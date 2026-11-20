@@ -266,7 +266,10 @@ impl MigrationRunner {
         db: &Surreal<impl Connection>,
     ) -> MigrationResult<Vec<PendingMigrationFile>> {
         let latest_migration = Self::get_latest_migration(db).await?;
-        Ok(Self::pending_after(all_migrations, latest_migration.as_ref()))
+        Ok(Self::pending_after(
+            all_migrations,
+            latest_migration.as_ref(),
+        ))
     }
 
     /// The migrations newer than `latest_migration`, oldest first.
@@ -493,10 +496,9 @@ impl MigrationRunner {
         let pending = Self::pending_after(all_migrations, latest.as_ref());
         let filtered_pending_migrations = match update_strategy {
             UpdateStrategy::Latest => pending,
-            UpdateStrategy::Number(count) => pending
-                .into_iter()
-                .take(count as usize)
-                .collect::<Vec<_>>(),
+            UpdateStrategy::Number(count) => {
+                pending.into_iter().take(count as usize).collect::<Vec<_>>()
+            }
             UpdateStrategy::Till(filecursor) => {
                 let pending_migs = pending;
 

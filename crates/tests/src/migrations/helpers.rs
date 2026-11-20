@@ -12,10 +12,9 @@ use tempfile::{TempDir, tempdir};
 use umbriel::{
     DbResources, Render, Runnable,
     migrations::{
-        Basename, DatabaseConnection, Migration, MigrationConfig, MigrationFilename,
-        MigrationFlag, MigrationResult, Migrator, MockPrompter, Mode, RenameOrDelete,
-        ResourceKey, ResourceKind, RightDatabase, RollbackOptions, Schema, SubCommand,
-        UpdateStrategy, config::UrlDb,
+        Basename, DatabaseConnection, Migration, MigrationConfig, MigrationFilename, MigrationFlag,
+        MigrationResult, Migrator, MockPrompter, Mode, RenameOrDelete, ResourceKey, ResourceKind,
+        RightDatabase, RollbackOptions, Schema, SubCommand, UpdateStrategy, config::UrlDb,
     },
     statements::begin_transaction,
 };
@@ -360,7 +359,11 @@ impl Project {
             })
             .collect::<Vec<_>>();
         let downs = files.len() - migrations.len();
-        let expected_downs = if self.reversible() { migrations.len() } else { 0 };
+        let expected_downs = if self.reversible() {
+            migrations.len()
+        } else {
+            0
+        };
         assert_eq!(downs, expected_downs, "down files: {files:?}");
         migrations
     }
@@ -381,8 +384,12 @@ impl Project {
     /// Asserts the migration files and the history, by base name, oldest first, and that every
     /// recorded migration names a file of the directory exactly (timestamp and extension).
     pub async fn assert_state(&self, files: &[&str], history: &[&str]) {
-        let names =
-            |names: &[&str]| names.iter().map(|&name| Basename::from(name.to_owned())).collect::<Vec<_>>();
+        let names = |names: &[&str]| {
+            names
+                .iter()
+                .map(|&name| Basename::from(name.to_owned()))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(self.files(), names(files), "the migration files");
         assert_eq!(self.history().await, names(history), "the history");
         let on_disk = migration_files(&self.dir);

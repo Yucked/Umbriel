@@ -3,6 +3,7 @@
 
 pub use std::{collections::BTreeMap, time::Duration};
 
+use crate::*;
 pub use chrono::{DateTime, Utc};
 pub use surrealdb::{
     Surreal,
@@ -31,7 +32,6 @@ pub use umbriel::{
     },
     value,
 };
-use crate::*;
 
 pub fn space_ship(key: &str, name: &str) -> SpaceShip {
     SpaceShip {
