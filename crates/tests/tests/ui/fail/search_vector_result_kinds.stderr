@@ -1,0 +1,170 @@
+error[E0277]: the trait bound `umbriel::kinds::Array<umbriel::kinds::Number>: Enters<NumberLike>` is not satisfied
+  --> tests/ui/fail/search_vector_result_kinds.rs:10:24
+   |
+10 |     let _ = math::abs!(vector::add!(embedding.clone(), embedding.clone()));
+   |             -----------^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^-
+   |             |          |
+   |             |          the trait `Enters<NumberLike>` is not implemented for `umbriel::kinds::Array<umbriel::kinds::Number>`
+   |             required by a bound introduced by this call
+   |
+help: the trait `Enters<NumberLike>` is not implemented for `umbriel::kinds::Array<umbriel::kinds::Number>`
+      but trait `Enters<ArrayLike>` is implemented for it
+  --> $WORKSPACE/crates/orm/src/kinds.rs
+   |
+   | impl<T: KindOf> Enters<ArrayLike> for Array<T> {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for that trait implementation, expected `ArrayLike`, found `NumberLike`
+   = note: required for `NumberLike` to implement `From<umbriel::Function<umbriel::kinds::Array<umbriel::kinds::Number>>>`
+   = note: required for `umbriel::Function<umbriel::kinds::Array<umbriel::kinds::Number>>` to implement `Into<NumberLike>`
+note: required by a bound in `abs_fn`
+  --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
+   |
+   |               pub fn [<$sql _fn>](
+   |                      ------------ required by a bound in this function
+   |                   $a1: impl Into<$crate::$t1>,
+   |                             ^^^^^^^^^^^^^^^^^ required by this bound in `abs_fn`
+   |
+  ::: $WORKSPACE/crates/orm/src/functions/math.rs
+   |
+   | / functions! { $ "math" "::", math, math;
+   | |     /// The absolute value.
+   | |     abs(number: NumberLike) -> kinds::Number [NumberLike.abs];
+   | |     /// The arccosine, in radians.
+...  |
+   | |     variance(numbers: ArrayLike) -> kinds::Number;
+   | | }
+   | |_- in this macro invocation
+   = note: this error originates in the macro `vector::add` which comes from the expansion of the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `umbriel::kinds::Number: Enters<ArrayLike>` is not satisfied
+  --> tests/ui/fail/search_vector_result_kinds.rs:12:25
+   |
+12 |     let _ = array::len!(vector::magnitude!(embedding));
+   |             ------------^^^^^^^^^^^^^^^^^^^^^^^^^^^^^-
+   |             |           |
+   |             |           the trait `Enters<ArrayLike>` is not implemented for `umbriel::kinds::Number`
+   |             required by a bound introduced by this call
+   |
+help: the trait `Enters<ArrayLike>` is not implemented for `umbriel::kinds::Number`
+      but trait `Enters<NumberLike>` is implemented for it
+  --> $WORKSPACE/crates/orm/src/kinds.rs
+   |
+   |           $($(impl Enters<$target> for $marker {})+)*
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+   | / enters! {
+   | |     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
+   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike, FileLike;
+   | |     Int => NumberLike;
+...  |
+   | |     File => FileLike;
+   | | }
+   | |_- in this macro invocation
+   = help: for that trait implementation, expected `NumberLike`, found `ArrayLike`
+   = note: required for `ArrayLike` to implement `From<umbriel::Function<umbriel::kinds::Number>>`
+   = note: required for `umbriel::Function<umbriel::kinds::Number>` to implement `Into<ArrayLike>`
+note: required by a bound in `umbriel::functions::array::len_fn`
+  --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
+   |
+   |               pub fn [<$sql _fn>](
+   |                      ------------ required by a bound in this function
+   |                   $a1: impl Into<$crate::$t1>,
+   |                             ^^^^^^^^^^^^^^^^^ required by this bound in `len_fn`
+   |
+  ::: $WORKSPACE/crates/orm/src/functions/array.rs
+   |
+   | / functions! { $ "array" "::", array, array;
+   | |     /// The array with `value` appended unless it is already there.
+   | |     add(array: ArrayLike, value: ValueLike) -> kinds::Array [ArrayLike.add];
+   | |     /// Whether every element is truthy, or matches `check` (a value or a closure).
+...  |
+   | |         [ArrayLike.windows];
+   | | }
+   | |_- in this macro invocation
+   = note: this error originates in the macro `vector::magnitude` which comes from the expansion of the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Optional<umbriel::kinds::Either<umbriel::kinds::String, umbriel::kinds::Array<umbriel::kinds::String>>>: Enters<StrandLike>` is not satisfied
+  --> tests/ui/fail/search_vector_result_kinds.rs:14:26
+   |
+14 |     let _ = string::len!(search::highlight!("<b>", "</b>", 1));
+   |             -------------^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^-
+   |             |            |
+   |             |            unsatisfied trait bound
+   |             required by a bound introduced by this call
+   |
+   = help: the trait `Enters<StrandLike>` is not implemented for `Optional<umbriel::kinds::Either<umbriel::kinds::String, umbriel::kinds::Array<umbriel::kinds::String>>>`
+help: the following other types implement trait `Enters<T>`
+  --> $WORKSPACE/crates/orm/src/kinds.rs
+   |
+   |           $($(impl Enters<$target> for $marker {})+)*
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |               |
+   |               `umbriel::kinds::Any`
+   |               `umbriel::kinds::String`
+...
+   | / enters! {
+   | |     Any => NumberLike, StrandLike, BoolLike, ArrayLike, SetLike, BytesLike, RecordIdLike,
+   | |         GeometryLike, DatetimeLike, DurationLike, ObjectLike, TableLike, ClosureLike, FileLike;
+   | |     Int => NumberLike;
+...  |
+   | |     File => FileLike;
+   | | }
+   | |_- in this macro invocation
+   = note: required for `StrandLike` to implement `From<umbriel::Function<Optional<umbriel::kinds::Either<umbriel::kinds::String, umbriel::kinds::Array<umbriel::kinds::String>>>>>`
+   = note: required for `umbriel::Function<Optional<umbriel::kinds::Either<umbriel::kinds::String, umbriel::kinds::Array<umbriel::kinds::String>>>>` to implement `Into<StrandLike>`
+note: required by a bound in `umbriel::functions::string::len_fn`
+  --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
+   |
+   |               pub fn [<$sql _fn>](
+   |                      ------------ required by a bound in this function
+   |                   $a1: impl Into<$crate::$t1>,
+   |                             ^^^^^^^^^^^^^^^^^ required by this bound in `len_fn`
+   |
+  ::: $WORKSPACE/crates/orm/src/functions/string.rs
+   |
+   | / functions! { $ "string" "::", string, string;
+   | |     /// Capitalises the first letter of every word.
+   | |     capitalize(string: StrandLike) -> kinds::String [StrandLike.capitalize];
+   | |     /// Concatenates the values as strings.
+...  |
+   | |     is_uuid(string: StrandLike) -> kinds::Bool [StrandLike.is_uuid];
+   | | }
+   | |_- in this macro invocation
+   = note: this error originates in the macro `search::highlight` which comes from the expansion of the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Optional<umbriel::kinds::Float>: Enters<NumberLike>` is not satisfied
+  --> tests/ui/fail/search_vector_result_kinds.rs:16:24
+   |
+16 |     let _ = math::abs!(search::score!(1));
+   |             -----------^^^^^^^^^^^^^^^^^-
+   |             |          |
+   |             |          the trait `Enters<NumberLike>` is not implemented for `Optional<umbriel::kinds::Float>`
+   |             required by a bound introduced by this call
+   |
+   = help: the following other types implement trait `Enters<T>`:
+             umbriel::kinds::Any
+             umbriel::kinds::Decimal
+             umbriel::kinds::Float
+             umbriel::kinds::Int
+             umbriel::kinds::Number
+   = note: required for `NumberLike` to implement `From<umbriel::Function<Optional<umbriel::kinds::Float>>>`
+   = note: required for `umbriel::Function<Optional<umbriel::kinds::Float>>` to implement `Into<NumberLike>`
+note: required by a bound in `abs_fn`
+  --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
+   |
+   |               pub fn [<$sql _fn>](
+   |                      ------------ required by a bound in this function
+   |                   $a1: impl Into<$crate::$t1>,
+   |                             ^^^^^^^^^^^^^^^^^ required by this bound in `abs_fn`
+   |
+  ::: $WORKSPACE/crates/orm/src/functions/math.rs
+   |
+   | / functions! { $ "math" "::", math, math;
+   | |     /// The absolute value.
+   | |     abs(number: NumberLike) -> kinds::Number [NumberLike.abs];
+   | |     /// The arccosine, in radians.
+...  |
+   | |     variance(numbers: ArrayLike) -> kinds::Number;
+   | | }
+   | |_- in this macro invocation
+   = note: this error originates in the macro `search::score` which comes from the expansion of the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)

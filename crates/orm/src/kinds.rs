@@ -159,6 +159,18 @@ impl<T: KindOf> KindOf for Optional<T> {
     }
 }
 
+/// A value of the kind `A` or of the kind `B`: `A | B`. Like [`Optional`], its results enter only
+/// [`ValueLike`](crate::ValueLike), since neither kind is certain.
+pub struct Either<A: KindOf, B: KindOf>(PhantomData<fn() -> (A, B)>);
+
+impl<A: KindOf, B: KindOf> sealed::Sealed for Either<A, B> {}
+
+impl<A: KindOf, B: KindOf> KindOf for Either<A, B> {
+    fn kind() -> Kind {
+        Kind::Either(vec![A::kind(), B::kind()])
+    }
+}
+
 /// Declares which markers enter which typed expressions.
 macro_rules! enters {
     ($($marker:ty => $($target:ty),+;)*) => {

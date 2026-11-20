@@ -7,7 +7,8 @@
 //!   receiver's typed expression, e.g. `StrandLike::from(name).len()` renders `name.len()`.
 //!
 //! Every call is a [`Function<K>`](crate::Function) typed by its documented result kind (see
-//! [`kinds`](crate::kinds)). `search` and `vector` keep their earlier wrappers.
+//! [`kinds`](crate::kinds)). `search::score`, `search::highlight` and `search::offsets` are
+//! written by hand, since their match reference is a literal rather than a typed expression.
 //!
 //! [See the SurrealDB documentation](https://surrealdb.com/docs/surrealql/functions/database)
 //! for what each function does.

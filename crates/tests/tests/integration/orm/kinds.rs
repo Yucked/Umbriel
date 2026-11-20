@@ -67,3 +67,16 @@ async fn every_marker_renders_its_kind() {
         );
     }
 }
+
+#[tokio::test]
+async fn either_renders_both_kinds() {
+    renders::<kinds::Either<kinds::String, kinds::Array<kinds::String>>>("string | array<string>");
+    renders::<kinds::Optional<kinds::Either<kinds::String, kinds::Int>>>("none | string | int");
+
+    let (db, _guard) = db().await;
+    let definition = defined_as::<kinds::Either<kinds::String, kinds::Array<kinds::String>>>();
+    assert!(
+        succeeds(&db, &format!("DEFINE TABLE thing SCHEMAFULL; {definition}")).await,
+        "`{definition}` is accepted"
+    );
+}
