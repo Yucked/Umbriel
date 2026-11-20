@@ -1,10 +1,11 @@
 <div align="center">
 
-# 🌑 Umbriel
+# ☄️ Umbriel
 
-**A typed, pure Rust ORM for SurrealDB 3.**
+**Type-safe SurrealDB for Rust.**
 
-Plain structs in. Checked SurrealQL out. Every value bound, every result typed.
+Expressive queries, ORM models, migrations, schema tooling and graph relations, all checked at
+compile time.
 
 ![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-f74c00?style=flat-square&logo=rust&logoColor=white)
 ![Edition 2024](https://img.shields.io/badge/edition-2024-f74c00?style=flat-square)
