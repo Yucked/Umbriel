@@ -47,8 +47,23 @@ pub struct DefineBucketStatement {
 }
 
 impl DefineBucketStatement {
-    /// `BACKEND @url`: where the files are stored, such as `memory`, `file:/data/avatars` or an
-    /// object store URL.
+    /// `BACKEND @url`: where the files are stored. SurrealDB 3.3.4 connects to it when the bucket
+    /// is defined, and fails the statement for a URL no backend accepts. The backends
+    /// (`surrealdb-core` `buc/mod.rs`, `buc/store/*.rs`):
+    ///
+    /// | URL | Store | Restrictions |
+    /// |---|---|---|
+    /// | `memory`, `memory://` | In the server's memory | Lost on restart and on redefinition; a `READONLY` memory bucket starts empty and stays so |
+    /// | `file:/path` | A server directory | The path must be absolute and inside the server's `bucket_folder_allowlist`, which is empty by default, so every path is refused until it is set. Defining the bucket creates the directory and its parents when missing, and fails when the path is not a directory. A key may not escape the directory. `?lowercase_paths` folds keys to lower case |
+    /// | `s3:/bucket`, `s3://endpoint/bucket`, `s3+http://…`, `s3+https://…` | S3 or an S3-compatible service | A host is a custom endpoint (MinIO, R2, …), and `s3+http`/`s3+https` choose its protocol; the first path segment is the bucket. `region`, `prefix`; credentials as `access_key` and `secret_key` |
+    /// | `gs://bucket`, `gcs://bucket` | Google Cloud Storage | `prefix`; `service_account` (a file path) or `service_account_key`; `anonymous` |
+    /// | `az://account/container`, `azure://…` | Azure Blob Storage | `prefix`; credentials as `access_key` or `sas_token`; `anonymous`, `use_emulator` |
+    /// | none | The server's global bucket, under a prefix of the namespace and database ids and the bucket name | Needs the server's `global_bucket` setting. With `global_bucket_enforced`, every bucket must use it and a `BACKEND` fails |
+    ///
+    /// Only `memory` is available on `wasm32`. Credentials in the URL are stored and shown by
+    /// `INFO` as written, so generated migrations refuse a backend carrying user info, a
+    /// fragment, `access_key`, `secret_key`, `service_account_key`, `sas_token` or any parameter
+    /// not listed above.
     pub fn backend(mut self, url: impl Into<String>) -> Self {
         self.backend = Some(url.into());
         self
