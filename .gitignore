@@ -27,5 +27,4 @@ node_modules
 
 # Untracked while they are rewritten.
 /docs/
-/README.md
 graphify-out/*
