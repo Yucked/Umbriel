@@ -278,6 +278,21 @@ mod behaviour {
     }
 
     #[tokio::test]
+    async fn an_array_length_is_exact() {
+        let (db, _guard) = db().await;
+        run(
+            &db,
+            define_field(Field::new("pair"))
+                .on_table("sale")
+                .type_(Kind::Array(Box::new(Kind::Int), Some(2))),
+        )
+        .await;
+        assert!(succeeds(&db, "CREATE sale:1 SET pair = [1, 2];").await);
+        assert!(!succeeds(&db, "CREATE sale:2 SET pair = [1];").await);
+        assert!(!succeeds(&db, "CREATE sale:3 SET pair = [1, 2, 3];").await);
+    }
+
+    #[tokio::test]
     async fn a_flexible_computed_object_keeps_its_keys_on_a_schemafull_table() {
         let (db, _guard) = db().await;
         run(&db, define_table("sale").schemafull()).await;
