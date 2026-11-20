@@ -212,8 +212,7 @@ impl Endpoint {
 
 /// A configuration variable. A missing one fails the test, so a misconfigured run can't pass.
 fn config(name: &str) -> String {
-    std::env::var(name)
-        .unwrap_or_else(|_| panic!("{name} is not set; see crates/tests/README.md"))
+    std::env::var(name).unwrap_or_else(|_| panic!("{name} is not set; see crates/tests/README.md"))
 }
 
 /// The configured root user.
@@ -419,14 +418,11 @@ async fn open(endpoint: Endpoint, options: &str) -> (Surreal<Any>, TestDb) {
     let database = format!("{DATABASE_PREFIX}{}", uuid::Uuid::new_v4().simple());
     // Without `IF NOT EXISTS` or `OVERWRITE`, `DEFINE DATABASE` refuses a name that exists, so a
     // test never takes over a database it did not create.
-    bounded(
-        "defining the test database",
-        async {
-            db.query(format!("DEFINE DATABASE {database}{options};"))
-                .await
-                .and_then(IndexedResults::check)
-        },
-    )
+    bounded("defining the test database", async {
+        db.query(format!("DEFINE DATABASE {database}{options};"))
+            .await
+            .and_then(IndexedResults::check)
+    })
     .await;
     let guard = TestDb {
         _removal: Removal {
@@ -461,13 +457,23 @@ pub async fn strict_db() -> (Surreal<Any>, TestDb) {
     open(Endpoint::Main, " STRICT").await
 }
 
+/// Runs `sql` and returns SurrealDB's answer, every statement checked. Panics, naming `sql`, when
+/// there is no answer within [`WAIT`].
+async fn answer(
+    db: &Surreal<impl surrealdb::Connection>,
+    sql: &str,
+) -> surrealdb::Result<IndexedResults> {
+    tokio::time::timeout(WAIT, db.query(sql.to_owned()))
+        .await
+        .unwrap_or_else(|_| panic!("`{sql}`: no answer within {WAIT:?}"))
+        .and_then(IndexedResults::check)
+}
+
 /// Runs `sql` and decodes the result of its first statement. Used to check what a test stored
 /// independently of the API under test.
 pub async fn read<T: SurrealValue>(db: &Surreal<impl surrealdb::Connection>, sql: &str) -> T {
-    let value: Value = db
-        .query(sql.to_owned())
+    let value: Value = answer(db, sql)
         .await
-        .and_then(surrealdb::IndexedResults::check)
         .unwrap_or_else(|error| panic!("`{sql}` fails: {error}"))
         .take(0)
         .unwrap_or_else(|error| panic!("`{sql}` has no result: {error}"));
@@ -497,20 +503,13 @@ pub async fn stored_definition(
 /// Runs `sql` and reports whether every statement in it succeeded. Used where a test checks only
 /// that SurrealDB accepts or refuses something.
 pub async fn succeeds(db: &Surreal<impl surrealdb::Connection>, sql: &str) -> bool {
-    db.query(sql.to_owned())
-        .await
-        .and_then(surrealdb::IndexedResults::check)
-        .is_ok()
+    answer(db, sql).await.is_ok()
 }
 
 /// The error SurrealDB gives for `sql`, as text. Panics when every statement succeeds, so a test
 /// can assert why a statement is refused rather than only that it is.
 pub async fn failure(db: &Surreal<impl surrealdb::Connection>, sql: &str) -> String {
-    match db
-        .query(sql.to_owned())
-        .await
-        .and_then(surrealdb::IndexedResults::check)
-    {
+    match answer(db, sql).await {
         Ok(_) => panic!("`{sql}` succeeded, expected an error"),
         Err(error) => error.to_string(),
     }
