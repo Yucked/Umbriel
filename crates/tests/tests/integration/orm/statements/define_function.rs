@@ -84,3 +84,35 @@ async fn a_defined_function_runs_and_is_removed() {
         .expect("the function is removed");
     assert!(!succeeds(&db, "RETURN fn::math::add_one(1);").await);
 }
+
+/// A defined function and param are usable, and the function is gone once removed.
+mod definitions {
+    use umbriel_tests::{support::statements::*, *};
+
+    #[tokio::test]
+    async fn params_and_functions_are_usable_after_definition() {
+        let (db, _guard) = db().await;
+        umbriel::create_param_name_fn!(greeting);
+        run(&db, define_param(greeting()).value("Hello")).await;
+        let value: String = read(&db, "RETURN $greeting;").await;
+        assert_eq!(value, "Hello");
+
+        let total = Param::new("total");
+        run(
+            &db,
+            define_function("add_one")
+                .arguments(vec![umbriel::statements::FunctionArgument {
+                    name: total.clone(),
+                    type_: Kind::Int,
+                }])
+                .body(chain(return_(Field::from(&total).add(1)))),
+        )
+        .await;
+        let result: i64 = read(&db, "RETURN fn::add_one(41);").await;
+        assert_eq!(result, 42);
+
+        run(&db, remove_function("add_one")).await;
+        assert!(Raw::new("RETURN fn::add_one(1);").run(&db).await.is_err());
+        run(&db, remove_param("greeting")).await;
+    }
+}

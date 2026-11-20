@@ -158,3 +158,146 @@ async fn without_if_exists_a_missing_resource_fails() {
     assert!(!runs(&db, remove_param("greeting")).await);
     assert!(!runs(&db, remove_analyzer("simple")).await);
 }
+
+/// Every kind of definition is accepted and removed again.
+mod definitions {
+    use umbriel_tests::{support::statements::*, *};
+
+    #[test]
+    fn users_and_accesses_are_removed_from_their_level() {
+        for (statement, sql) in [
+            (remove_user("alice").on_root(), "REMOVE USER alice ON ROOT;"),
+            (
+                remove_user("alice").on_namespace(),
+                "REMOVE USER alice ON NAMESPACE;",
+            ),
+            (
+                remove_user("alice").on_database(),
+                "REMOVE USER alice ON DATABASE;",
+            ),
+        ] {
+            assert_sql(&statement, sql);
+        }
+        for (statement, sql) in [
+            (
+                remove_access("issuer").on_root(),
+                "REMOVE ACCESS issuer ON ROOT;",
+            ),
+            (
+                remove_access("api").on_namespace(),
+                "REMOVE ACCESS api ON NAMESPACE;",
+            ),
+            (
+                remove_access("account").on_database(),
+                "REMOVE ACCESS account ON DATABASE;",
+            ),
+        ] {
+            assert_sql(&statement, sql);
+        }
+        assert_render_error(&remove_access("account"), "needs a level");
+        assert_render_error(&remove_param("_p0"), "reserved");
+    }
+
+    #[tokio::test]
+    async fn every_definition_is_accepted_and_removable() {
+        let (db, guard) = db().await;
+        // Unique names: a namespace is server-wide, and a fixed name could be another test's or
+        // something real.
+        let defined = format!("{}_defined", guard.database());
+        let user = Table::from("user");
+        run(&db, define_table(user.clone()).schemaless()).await;
+        run(
+            &db,
+            define_field(Field::new("email"))
+                .on_table(user.clone())
+                .type_(Kind::String),
+        )
+        .await;
+        run(
+            &db,
+            define_index("user_email")
+                .on_table(user.clone())
+                .fields(Field::new("email"))
+                .unique(),
+        )
+        .await;
+        run(
+            &db,
+            define_event("audit")
+                .on_table(user.clone())
+                .when(Param::new("event").equal("CREATE"))
+                .then(select(All).from(user.clone())),
+        )
+        .await;
+        run(
+            &db,
+            define_analyzer("simple").tokenizers([Tokenizer::Blank]),
+        )
+        .await;
+        run(
+            &db,
+            define_access("account").on_database().record(
+                record_access()
+                    .signup(Raw::new("CREATE user SET email = $email"))
+                    .signin(Raw::new("SELECT * FROM user WHERE email = $email"))
+                    .with_jwt(JwtAlgorithm::HS512, "example-key")
+                    .duration_for_session(Duration::from_secs(3600)),
+            ),
+        )
+        .await;
+        run(
+            &db,
+            define_access("api").on_database().jwt(
+                jwt_access()
+                    .algorithm(JwtAlgorithm::HS256)
+                    .key("example-key"),
+            ),
+        )
+        .await;
+        run(
+            &db,
+            define_user("alice")
+                .on_database()
+                .password("example-password")
+                .role(UserRole::Viewer),
+        )
+        .await;
+        run(&db, define_namespace(defined.as_str())).await;
+        run(&db, define_database(defined.as_str())).await;
+
+        let info: Option<BTreeMap<String, Value>> = info_for()
+            .database()
+            .run(&db)
+            .await
+            .expect("info")
+            .take(0)
+            .expect("object");
+        let info = info.expect("database info");
+        for key in ["accesses", "analyzers", "tables", "users"] {
+            assert!(info.contains_key(key), "INFO FOR DB has `{key}`: {info:?}");
+        }
+        let table: Option<BTreeMap<String, Value>> = info_for()
+            .table(user.clone())
+            .run(&db)
+            .await
+            .expect("info")
+            .take(0)
+            .expect("object");
+        assert!(table.expect("table info").contains_key("fields"));
+
+        run(&db, remove_access("account").on_database()).await;
+        run(&db, remove_access("api").on_database()).await;
+        run(&db, remove_user("alice").on_database()).await;
+        run(&db, remove_analyzer("simple")).await;
+        run(&db, remove_event("audit").on_table(user.clone())).await;
+        run(&db, remove_index("user_email").on_table(user.clone())).await;
+        run(
+            &db,
+            remove_field(Field::new("email")).on_table(user.clone()),
+        )
+        .await;
+        run(&db, remove_table(user)).await;
+        run(&db, remove_database(defined.as_str())).await;
+        run(&db, remove_namespace(defined.as_str())).await;
+    }
+}
