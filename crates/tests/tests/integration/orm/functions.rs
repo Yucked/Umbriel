@@ -3,6 +3,7 @@
 mod api;
 mod array;
 mod bytes;
+mod catalogue;
 mod count;
 mod crypto;
 mod duration;
