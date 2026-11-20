@@ -1,45 +1,8 @@
-//! `crypto::*` (`orm/src/functions/crypto.rs`): every function rendered, the hashes SurrealDB
+//! `crypto::*` (`orm/src/functions/crypto.rs`): every function run, the hashes SurrealDB
 //! computes and the password schemes round-tripping. None of them has a method form.
 
-use umbriel::{Field, Param, Render, functions::crypto};
+use umbriel::{Param, Render, functions::crypto};
 use umbriel_tests::*;
-
-#[test]
-fn rendering() {
-    calls!(
-        (crypto::blake3!("a"), "crypto::blake3('a')"),
-        (crypto::joaat!("a"), "crypto::joaat('a')"),
-        (crypto::md5!("a"), "crypto::md5('a')"),
-        (crypto::sha1!("a"), "crypto::sha1('a')"),
-        (crypto::sha256!("a"), "crypto::sha256('a')"),
-        (crypto::sha512!("a"), "crypto::sha512('a')"),
-    );
-    for (generate, compare, name) in [
-        (
-            crypto::argon2::generate!("pass"),
-            crypto::argon2::compare!(Field::new("hash"), "pass"),
-            "argon2",
-        ),
-        (
-            crypto::bcrypt::generate!("pass"),
-            crypto::bcrypt::compare!(Field::new("hash"), "pass"),
-            "bcrypt",
-        ),
-        (
-            crypto::pbkdf2::generate!("pass"),
-            crypto::pbkdf2::compare!(Field::new("hash"), "pass"),
-            "pbkdf2",
-        ),
-        (
-            crypto::scrypt::generate!("pass"),
-            crypto::scrypt::compare!(Field::new("hash"), "pass"),
-            "scrypt",
-        ),
-    ] {
-        call(&generate, &format!("crypto::{name}::generate('pass')"));
-        call(&compare, &format!("crypto::{name}::compare(hash, 'pass')"));
-    }
-}
 
 #[tokio::test]
 async fn results() {

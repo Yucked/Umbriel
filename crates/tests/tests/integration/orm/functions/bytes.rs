@@ -1,17 +1,8 @@
-//! `bytes::*` (`orm/src/functions/bytes.rs`): every function and method form rendered, and the
+//! `bytes::*` (`orm/src/functions/bytes.rs`): every function and method form run, and the
 //! results SurrealDB computes.
 
-use umbriel::{BytesLike, Field, functions::bytes};
+use umbriel::{BytesLike, functions::bytes};
 use umbriel_tests::*;
-
-#[test]
-fn rendering() {
-    let payload = Field::new("payload");
-    calls!(
-        (bytes::len!(payload.clone()), "bytes::len(payload)"),
-        (BytesLike::from(payload.clone()).len(), "payload.len()"),
-    );
-}
 
 #[tokio::test]
 async fn results() {

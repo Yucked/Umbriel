@@ -1,6 +1,6 @@
-//! `file::*` (`orm/src/functions/file.rs`): every function and method form rendered, and a
-//! file's lifecycle in a `memory` bucket on a database that allows the experimental `files`
-//! feature.
+//! `file::*` (`orm/src/functions/file.rs`): the function and method forms run (`file::bucket`
+//! and the `rename` method only rendered), and a file's lifecycle in a `memory` bucket on a
+//! database that allows the experimental `files` feature.
 
 use surrealdb::{
     Surreal,
@@ -27,55 +27,23 @@ fn prefixed(prefix: &str) -> Object {
     options
 }
 
+/// The forms no server test calls.
 #[test]
 fn rendering() {
     calls!(
-        (file::bucket!(alice()), "file::bucket(f\"avatars:/alice.txt\")"),
-        (file::key!(alice()), "file::key(f\"avatars:/alice.txt\")"),
         (
-            file::put!(alice(), "Alice"),
-            "file::put(f\"avatars:/alice.txt\", 'Alice')"
+            file::bucket!(alice()),
+            "file::bucket(f\"avatars:/alice.txt\")"
         ),
         (
-            file::put_if_not_exists!(alice(), "Alice"),
-            "file::put_if_not_exists(f\"avatars:/alice.txt\", 'Alice')"
+            alice().rename("bob.txt"),
+            "(f\"avatars:/alice.txt\").rename('bob.txt')"
         ),
-        (file::get!(alice()), "file::get(f\"avatars:/alice.txt\")"),
-        (file::head!(alice()), "file::head(f\"avatars:/alice.txt\")"),
-        (file::delete!(alice()), "file::delete(f\"avatars:/alice.txt\")"),
-        (
-            file::copy!(alice(), "bob.txt"),
-            "file::copy(f\"avatars:/alice.txt\", 'bob.txt')"
-        ),
-        (
-            file::copy_if_not_exists!(alice(), bob()),
-            "file::copy_if_not_exists(f\"avatars:/alice.txt\", f\"avatars:/bob.txt\")"
-        ),
-        (
-            file::rename!(alice(), "bob.txt"),
-            "file::rename(f\"avatars:/alice.txt\", 'bob.txt')"
-        ),
-        (
-            file::rename_if_not_exists!(alice(), "bob.txt"),
-            "file::rename_if_not_exists(f\"avatars:/alice.txt\", 'bob.txt')"
-        ),
-        (file::exists!(alice()), "file::exists(f\"avatars:/alice.txt\")"),
-        (file::list!("avatars"), "file::list('avatars')"),
-        (
-            file::list!("avatars", prefixed("a")),
-            "file::list('avatars', { prefix: 'a' })"
-        ),
-        (alice().exists(), "(f\"avatars:/alice.txt\").exists()"),
-        (alice().put("Alice"), "(f\"avatars:/alice.txt\").put('Alice')"),
-        (alice().rename("bob.txt"), "(f\"avatars:/alice.txt\").rename('bob.txt')"),
     );
 }
 
 /// Runs `function` with its values bound, as an application does.
-async fn run<T: SurrealValue, K: KindOf>(
-    db: &Surreal<Any>,
-    function: Function<K>,
-) -> Option<T> {
+async fn run<T: SurrealValue, K: KindOf>(db: &Surreal<Any>, function: Function<K>) -> Option<T> {
     function.run(db).await.expect("ran")
 }
 
@@ -93,7 +61,10 @@ async fn avatars() -> (Surreal<Any>, TestDb) {
 #[tokio::test]
 async fn a_file_is_written_read_copied_renamed_listed_and_deleted() {
     let (db, _guard) = avatars().await;
-    assert_eq!(run::<bool, _>(&db, file::exists!(alice())).await, Some(false));
+    assert_eq!(
+        run::<bool, _>(&db, file::exists!(alice())).await,
+        Some(false)
+    );
     let missing = run::<Value, _>(&db, file::get!(alice())).await;
     assert!(matches!(missing, None | Some(Value::None)), "{missing:?}");
 
@@ -129,7 +100,10 @@ async fn a_file_is_written_read_copied_renamed_listed_and_deleted() {
 
     run::<Value, _>(&db, file::delete!(bob())).await;
     run::<Value, _>(&db, file::rename!(alice(), "bob.txt")).await;
-    assert_eq!(run::<bool, _>(&db, file::exists!(alice())).await, Some(false));
+    assert_eq!(
+        run::<bool, _>(&db, file::exists!(alice())).await,
+        Some(false)
+    );
     assert_eq!(run::<bool, _>(&db, file::exists!(bob())).await, Some(true));
 }
 
@@ -157,8 +131,16 @@ async fn the_if_not_exists_forms_leave_an_existing_target_unchanged() {
         let result: umbriel::Result<Option<Value>> = no_op.run(&db).await;
         assert!(result.is_ok(), "{}: {result:?}", no_op.to_debug_sql());
     }
-    assert_eq!(contents(&db, alice()).await, b"Alice", "the source is unchanged");
-    assert_eq!(contents(&db, bob()).await, b"Bob", "the target is unchanged");
+    assert_eq!(
+        contents(&db, alice()).await,
+        b"Alice",
+        "the source is unchanged"
+    );
+    assert_eq!(
+        contents(&db, bob()).await,
+        b"Bob",
+        "the target is unchanged"
+    );
 }
 
 #[tokio::test]
@@ -170,7 +152,10 @@ async fn the_if_not_exists_forms_act_on_a_missing_target() {
     assert_eq!(contents(&db, bob()).await, b"Alice");
     run::<Value, _>(&db, file::delete!(bob())).await;
     run::<Value, _>(&db, file::rename_if_not_exists!(alice(), "bob.txt")).await;
-    assert_eq!(run::<bool, _>(&db, file::exists!(alice())).await, Some(false));
+    assert_eq!(
+        run::<bool, _>(&db, file::exists!(alice())).await,
+        Some(false)
+    );
     assert_eq!(contents(&db, bob()).await, b"Alice");
 }
 

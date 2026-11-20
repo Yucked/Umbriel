@@ -1,45 +1,10 @@
-//! `value::*` (`orm/src/functions/value.rs`): every function and method form rendered, and the
+//! `value::*` (`orm/src/functions/value.rs`): every function and method form run, and the
 //! results SurrealDB computes.
 
 use std::collections::BTreeMap;
 
-use umbriel::{Field, Operatable, Param, Render, ValueLike, closure, functions::value};
+use umbriel::{Operatable, Param, Render, ValueLike, closure, functions::value};
 use umbriel_tests::*;
-
-#[test]
-fn rendering() {
-    let score = Field::new("score");
-    let double = || closure(["n"], |[n]| n.multiply(2));
-    calls!(
-        (
-            value::chain!(score.clone(), double()),
-            "value::chain(score, |$n| $n * 2)"
-        ),
-        (value::diff!(score.clone(), 1), "value::diff(score, 1)"),
-        (
-            value::expect!(score.clone(), double()),
-            "value::expect(score, |$n| $n * 2)"
-        ),
-        (
-            value::expect!(score.clone(), double(), "too low"),
-            "value::expect(score, |$n| $n * 2, 'too low')"
-        ),
-        (
-            value::patch!(score.clone(), Field::new("changes")),
-            "value::patch(score, changes)"
-        ),
-    );
-    let score = ValueLike::from(Field::new("score"));
-    calls!(
-        (score.chain(double()), "score.chain(|$n| $n * 2)"),
-        (score.diff(1), "score.diff(1)"),
-        (
-            score.expect(double(), None::<&str>),
-            "score.expect(|$n| $n * 2)"
-        ),
-        (score.patch(Field::new("changes")), "score.patch(changes)"),
-    );
-}
 
 #[tokio::test]
 async fn results() {

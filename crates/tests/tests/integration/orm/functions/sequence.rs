@@ -1,22 +1,8 @@
-//! `sequence::*` (`orm/src/functions/sequence.rs`): `sequence::nextval` rendered and drawing
+//! `sequence::*` (`orm/src/functions/sequence.rs`): `sequence::nextval` drawing
 //! increasing values from a defined sequence.
 
-use umbriel::{Param, Runnable, functions::sequence, statements::define_sequence};
+use umbriel::{Runnable, functions::sequence, statements::define_sequence};
 use umbriel_tests::*;
-
-#[test]
-fn rendering() {
-    calls!(
-        (
-            sequence::nextval!("order_number"),
-            "sequence::nextval('order_number')"
-        ),
-        (
-            sequence::nextval!(Param::new("name")),
-            "sequence::nextval($name)"
-        ),
-    );
-}
 
 #[tokio::test]
 async fn values_increase_from_the_start() {

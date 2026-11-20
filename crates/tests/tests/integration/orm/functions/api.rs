@@ -1,4 +1,4 @@
-//! `api::*` (`orm/src/functions/api.rs`): `api::invoke` rendered and calling a defined API,
+//! `api::*` (`orm/src/functions/api.rs`): `api::invoke` calling a defined API,
 //! through the typed middleware of `ApiConfig`.
 
 use surrealdb::types::{Number, Object, Value};
@@ -8,19 +8,6 @@ use umbriel::{
     statements::{ApiMethod, api_action, api_config, define_api},
 };
 use umbriel_tests::*;
-
-#[test]
-fn rendering() {
-    let mut request = Object::new();
-    request.insert("method", "post".to_owned());
-    calls!(
-        (api::invoke!("/status"), "api::invoke('/status')"),
-        (
-            api::invoke!("/status", request),
-            "api::invoke('/status', { method: 'post' })"
-        ),
-    );
-}
 
 /// The response object of `api::invoke(path)`.
 async fn invoke(db: &surrealdb::Surreal<surrealdb::engine::any::Any>, path: &str) -> Object {
@@ -37,8 +24,11 @@ async fn invoke_answers_with_the_action_and_its_middleware() {
     answer.insert("body", "ok".to_owned());
     define_api("/status")
         .action(
-            api_action([ApiMethod::Get], ValueLike::value(answer))
-                .config(api_config().res_status(201).res_header("x-acme", "Acme Corp")),
+            api_action([ApiMethod::Get], ValueLike::value(answer)).config(
+                api_config()
+                    .res_status(201)
+                    .res_header("x-acme", "Acme Corp"),
+            ),
         )
         .run(&db)
         .await

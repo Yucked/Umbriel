@@ -1,4 +1,4 @@
-//! `time::*` (`orm/src/functions/time.rs`): every function and method form rendered, the
+//! `time::*` (`orm/src/functions/time.rs`): every function and method form run, the
 //! optional datetime of the part readers, and the results SurrealDB computes.
 
 use std::time::Duration;
@@ -7,136 +7,16 @@ use chrono::{DateTime, Utc};
 use umbriel::{DatetimeLike, Field, Param, Render, arr, functions::time};
 use umbriel_tests::*;
 
+/// The form no server test calls, and a datetime literal as an argument.
 #[test]
 fn rendering() {
-    let created = Field::new("created");
-    calls!(
-        (time::now!(), "time::now()"),
-        (time::timezone!(), "time::timezone()"),
-        (time::day!(created.clone()), "time::day(created)"),
-        (time::day!(), "time::day()"),
-        (time::hour!(created.clone()), "time::hour(created)"),
-        (
-            time::is_leap_year!(created.clone()),
-            "time::is_leap_year(created)"
-        ),
-        (time::micros!(created.clone()), "time::micros(created)"),
-        (time::millis!(created.clone()), "time::millis(created)"),
-        (time::minute!(created.clone()), "time::minute(created)"),
-        (time::month!(created.clone()), "time::month(created)"),
-        (time::nano!(created.clone()), "time::nano(created)"),
-        (time::second!(created.clone()), "time::second(created)"),
-        (time::unix!(created.clone()), "time::unix(created)"),
-        (time::wday!(created.clone()), "time::wday(created)"),
-        (time::week!(created.clone()), "time::week(created)"),
-        (time::yday!(created.clone()), "time::yday(created)"),
-        (time::year!(created.clone()), "time::year(created)"),
-        (time::year!(), "time::year()"),
-        (
-            time::floor!(created.clone(), Duration::from_secs(604_800)),
-            "time::floor(created, 1w)"
-        ),
-        (
-            time::ceil!(created.clone(), Duration::from_secs(3600)),
-            "time::ceil(created, 1h)"
-        ),
-        (
-            time::round!(created.clone(), Duration::from_secs(60)),
-            "time::round(created, 1m)"
-        ),
-        (
-            time::format_!(created.clone(), "%Y"),
-            "time::format(created, '%Y')"
-        ),
-        (
-            time::group!(created.clone(), "year"),
-            "time::group(created, 'year')"
-        ),
-        (
-            time::group!(created.clone(), "week"),
-            "time::group(created, 'week')"
-        ),
-        (time::max!(Param::new("dates")), "time::max($dates)"),
-        (time::min!(Param::new("dates")), "time::min($dates)"),
-        (
-            time::set_day!(created.clone(), 1),
-            "time::set_day(created, 1)"
-        ),
-        (
-            time::set_hour!(created.clone(), 1),
-            "time::set_hour(created, 1)"
-        ),
-        (
-            time::set_minute!(created.clone(), 1),
-            "time::set_minute(created, 1)"
-        ),
-        (
-            time::set_month!(created.clone(), 1),
-            "time::set_month(created, 1)"
-        ),
-        (
-            time::set_nanosecond!(created.clone(), 1),
-            "time::set_nanosecond(created, 1)"
-        ),
-        (
-            time::set_second!(created.clone(), 1),
-            "time::set_second(created, 1)"
-        ),
-        (
-            time::set_year!(created, 2020),
-            "time::set_year(created, 2020)"
-        ),
-        (time::from_micros!(1), "time::from_micros(1)"),
-        (time::from_millis!(1), "time::from_millis(1)"),
-        (time::from_nanos!(1), "time::from_nanos(1)"),
-        (time::from_secs!(1), "time::from_secs(1)"),
-        (
-            time::from_ulid!("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-            "time::from_ulid('01ARZ3NDEKTSV4RRFFQ69G5FAV')"
-        ),
-        (time::from_unix!(1), "time::from_unix(1)"),
-        (time::from_uuid!(Field::new("key")), "time::from_uuid(key)"),
-    );
+    calls!((time::from_uuid!(Field::new("key")), "time::from_uuid(key)"));
     let literal = time::day!(datetime()).to_debug_sql();
     assert!(
         literal.starts_with("time::day(d'2021-11-01T08:30:17"),
         "{literal}"
     );
     assert_parses(&format!("RETURN {literal};"));
-}
-
-#[test]
-fn method_rendering() {
-    let created = DatetimeLike::from(Field::new("created"));
-    let hour = || Duration::from_secs(3600);
-    calls!(
-        (created.ceil(hour()), "created.ceil(1h)"),
-        (created.day(), "created.day()"),
-        (created.floor(hour()), "created.floor(1h)"),
-        (created.format("%Y"), "created.format('%Y')"),
-        (created.group("month"), "created.group('month')"),
-        (created.hour(), "created.hour()"),
-        (created.is_leap_year(), "created.is_leap_year()"),
-        (created.micros(), "created.micros()"),
-        (created.millis(), "created.millis()"),
-        (created.minute(), "created.minute()"),
-        (created.month(), "created.month()"),
-        (created.nano(), "created.nano()"),
-        (created.round(hour()), "created.round(1h)"),
-        (created.second(), "created.second()"),
-        (created.set_day(1), "created.set_day(1)"),
-        (created.set_hour(1), "created.set_hour(1)"),
-        (created.set_minute(1), "created.set_minute(1)"),
-        (created.set_month(1), "created.set_month(1)"),
-        (created.set_nanosecond(1), "created.set_nanosecond(1)"),
-        (created.set_second(1), "created.set_second(1)"),
-        (created.set_year(2020), "created.set_year(2020)"),
-        (created.unix(), "created.unix()"),
-        (created.wday(), "created.wday()"),
-        (created.week(), "created.week()"),
-        (created.yday(), "created.yday()"),
-        (created.year(), "created.year()"),
-    );
 }
 
 #[tokio::test]

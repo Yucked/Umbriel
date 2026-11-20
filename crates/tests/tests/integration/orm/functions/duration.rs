@@ -1,65 +1,10 @@
-//! `duration::*` (`orm/src/functions/duration.rs`): every function and method form rendered, and
+//! `duration::*` (`orm/src/functions/duration.rs`): every function and method form run, and
 //! the results SurrealDB computes.
 
 use std::time::Duration;
 
 use umbriel::{DurationLike, Field, Param, Render, functions::duration};
 use umbriel_tests::*;
-
-#[test]
-fn rendering() {
-    let elapsed = Field::new("elapsed");
-    calls!(
-        (duration::days!(elapsed.clone()), "duration::days(elapsed)"),
-        (
-            duration::hours!(elapsed.clone()),
-            "duration::hours(elapsed)"
-        ),
-        (
-            duration::micros!(elapsed.clone()),
-            "duration::micros(elapsed)"
-        ),
-        (
-            duration::millis!(elapsed.clone()),
-            "duration::millis(elapsed)"
-        ),
-        (duration::mins!(elapsed.clone()), "duration::mins(elapsed)"),
-        (
-            duration::nanos!(elapsed.clone()),
-            "duration::nanos(elapsed)"
-        ),
-        (duration::secs!(elapsed.clone()), "duration::secs(elapsed)"),
-        (
-            duration::weeks!(elapsed.clone()),
-            "duration::weeks(elapsed)"
-        ),
-        (duration::years!(elapsed), "duration::years(elapsed)"),
-        (duration::from_days!(1), "duration::from_days(1)"),
-        (duration::from_hours!(1), "duration::from_hours(1)"),
-        (duration::from_micros!(1), "duration::from_micros(1)"),
-        (duration::from_millis!(1), "duration::from_millis(1)"),
-        (duration::from_mins!(1), "duration::from_mins(1)"),
-        (duration::from_nanos!(1), "duration::from_nanos(1)"),
-        (duration::from_secs!(1), "duration::from_secs(1)"),
-        (duration::from_weeks!(1), "duration::from_weeks(1)"),
-    );
-}
-
-#[test]
-fn method_rendering() {
-    let elapsed = DurationLike::from(Field::new("elapsed"));
-    calls!(
-        (elapsed.days(), "elapsed.days()"),
-        (elapsed.hours(), "elapsed.hours()"),
-        (elapsed.micros(), "elapsed.micros()"),
-        (elapsed.millis(), "elapsed.millis()"),
-        (elapsed.mins(), "elapsed.mins()"),
-        (elapsed.nanos(), "elapsed.nanos()"),
-        (elapsed.secs(), "elapsed.secs()"),
-        (elapsed.weeks(), "elapsed.weeks()"),
-        (elapsed.years(), "elapsed.years()"),
-    );
-}
 
 #[tokio::test]
 async fn results() {

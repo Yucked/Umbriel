@@ -1,46 +1,11 @@
-//! `encoding::*` (`orm/src/functions/encoding.rs`): every function rendered, and the results
+//! `encoding::*` (`orm/src/functions/encoding.rs`): every function run, and the results
 //! SurrealDB computes.
 
 use umbriel::{
-    Field, Param, Render,
+    Param, Render,
     functions::{encoding, type_},
 };
 use umbriel_tests::*;
-
-#[test]
-fn rendering() {
-    let payload = Field::new("payload");
-    calls!(
-        (
-            encoding::base64::decode!("aGk="),
-            "encoding::base64::decode('aGk=')"
-        ),
-        (
-            encoding::base64::encode!(payload.clone()),
-            "encoding::base64::encode(payload)"
-        ),
-        (
-            encoding::base64::encode!(payload.clone(), false),
-            "encoding::base64::encode(payload, false)"
-        ),
-        (
-            encoding::cbor::decode!(payload.clone()),
-            "encoding::cbor::decode(payload)"
-        ),
-        (
-            encoding::cbor::encode!(Field::new("input")),
-            "encoding::cbor::encode(input)"
-        ),
-        (
-            encoding::json::decode!("[1]"),
-            "encoding::json::decode('[1]')"
-        ),
-        (
-            encoding::json::encode!(Field::new("input")),
-            "encoding::json::encode(input)"
-        ),
-    );
-}
 
 #[tokio::test]
 async fn results() {

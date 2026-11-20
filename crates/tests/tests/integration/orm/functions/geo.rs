@@ -1,7 +1,7 @@
-//! `geo::*` (`orm/src/functions/geo.rs`): every function and method form rendered, and the
+//! `geo::*` (`orm/src/functions/geo.rs`): every function and method form run, and the
 //! results SurrealDB computes.
 
-use umbriel::{Field, GeometryLike, Param, Render, functions::geo as geo_fn};
+use umbriel::{GeometryLike, Param, Render, functions::geo as geo_fn};
 use umbriel_tests::*;
 
 fn square() -> geo::Polygon {
@@ -15,53 +15,6 @@ fn square() -> geo::Polygon {
         ]),
         vec![],
     )
-}
-
-#[test]
-fn rendering() {
-    let area = Field::new("area");
-    let from = Field::new("from");
-    let to = Field::new("to");
-    calls!(
-        (geo_fn::area!(area.clone()), "geo::area(area)"),
-        (
-            geo_fn::bearing!(from.clone(), to.clone()),
-            "geo::bearing(from, to)"
-        ),
-        (geo_fn::centroid!(area.clone()), "geo::centroid(area)"),
-        (
-            geo_fn::distance!(from.clone(), to),
-            "geo::distance(from, to)"
-        ),
-        (geo_fn::is_valid!(area), "geo::is_valid(area)"),
-        (
-            geo_fn::hash::decode!("mpuxk4s24f51"),
-            "geo::hash::decode('mpuxk4s24f51')"
-        ),
-        (
-            geo_fn::hash::encode!(from.clone()),
-            "geo::hash::encode(from)"
-        ),
-        (geo_fn::hash::encode!(from, 5), "geo::hash::encode(from, 5)"),
-    );
-    assert_parses(&format!(
-        "RETURN {};",
-        geo_fn::area!(square()).to_debug_sql()
-    ));
-}
-
-#[test]
-fn method_rendering() {
-    let area = GeometryLike::from(Field::new("area"));
-    calls!(
-        (area.area(), "area.area()"),
-        (area.bearing(Field::new("to")), "area.bearing(to)"),
-        (area.centroid(), "area.centroid()"),
-        (area.distance(Field::new("to")), "area.distance(to)"),
-        (area.is_valid(), "area.is_valid()"),
-        (area.hash_decode(), "area.hash_decode()"),
-        (area.hash_encode(Some(5)), "area.hash_encode(5)"),
-    );
 }
 
 #[tokio::test]

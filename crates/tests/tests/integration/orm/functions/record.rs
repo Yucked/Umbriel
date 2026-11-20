@@ -1,30 +1,8 @@
-//! `record::*` (`orm/src/functions/record.rs`): every function and method form rendered, and the
+//! `record::*` (`orm/src/functions/record.rs`): every function and method form run, and the
 //! results SurrealDB computes.
 
 use umbriel::{Field, Model, Param, RecordIdLike, Render, functions::record};
 use umbriel_tests::*;
-
-#[test]
-fn rendering() {
-    calls!(
-        (
-            record::exists!(User::id("alice")),
-            "record::exists(user:alice)"
-        ),
-        (record::id!(User::id("alice")), "record::id(user:alice)"),
-        (record::is_edge!(Field::new("id")), "record::is_edge(id)"),
-        (record::table!(Field::new("id")), "record::table(id)"),
-        (record::tb!(Field::new("id")), "record::tb(id)"),
-    );
-    let owner = RecordIdLike::from(Field::new("owner"));
-    calls!(
-        (owner.exists(), "owner.exists()"),
-        (owner.id(), "owner.id()"),
-        (owner.is_edge(), "owner.is_edge()"),
-        (owner.table(), "owner.table()"),
-        (owner.tb(), "owner.tb()"),
-    );
-}
 
 #[tokio::test]
 async fn results() {

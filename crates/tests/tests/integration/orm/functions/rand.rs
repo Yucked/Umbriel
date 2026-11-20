@@ -1,5 +1,6 @@
-//! `rand()` and `rand::*` (`orm/src/functions/rand.rs`): every function rendered with and without
-//! its optional arguments, and the kinds of the values SurrealDB generates.
+//! `rand()` and `rand::*` (`orm/src/functions/rand.rs`): the functions run, with the kinds of
+//! the values SurrealDB generates; the forms no run covers are only rendered, as their values are
+//! random.
 
 use std::time::Duration;
 
@@ -9,26 +10,15 @@ use umbriel::{
 };
 use umbriel_tests::*;
 
+/// The forms no server test calls: their results are random, so only the rendering is checked.
 #[test]
 fn rendering() {
     calls!(
-        (rand_fn::rand!(), "rand()"),
-        (rand_fn::bool!(), "rand::bool()"),
-        (
-            rand_fn::duration!(Duration::from_secs(1), Duration::from_secs(60)),
-            "rand::duration(1s, 1m)",
-        ),
-        (rand_fn::enum_!("a", "b"), "rand::enum('a', 'b')"),
         (rand_fn::float!(), "rand::float()"),
-        (rand_fn::float!(1, 2), "rand::float(1, 2)"),
         (rand_fn::int!(), "rand::int()"),
-        (rand_fn::int!(1, 10), "rand::int(1, 10)"),
         (rand_fn::string!(), "rand::string()"),
-        (rand_fn::string!(8), "rand::string(8)"),
         (rand_fn::string!(4, 8), "rand::string(4, 8)"),
-        (rand_fn::time!(), "rand::time()"),
         (rand_fn::time!(0, 1_000), "rand::time(0, 1000)"),
-        (rand_fn::ulid!(), "rand::ulid()"),
         (
             rand_fn::ulid!(datetime()),
             &format!(
@@ -36,11 +26,6 @@ fn rendering() {
                 umbriel::ValueLike::from(datetime()).to_debug_sql()
             )
         ),
-        (rand_fn::uuid!(), "rand::uuid()"),
-        (rand_fn::uuid::v4!(), "rand::uuid::v4()"),
-        (rand_fn::uuid::v7!(), "rand::uuid::v7()"),
-        (rand_fn::id!(), "rand::id()"),
-        (rand_fn::id!(10), "rand::id(10)"),
         (rand_fn::id!(5, 10), "rand::id(5, 10)"),
     );
 }

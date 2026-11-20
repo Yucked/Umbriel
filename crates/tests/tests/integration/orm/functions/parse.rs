@@ -1,54 +1,10 @@
-//! `parse::*` (`orm/src/functions/parse.rs`): every function rendered and the parts SurrealDB
+//! `parse::*` (`orm/src/functions/parse.rs`): every function run, and the parts SurrealDB
 //! extracts. None of them has a method form.
 
 use umbriel::{Param, Render, functions::parse};
 use umbriel_tests::*;
 
 const URL: &str = "https://example.com:443/topics?arg=value#fragment";
-
-#[test]
-fn rendering() {
-    calls!(
-        (
-            parse::email::host!("alice@example.com"),
-            "parse::email::host('alice@example.com')"
-        ),
-        (
-            parse::email::user!("alice@example.com"),
-            "parse::email::user('alice@example.com')"
-        ),
-    );
-    calls!(
-        (
-            parse::url::domain!(URL),
-            &format!("parse::url::domain('{URL}')")
-        ),
-        (
-            parse::url::fragment!(URL),
-            &format!("parse::url::fragment('{URL}')")
-        ),
-        (
-            parse::url::host!(URL),
-            &format!("parse::url::host('{URL}')")
-        ),
-        (
-            parse::url::path!(URL),
-            &format!("parse::url::path('{URL}')")
-        ),
-        (
-            parse::url::port!(URL),
-            &format!("parse::url::port('{URL}')")
-        ),
-        (
-            parse::url::query!(URL),
-            &format!("parse::url::query('{URL}')")
-        ),
-        (
-            parse::url::scheme!(URL),
-            &format!("parse::url::scheme('{URL}')")
-        ),
-    );
-}
 
 #[tokio::test]
 async fn results() {

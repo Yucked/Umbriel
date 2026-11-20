@@ -1,56 +1,13 @@
-//! `object::*` (`orm/src/functions/object.rs`): every function and method form rendered, and the
+//! `object::*` (`orm/src/functions/object.rs`): every function and method form run, and the
 //! results SurrealDB computes.
 
 use std::collections::BTreeMap;
 
-use umbriel::{Field, ObjectLike, Param, Render, functions::object};
+use umbriel::{ObjectLike, Param, Render, functions::object};
 use umbriel_tests::*;
 
 fn alice() -> BTreeMap<String, i64> {
     BTreeMap::from([("age".to_owned(), 30), ("score".to_owned(), 7)])
-}
-
-#[test]
-fn rendering() {
-    let settings = Field::new("settings");
-    calls!(
-        (
-            object::entries!(settings.clone()),
-            "object::entries(settings)"
-        ),
-        (
-            object::extend!(settings.clone(), Field::new("defaults")),
-            "object::extend(settings, defaults)"
-        ),
-        (
-            object::from_entries!(Field::new("pairs")),
-            "object::from_entries(pairs)"
-        ),
-        (
-            object::is_empty!(settings.clone()),
-            "object::is_empty(settings)"
-        ),
-        (object::keys!(settings.clone()), "object::keys(settings)"),
-        (object::len!(settings.clone()), "object::len(settings)"),
-        (
-            object::remove!(settings.clone(), "age"),
-            "object::remove(settings, 'age')"
-        ),
-        (object::values!(settings), "object::values(settings)"),
-    );
-    let settings = ObjectLike::from(Field::new("settings"));
-    calls!(
-        (settings.entries(), "settings.entries()"),
-        (
-            settings.extend(Field::new("defaults")),
-            "settings.extend(defaults)"
-        ),
-        (settings.is_empty(), "settings.is_empty()"),
-        (settings.keys(), "settings.keys()"),
-        (settings.len(), "settings.len()"),
-        (settings.remove("age"), "settings.remove('age')"),
-        (settings.values(), "settings.values()"),
-    );
 }
 
 #[tokio::test]

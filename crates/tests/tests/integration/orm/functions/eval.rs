@@ -6,16 +6,14 @@ use std::collections::BTreeMap;
 use umbriel::{Render, functions::eval};
 use umbriel_tests::*;
 
+/// The form no server test calls, and bindings passed to `eval::surql`.
 #[test]
 fn rendering() {
     let bindings = BTreeMap::from([("n".to_owned(), 1)]);
-    calls!(
-        (eval::surql!("RETURN 1"), "eval::surql('RETURN 1')"),
-        (
-            eval::gql!("{ user { id } }"),
-            "eval::gql('{ user { id } }')"
-        ),
-    );
+    calls!((
+        eval::gql!("{ user { id } }"),
+        "eval::gql('{ user { id } }')"
+    ));
     let with_bindings = eval::surql!("RETURN $n", bindings).to_debug_sql();
     assert!(
         with_bindings.starts_with("eval::surql('RETURN $n', {"),
