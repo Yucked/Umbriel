@@ -1,6 +1,6 @@
 //! `FOR` permissions (`orm/src/statements/for_permission.rs`): one or several operations under a condition.
 
-use umbriel_tests::{support::statements::*, *};
+use umbriel_tests::support::statements::*;
 
 #[test]
 fn for_permissions() {
