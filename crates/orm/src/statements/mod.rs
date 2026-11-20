@@ -39,6 +39,7 @@ pub(crate) mod info_result;
 pub(crate) mod insert;
 pub(crate) mod let_;
 pub(crate) mod live_select;
+pub(crate) mod rebuild;
 pub(crate) mod relate;
 pub(crate) mod remove;
 pub(crate) mod return_;
@@ -207,10 +208,10 @@ impl<S: Statement + ?Sized> Render for StatementBody<'_, S> {
 
 pub use alter::{
     AlterAnalyzerStatement, AlterApiStatement, AlterBucketStatement, AlterEventStatement,
-    AlterFieldStatement, AlterFunctionStatement, AlterModuleStatement, AlterParamStatement,
-    AlterSequenceStatement, AlterTableStatement, alter_analyzer, alter_api, alter_bucket,
-    alter_event, alter_field, alter_function, alter_module, alter_param, alter_sequence,
-    alter_table,
+    AlterFieldStatement, AlterFunctionStatement, AlterIndexStatement, AlterModuleStatement,
+    AlterParamStatement, AlterSequenceStatement, AlterTableStatement, alter_analyzer, alter_api,
+    alter_bucket, alter_event, alter_field, alter_function, alter_index, alter_module, alter_param,
+    alter_sequence, alter_table,
 };
 pub use any::{
     AnyTarget, CreateAnyStatement, InsertAnyStatement, Models, WritableModels, create_any,
@@ -225,7 +226,8 @@ pub use define_access::{
     record_access,
 };
 pub use define_analyzer::{
-    AnalyzerFilter, DefineAnalyzerStatement, SnowballLanguage, Tokenizer, define_analyzer,
+    AnalyzerFilter, DefineAnalyzerStatement, SegmentLanguage, SnowballLanguage, Tokenizer,
+    define_analyzer,
 };
 pub use define_api::{
     ApiAction, ApiConfig, ApiMethod, BodyStrategy, DefineApiStatement, api_action, api_config,
@@ -238,9 +240,12 @@ pub use define_config::{
 };
 pub use define_database::{DefineDatabaseStatement, define_database};
 pub use define_event::{DefineEventStatement, define_event};
-pub use define_field::{DefineFieldStatement, define_field};
+pub use define_field::{DefineFieldStatement, OnDelete, define_field};
 pub use define_function::{DefineFunctionStatement, FunctionArgument, define_function};
-pub use define_index::{DefineIndexStatement, FullTextAnalyzer, define_index, fulltext_analyzer};
+pub use define_index::{
+    DefineIndexStatement, DiskAnnOptions, Distance, FullTextAnalyzer, HnswOptions, VectorType,
+    define_index, diskann, fulltext_analyzer, hnsw,
+};
 pub use define_module::{
     DefineModuleStatement, ModuleName, define_module_file, define_module_silo,
 };
@@ -261,6 +266,7 @@ pub use info_result::{
 pub use insert::{InsertStatement, Insertables, input_of, insert, insert_relation};
 pub use let_::{LetStatement, let_};
 pub use live_select::{LiveSelectStatement, live};
+pub use rebuild::{RebuildIndexStatement, rebuild_index};
 pub use relate::{RelateOrUpdateStatement, RelateStatement, relate, relate_only};
 pub use remove::{
     RemoveAccessStatement, RemoveAnalyzerStatement, RemoveApiStatement, RemoveBucketStatement,
