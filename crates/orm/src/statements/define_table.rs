@@ -40,6 +40,8 @@ pub struct DefineTableStatement {
     changefeed: Option<Duration>,
     include_original: bool,
     as_: Option<SelectStatement>,
+    inline_edges: Option<u32>,
+    inline_references: Option<u32>,
     permissions: PermissionsClause,
 }
 
@@ -106,11 +108,37 @@ pub fn define_table(table: impl Into<Name<Table>>) -> DefineTableStatement {
         changefeed: None,
         include_original: false,
         as_: None,
+        inline_edges: None,
+        inline_references: None,
         permissions: PermissionsClause::default(),
     }
 }
 
 impl DefineTableStatement {
+    /// `INLINE EDGES @cap`: each record caches up to `cap` of its edges, so traversals read them
+    /// without a scan. SurrealDB rejects a cap above its maximum.
+    ///
+    /// ```rust
+    /// use umbriel::{*, statements::define_table};
+    ///
+    /// let statement = define_table(Table::new("user")).inline_edges(16).inline_references(8);
+    /// assert_eq!(
+    ///     statement.to_debug_sql(),
+    ///     "DEFINE TABLE user INLINE EDGES 16 INLINE REFERENCES 8;"
+    /// );
+    /// ```
+    pub fn inline_edges(mut self, cap: u32) -> Self {
+        self.inline_edges = Some(cap);
+        self
+    }
+
+    /// `INLINE REFERENCES @cap`: each record caches up to `cap` of the references to it.
+    /// SurrealDB rejects a cap above its maximum.
+    pub fn inline_references(mut self, cap: u32) -> Self {
+        self.inline_references = Some(cap);
+        self
+    }
+
     /// Drop the table if it exists and create a new one with the same name.
     pub fn drop(mut self) -> Self {
         self.drop = true;
@@ -250,6 +278,14 @@ impl Statement for DefineTableStatement {
         }
 
         self.options.render_comment(out);
+
+        if let Some(cap) = self.inline_edges {
+            out.push_str(" INLINE EDGES ").push_display(&cap);
+        }
+        if let Some(cap) = self.inline_references {
+            out.push_str(" INLINE REFERENCES ").push_display(&cap);
+        }
+
         out.push(&self.permissions);
     }
 }
@@ -312,6 +348,7 @@ pub struct TableRelation {
     in_: Vec<Table>,
     out: Vec<Table>,
     enforced: bool,
+    lightweight: bool,
 }
 
 /// Starts the endpoints of a `TYPE RELATION` table, for
@@ -340,7 +377,20 @@ impl TableRelation {
         self
     }
 
+    /// `LIGHTWEIGHT`: relations are stored as adjacency on their endpoints only, with no edge
+    /// records, which implies `ENFORCED`. It needs both endpoint lists (a relation without them
+    /// fails to render); SurrealDB also rejects it with `DROP`, `SCHEMAFULL`, a changefeed or a
+    /// view, turns it on only over an empty table, and turns it off only while the relation holds
+    /// no edges.
+    pub fn lightweight(mut self) -> Self {
+        self.lightweight = true;
+        self
+    }
+
     fn render(&self, out: &mut Renderer) {
+        if self.lightweight && (self.in_.is_empty() || self.out.is_empty()) {
+            out.push_error("a LIGHTWEIGHT relation needs its IN and OUT tables");
+        }
         if !self.in_.is_empty() {
             out.push_str(" IN ").push_joined(&self.in_, " | ");
         }
@@ -349,6 +399,9 @@ impl TableRelation {
         }
         if self.enforced {
             out.push_str(" ENFORCED");
+        }
+        if self.lightweight {
+            out.push_str(" LIGHTWEIGHT");
         }
     }
 }

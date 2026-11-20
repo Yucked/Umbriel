@@ -253,3 +253,126 @@ mod definitions {
         );
     }
 }
+
+/// `LIGHTWEIGHT` relations and the `INLINE` caches.
+mod lightweight {
+    use super::*;
+    use umbriel::{Raw, Render, statements::TableRelation};
+
+    fn knows() -> TableRelation {
+        table_relation().in_(["person"]).out(["person"])
+    }
+
+    #[test]
+    fn lightweight_and_inline_caps_render() {
+        assert_sql(
+            &define_table("knows").kind_relation(knows().lightweight()),
+            "DEFINE TABLE knows TYPE RELATION IN person OUT person LIGHTWEIGHT;",
+        );
+        assert_sql(
+            &define_table("person").inline_edges(16).inline_references(8),
+            "DEFINE TABLE person INLINE EDGES 16 INLINE REFERENCES 8;",
+        );
+    }
+
+    #[tokio::test]
+    async fn a_lightweight_relation_is_traversed_and_scanned_from_its_endpoints() {
+        let (db, _guard) = db().await;
+        run(
+            &db,
+            define_table("knows").kind_relation(knows().lightweight()),
+        )
+        .await;
+        run(
+            &db,
+            Raw::new(
+                "CREATE person:alice; CREATE person:bob; \
+                 RELATE person:alice->knows->person:bob;",
+            ),
+        )
+        .await;
+        let friends: bool = read(&db, "RETURN person:alice->knows->person = [person:bob];").await;
+        assert!(friends, "the relation is traversed");
+        // The edge has no record: scanning the table derives it from the `IN` tables' adjacency.
+        let scanned: bool = read(
+            &db,
+            "RETURN (SELECT VALUE [in, out] FROM knows) = [[person:alice, person:bob]];",
+        )
+        .await;
+        assert!(scanned, "the scan derives the edge");
+        let stored = stored_definition(&db, "INFO FOR DB;", "tables", "knows").await;
+        assert!(
+            stored.contains("LIGHTWEIGHT") && stored.contains("ENFORCED"),
+            "LIGHTWEIGHT implies ENFORCED: {stored}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lightweight_needs_explicit_endpoints() {
+        assert!(
+            define_table("knows")
+                .kind_relation(table_relation().lightweight())
+                .to_query()
+                .is_err(),
+            "endpoints are required to render"
+        );
+        let (db, _guard) = db().await;
+        assert!(
+            !succeeds(&db, "DEFINE TABLE knows TYPE RELATION LIGHTWEIGHT;").await,
+            "the server requires them too"
+        );
+    }
+
+    #[tokio::test]
+    async fn lightweight_rejects_schemafull_drop_views_and_changefeeds() {
+        let (db, _guard) = db().await;
+        for clause in ["SCHEMAFULL", "DROP", "CHANGEFEED 1h"] {
+            let sql = format!(
+                "DEFINE TABLE knows TYPE RELATION IN person OUT person LIGHTWEIGHT {clause};"
+            );
+            assert!(!succeeds(&db, &sql).await, "`{sql}` is accepted");
+        }
+        let view = "DEFINE TABLE knows TYPE RELATION IN person OUT person LIGHTWEIGHT \
+                    AS SELECT * FROM person;";
+        assert!(!succeeds(&db, view).await, "`{view}` is accepted");
+    }
+
+    #[tokio::test]
+    async fn lightweight_is_turned_off_only_while_it_holds_no_edges() {
+        let (db, _guard) = db().await;
+        run(
+            &db,
+            define_table("knows").kind_relation(knows().lightweight()),
+        )
+        .await;
+        run(
+            &db,
+            Raw::new(
+                "CREATE person:alice; CREATE person:bob; \
+                 RELATE person:alice->knows->person:bob;",
+            ),
+        )
+        .await;
+        let off = define_table("knows")
+            .overwrite()
+            .kind_relation(knows())
+            .to_debug_sql();
+        let message = failure(&db, &off).await;
+        assert!(message.contains("holds no edges"), "{off}: {message}");
+
+        run(&db, Raw::new("DELETE person:alice;")).await;
+        assert!(succeeds(&db, &off).await, "`{off}` is refused once empty");
+    }
+
+    #[tokio::test]
+    async fn an_inline_cap_above_the_maximum_is_rejected() {
+        let (db, _guard) = db().await;
+        let statement = define_table("person").inline_edges(u32::MAX);
+        let sql = statement.to_debug_sql();
+        let error = statement.run(&db).await.expect_err("the cap is too large");
+        assert!(
+            error.to_string().contains("cannot exceed"),
+            "{sql}: {error}"
+        );
+    }
+}

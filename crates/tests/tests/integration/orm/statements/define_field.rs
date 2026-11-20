@@ -699,3 +699,285 @@ mod definitions {
         assert_eq!(adult, Some(false));
     }
 }
+
+/// `REFERENCE … ON DELETE` and `INLINE`.
+mod references {
+    use super::*;
+    use umbriel::{
+        Lookup, Raw, Render,
+        statements::{OnDelete, table_relation},
+        types::Table as TableName,
+    };
+
+    fn author() -> umbriel::statements::DefineFieldStatement {
+        define_field(Field::new("author"))
+            .on_table("post")
+            .type_(Kind::Record(vec![TableName::new("user")]))
+    }
+
+    #[test]
+    fn reference_clauses_render() {
+        let cases = [
+            (author().reference(), "REFERENCE"),
+            (
+                author().reference_on_delete(OnDelete::Reject),
+                "REFERENCE ON DELETE REJECT",
+            ),
+            (
+                author().reference_on_delete(OnDelete::Ignore),
+                "REFERENCE ON DELETE IGNORE",
+            ),
+            (
+                author().reference_on_delete(OnDelete::Cascade),
+                "REFERENCE ON DELETE CASCADE",
+            ),
+            (
+                author().reference_on_delete(OnDelete::Unset),
+                "REFERENCE ON DELETE UNSET",
+            ),
+            (
+                author().reference_on_delete(OnDelete::Then(umbriel::ValueLike::new(Raw::new(
+                    "UPDATE $this SET orphaned = true",
+                )))),
+                "REFERENCE ON DELETE THEN UPDATE $this SET orphaned = true",
+            ),
+        ];
+        for (statement, clause) in cases {
+            assert_sql(
+                &statement,
+                &format!("DEFINE FIELD author ON TABLE post TYPE record<user> {clause};"),
+            );
+        }
+        assert_sql(
+            &define_field(Field::new("since")).on_table("knows").inline(),
+            "DEFINE FIELD since ON TABLE knows INLINE;",
+        );
+    }
+
+    /// `user:alice`, and `post:one` whose `author` field, under `policy`, references her.
+    async fn authored(policy: OnDelete) -> (Surreal<Any>, TestDb) {
+        let (db, guard) = db().await;
+        run(&db, author().reference_on_delete(policy)).await;
+        run(
+            &db,
+            Raw::new("CREATE user:alice; CREATE post:one SET author = user:alice;"),
+        )
+        .await;
+        (db, guard)
+    }
+
+    #[tokio::test]
+    async fn reject_blocks_deleting_a_referenced_record() {
+        let (db, _guard) = authored(OnDelete::Reject).await;
+        assert!(!succeeds(&db, "DELETE user:alice;").await);
+        let kept: bool = read(&db, "RETURN record::exists(user:alice);").await;
+        assert!(kept);
+    }
+
+    #[tokio::test]
+    async fn ignore_leaves_a_dangling_link() {
+        let (db, _guard) = authored(OnDelete::Ignore).await;
+        run(&db, Raw::new("DELETE user:alice;")).await;
+        let link: bool = read(&db, "RETURN post:one.author = user:alice;").await;
+        assert!(link, "the post still names alice");
+    }
+
+    #[tokio::test]
+    async fn cascade_deletes_the_referencing_record() {
+        let (db, _guard) = authored(OnDelete::Cascade).await;
+        run(&db, Raw::new("DELETE user:alice;")).await;
+        let kept: bool = read(&db, "RETURN record::exists(post:one);").await;
+        assert!(!kept, "the post is deleted with its author");
+    }
+
+    #[tokio::test]
+    async fn unset_clears_the_link() {
+        let (db, _guard) = db().await;
+        // `UNSET` leaves the field `NONE`, so its type must admit `NONE`.
+        let optional_user =
+            Kind::Either(vec![Kind::None, Kind::Record(vec![TableName::new("user")])]);
+        run(
+            &db,
+            define_field(Field::new("author"))
+                .on_table("post")
+                .type_(optional_user)
+                .reference_on_delete(OnDelete::Unset),
+        )
+        .await;
+        run(
+            &db,
+            Raw::new("CREATE user:alice; CREATE post:one SET author = user:alice;"),
+        )
+        .await;
+        run(&db, Raw::new("DELETE user:alice;")).await;
+        let cleared: bool = read(&db, "RETURN post:one.author IS NONE;").await;
+        assert!(cleared, "the post's author is removed");
+    }
+
+    #[tokio::test]
+    async fn unset_fails_on_a_link_that_cannot_be_none() {
+        let (db, _guard) = authored(OnDelete::Unset).await;
+        assert!(
+            !succeeds(&db, "DELETE user:alice;").await,
+            "a required link cannot be unset"
+        );
+    }
+
+    #[tokio::test]
+    async fn then_runs_the_custom_expression() {
+        let (db, _guard) = authored(OnDelete::Then(umbriel::ValueLike::new(Raw::new(
+            "UPDATE $this SET orphaned = true",
+        ))))
+        .await;
+        run(&db, Raw::new("DELETE user:alice;")).await;
+        let orphaned: bool = read(&db, "RETURN post:one.orphaned = true;").await;
+        assert!(orphaned, "the expression ran for the post");
+    }
+
+    #[tokio::test]
+    async fn references_work_for_option_array_and_set_of_records() {
+        let (db, _guard) = db().await;
+        let user = || Kind::Record(vec![TableName::new("user")]);
+        for (name, kind) in [
+            ("editor", Kind::Either(vec![Kind::None, user()])),
+            ("reviewers", Kind::Array(Box::new(user()), None)),
+            ("watchers", Kind::Set(Box::new(user()), None)),
+        ] {
+            run(
+                &db,
+                define_field(Field::new(name))
+                    .on_table("post")
+                    .type_(kind)
+                    .reference(),
+            )
+            .await;
+        }
+        run(
+            &db,
+            Raw::new(
+                "CREATE user:alice; \
+                 CREATE post:one SET editor = user:alice, reviewers = [user:alice], \
+                 watchers = <set> [user:alice];",
+            ),
+        )
+        .await;
+        let alice = Field::from_expr(umbriel::ValueLike::from(umbriel::types::RecordId::new(
+            "user", "alice",
+        )));
+        for name in ["editor", "reviewers", "watchers"] {
+            let path = alice
+                .clone()
+                .referenced_by(Lookup::referencing("post", name));
+            let found: bool = read(
+                &db,
+                &format!("RETURN {} = [post:one];", path.to_debug_sql()),
+            )
+            .await;
+            assert!(found, "`{name}` references alice");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_reference_lookup_finds_referencing_records() {
+        let (db, _guard) = authored(OnDelete::Ignore).await;
+        let alice = Field::from_expr(umbriel::ValueLike::from(umbriel::types::RecordId::new(
+            "user", "alice",
+        )));
+        for path in [
+            alice.clone().referenced_by(Lookup::tables(["post"])),
+            alice.referenced_by(Lookup::referencing("post", "author")),
+        ] {
+            let found: bool = read(
+                &db,
+                &format!("RETURN {} = [post:one];", path.to_debug_sql()),
+            )
+            .await;
+            assert!(found, "`{}` finds the post", path.to_debug_sql());
+        }
+    }
+
+    #[tokio::test]
+    async fn a_reference_on_a_non_record_field_is_rejected() {
+        let (db, _guard) = db().await;
+        let error = define_field(Field::new("title"))
+            .on_table("post")
+            .type_(Kind::String)
+            .reference()
+            .run(&db)
+            .await
+            .expect_err("a string field cannot be a reference");
+        assert!(error.to_string().contains("string"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_reference_on_a_nested_field_is_rejected() {
+        let (db, _guard) = db().await;
+        assert!(
+            define_field(Field::new("meta").with_field("author"))
+                .on_table("post")
+                .type_(Kind::Record(vec![TableName::new("user")]))
+                .reference()
+                .run(&db)
+                .await
+                .is_err()
+        );
+    }
+
+    /// `knows`, a relation table from and to `person`.
+    async fn relations() -> (Surreal<Any>, TestDb) {
+        let (db, guard) = db().await;
+        run(
+            &db,
+            define_table("knows").kind_relation(table_relation().in_(["person"]).out(["person"])),
+        )
+        .await;
+        (db, guard)
+    }
+
+    #[tokio::test]
+    async fn inline_on_a_relation_field_is_stored_with_the_edge() {
+        let (db, _guard) = relations().await;
+        run(
+            &db,
+            define_field(Field::new("since"))
+                .on_table("knows")
+                .type_(Kind::Int)
+                .inline(),
+        )
+        .await;
+        run(
+            &db,
+            Raw::new(
+                "CREATE person:alice; CREATE person:bob; \
+                 RELATE person:alice->knows->person:bob SET since = 2020;",
+            ),
+        )
+        .await;
+        let since: Vec<i64> = read(&db, "RETURN person:alice->knows.since;").await;
+        assert_eq!(since, [2020]);
+        let stored: String = read(&db, "RETURN (INFO FOR TABLE knows).fields.since;").await;
+        assert!(stored.contains("INLINE"), "{stored}");
+    }
+
+    #[tokio::test]
+    async fn inline_is_rejected_off_a_relation_table_on_id_in_out_on_nested_and_on_computed_fields()
+    {
+        let (db, _guard) = relations().await;
+        run(&db, define_table("person")).await;
+        let rejected = [
+            define_field(Field::new("name")).on_table("person").inline(),
+            define_field(Field::new("in")).on_table("knows").inline(),
+            define_field(Field::new("meta").with_field("since"))
+                .on_table("knows")
+                .inline(),
+            define_field(Field::new("age"))
+                .on_table("knows")
+                .computed(umbriel::ValueLike::from(1))
+                .inline(),
+        ];
+        for statement in rejected {
+            let sql = statement.to_debug_sql();
+            assert!(statement.run(&db).await.is_err(), "`{sql}` is accepted");
+        }
+    }
+}

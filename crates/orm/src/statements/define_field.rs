@@ -43,7 +43,27 @@ pub struct DefineFieldStatement {
     value: Option<ValueLike>,
     computed: Option<ValueLike>,
     assert: Option<Filter>,
+    inline: bool,
+    reference: Option<Option<OnDelete>>,
     permissions: PermissionsClause,
+}
+
+/// What deleting a record does to the records whose `REFERENCE` field points to it.
+#[derive(Debug, Clone)]
+pub enum OnDelete {
+    /// `REJECT`: the delete fails while a reference to the record remains.
+    Reject,
+    /// `IGNORE`: the delete goes ahead, leaving the reference pointing to no record.
+    Ignore,
+    /// `CASCADE`: the referencing records are deleted too.
+    Cascade,
+    /// `UNSET`: the reference is removed from each referencing record (from an array, the one
+    /// element). A single link needs a type that admits `NONE`, such as `option<record<…>>`;
+    /// otherwise the delete fails.
+    Unset,
+    /// `THEN @expression`: runs `expression` for each referencing record, with `$this` the
+    /// referencing record and `$reference` the deleted record's id.
+    Then(ValueLike),
 }
 
 /// A field's `DEFAULT`, applied only when the field is missing or on every write.
@@ -121,11 +141,51 @@ pub fn define_field(fieldable: impl Into<Field>) -> DefineFieldStatement {
         value: None,
         computed: None,
         assert: None,
+        inline: false,
+        reference: None,
         permissions: PermissionsClause::default(),
     }
 }
 
 impl DefineFieldStatement {
+    /// `REFERENCE`: the field's record links are tracked as references, so the linked records
+    /// can find the records pointing to them (`<~table`) and deleting a linked record follows
+    /// SurrealDB's default policy (`IGNORE`). The field must be top-level, of type `record`,
+    /// `option<record>`, or an array or set of records; SurrealDB rejects any other.
+    ///
+    /// ```rust
+    /// use umbriel::{*, statements::{OnDelete, define_field}, types::{Kind, Table}};
+    ///
+    /// let statement = define_field(Field::new("author"))
+    ///     .on_table("post")
+    ///     .type_(Kind::Record(vec![Table::new("user")]))
+    ///     .reference_on_delete(OnDelete::Cascade);
+    /// assert_eq!(
+    ///     statement.to_debug_sql(),
+    ///     "DEFINE FIELD author ON TABLE post TYPE record<user> REFERENCE ON DELETE CASCADE;"
+    /// );
+    /// ```
+    pub fn reference(mut self) -> Self {
+        self.reference = Some(None);
+        self
+    }
+
+    /// `REFERENCE ON DELETE @policy`: [`reference`](Self::reference) with the policy deleting a
+    /// linked record follows.
+    pub fn reference_on_delete(mut self, policy: OnDelete) -> Self {
+        self.reference = Some(Some(policy));
+        self
+    }
+
+    /// `INLINE`: the field's value is stored with the edge's adjacency, so traversals read it
+    /// without loading the edge. SurrealDB accepts it only on top-level fields of an existing
+    /// `TYPE RELATION` table, other than `id`, `in`, `out` and computed fields, and at most 255
+    /// per table.
+    pub fn inline(mut self) -> Self {
+        self.inline = true;
+        self
+    }
+
     /// Set the table where the field is defined. The name may come from a parameter.
     pub fn on_table(mut self, table: impl Into<Name<Table>>) -> Self {
         self.table = Some(table.into());
@@ -392,6 +452,10 @@ impl Statement for DefineFieldStatement {
             out.push_str(" READONLY");
         }
 
+        if self.inline {
+            out.push_str(" INLINE");
+        }
+
         if let Some(default) = &self.default {
             if matches!(default, FieldDefault::Always(_))
                 && self.field.top_level_name() == Some("id")
@@ -407,6 +471,30 @@ impl Statement for DefineFieldStatement {
 
         if let Some(assertion) = &self.assert {
             out.push_str(" ASSERT ").push(assertion);
+        }
+
+        if let Some(policy) = &self.reference {
+            out.push_str(" REFERENCE");
+            if let Some(policy) = policy {
+                out.push_str(" ON DELETE ");
+                match policy {
+                    OnDelete::Reject => {
+                        out.push_str("REJECT");
+                    }
+                    OnDelete::Ignore => {
+                        out.push_str("IGNORE");
+                    }
+                    OnDelete::Cascade => {
+                        out.push_str("CASCADE");
+                    }
+                    OnDelete::Unset => {
+                        out.push_str("UNSET");
+                    }
+                    OnDelete::Then(expression) => {
+                        out.push_str("THEN ").push(expression);
+                    }
+                }
+            }
         }
 
         self.options.render_comment(out);
