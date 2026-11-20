@@ -298,14 +298,30 @@ pub enum MigrationError {
         migration: MigrationFilename,
     },
 
-    /// A bucket's definition changed. Redefining a bucket connects a new store, which empties a
-    /// `memory` bucket, so the change is not written.
+    /// A bucket's backend changed. Redefining a bucket connects a new store, which empties a
+    /// `memory` bucket, and `ALTER BUCKET` leaves the open store in place until a restart, so the
+    /// change is not written. Comment, `READONLY` and permission changes are written as
+    /// `ALTER BUCKET`.
     #[error(
-        "Cannot update {key} in a migration: redefining a bucket connects a new store, which \
-        loses the files of a `memory` bucket. Change it deliberately in a hand-written migration"
+        "Cannot change the backend of {key} in a migration: redefining a bucket connects a new \
+        store, which loses the files of a `memory` bucket. Change it deliberately in a \
+        hand-written migration"
     )]
     UnsafeBucketUpdate {
         /// The bucket.
+        key: ResourceKey,
+    },
+
+    /// An index change would lose its `PREPARE REMOVE` mark: an index marked for removal can
+    /// only change its comment, and marking one for removal cannot be combined with another
+    /// change, since redefining it (`OVERWRITE`) clears the mark.
+    #[error(
+        "Cannot change {key} in a migration: it is or becomes marked for removal (`ALTER INDEX \
+        … PREPARE REMOVE`), and redefining it would clear the mark. Change only its comment, or \
+        make the change in a hand-written migration"
+    )]
+    UnsafeIndexUpdate {
+        /// The index.
         key: ResourceKey,
     },
 

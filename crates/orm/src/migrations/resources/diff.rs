@@ -4,24 +4,26 @@
 //! a create in one direction is a removal in the other. Within a direction every definition is
 //! written first, prerequisites before their dependents (see [`ResourceKind`]), then every removal,
 //! dependents before their prerequisites: replacing an analyzer defines the new one, moves the
-//! index to it, and only then removes the old one.
+//! index to it, and only then removes the old one. Between the two, the full-text indexes whose
+//! analyzer changed in place are rebuilt.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use surrealdb::types::{Object, ToSql, Value};
 
 use super::{bucket_backend::credential_in_backend, table_fields::field_changes};
 use crate::{
-    DbResources, Field, Render, Table,
+    DbResources, Field, Render, Table, TableIndex,
     migrations::{
         Definition, Direction, MigrationError, MigrationResult, Prompter, QueryType, ResourceKey,
         ResourceKind, Schema,
     },
     render::render_inline,
     statements::{
-        ModuleName, alter_sequence, remove_access, remove_analyzer, remove_api, remove_bucket,
-        remove_config_api, remove_config_graphql, remove_event, remove_field, remove_function,
-        remove_index, remove_module, remove_param, remove_sequence, remove_table, remove_user,
+        ModuleName, alter_bucket, alter_index, alter_sequence, rebuild_index, remove_access,
+        remove_analyzer, remove_api, remove_bucket, remove_config_api, remove_config_graphql,
+        remove_event, remove_field, remove_function, remove_index, remove_module, remove_param,
+        remove_sequence, remove_table, remove_user,
     },
 };
 
@@ -46,6 +48,8 @@ enum Step<'a> {
     /// A definition the database holds in another form.
     Update(&'a ResourceKey),
     Remove(&'a ResourceKey),
+    /// `REBUILD INDEX`: a full-text index whose analyzer changed in place.
+    Rebuild(&'a ResourceKey),
     Rename {
         table: &'a str,
         from: &'a str,
@@ -57,7 +61,7 @@ impl Step<'_> {
     /// Where the step sorts: by kind, then table, then name.
     fn order(&self) -> (ResourceKind, Option<&str>, &str) {
         match self {
-            Self::Create(key) | Self::Update(key) | Self::Remove(key) => {
+            Self::Create(key) | Self::Update(key) | Self::Remove(key) | Self::Rebuild(key) => {
                 (key.kind, key.table.as_deref(), key.name.as_str())
             }
             Self::Rename { table, to, .. } => (ResourceKind::Field, Some(*table), *to),
@@ -136,8 +140,31 @@ impl<'a> SchemaDiff<'a> {
     /// exists, and only a change of its timeout is written, as `ALTER SEQUENCE`; any other change
     /// fails with [`MigrationError::UnsafeSequenceUpdate`]. Buckets are the other, since
     /// redefining one connects a new store, which empties a `memory` bucket: a new bucket is
-    /// written with a plain `DEFINE`, and any change fails with
+    /// written with a plain `DEFINE`, a change of its comment, `READONLY` or permissions as
+    /// `ALTER BUCKET`, which keeps its files, and a change of its backend fails with
     /// [`MigrationError::UnsafeBucketUpdate`].
+    ///
+    /// An index whose comment alone changes is written as `ALTER INDEX`, which keeps its data,
+    /// rather than redefined, which rebuilds it. Its `PREPARE REMOVE` mark, which a redefinition
+    /// clears, decides the rest:
+    ///
+    /// | Change | Written as |
+    /// |---|---|
+    /// | marked for removal, nothing else but the comment | `ALTER INDEX … PREPARE REMOVE` |
+    /// | marked for removal with another change | [`MigrationError::UnsafeIndexUpdate`] |
+    /// | unmarked, with or without another change | `DEFINE INDEX OVERWRITE` |
+    /// | a marked index, another change | [`MigrationError::UnsafeIndexUpdate`] |
+    /// | created marked | `DEFINE INDEX`, then `ALTER INDEX … PREPARE REMOVE` |
+    ///
+    /// Unmarking with another change is forward-only: its reverse is rejected, so a two-way
+    /// migration with it fails. Every other allowed change is reversible.
+    ///
+    /// SurrealDB does not rebuild an index when its analyzer is redefined, so after every
+    /// definition a direction rebuilds (`REBUILD INDEX`) each full-text index that it keeps,
+    /// does not redefine and has not marked for removal, whose analyzer changed other than in its
+    /// comment, or whose analyzer's `FUNCTION` names a function (`fn::`) or module (`mod::`)
+    /// that changed other than in its comment. A function that function calls, and the
+    /// contents of a module's file, are not followed.
     ///
     /// A definition whose secrets the server redacted fails with
     /// [`MigrationError::RedactedDefinition`] rather than being written with the placeholder,
@@ -185,9 +212,33 @@ impl<'a> SchemaDiff<'a> {
             _ => true,
         });
 
+        // Index updates are planned first: whether one redefines its index decides whether an
+        // analyzer change still needs to rebuild it.
+        let mut index_updates = HashMap::new();
+        for step in &defines {
+            if let Step::Update(key) = step
+                && key.kind == ResourceKind::Index
+            {
+                index_updates.insert(*key, index_update(source, target, key)?);
+            }
+        }
+        let redefined = defines
+            .iter()
+            .filter_map(|step| match step {
+                Step::Create(key) if key.kind == ResourceKind::Index => Some(*key),
+                Step::Update(key) => index_updates
+                    .get(key)
+                    .is_some_and(|update| update.redefines)
+                    .then_some(*key),
+                _ => None,
+            })
+            .collect::<HashSet<_>>();
+        let mut rebuilds = self.rebuilds(source, target, &redefined)?;
+        rebuilds.sort_by(|a, b| a.order().cmp(&b.order()));
+
         let mut statements = Vec::new();
         let mut group = None;
-        for step in defines.iter().chain(&removes) {
+        for step in defines.iter().chain(&rebuilds).chain(&removes) {
             // A blank line between kinds and between tables.
             let (kind, table, _) = step.order();
             if group.is_some_and(|group| group != (kind, table)) {
@@ -196,16 +247,32 @@ impl<'a> SchemaDiff<'a> {
             group = Some((kind, table));
 
             match step {
-                Step::Create(key) => statements.push(QueryType::Statement(define(target, key)?)),
+                Step::Create(key) => {
+                    statements.push(QueryType::Statement(define(target, key)?));
+                    if key.kind == ResourceKind::Index && flagged(target, key)? {
+                        let statement = alter_index(TableIndex::new(key.name.clone()))
+                            .on_table(index_table(key))
+                            .prepare_remove();
+                        statements.push(QueryType::Statement(rendered(key, &statement)?));
+                    }
+                }
                 Step::Update(key) if key.kind == ResourceKind::Sequence => statements.push(
                     QueryType::Statement(alter_sequence_timeout(source, target, key)?),
                 ),
-                Step::Update(key) if key.kind == ResourceKind::Bucket => {
-                    return Err(MigrationError::UnsafeBucketUpdate {
-                        key: (*key).clone(),
-                    });
+                Step::Update(key) if key.kind == ResourceKind::Bucket => statements.push(
+                    QueryType::Statement(alter_bucket_metadata(source, target, key)?),
+                ),
+                Step::Update(key) if key.kind == ResourceKind::Index => {
+                    if let Some(update) = index_updates.remove(key) {
+                        statements.extend(update.statements.into_iter().map(QueryType::Statement));
+                    }
                 }
                 Step::Update(key) => statements.push(QueryType::Statement(define(target, key)?)),
+                Step::Rebuild(key) => {
+                    let statement =
+                        rebuild_index(TableIndex::new(key.name.clone())).on_table(index_table(key));
+                    statements.push(QueryType::Statement(rendered(key, &statement)?));
+                }
                 Step::Remove(key) => statements.push(QueryType::Statement(remove(key)?)),
                 Step::Rename { table, from, to } => {
                     let new = field_key(table, to);
@@ -224,6 +291,268 @@ impl<'a> SchemaDiff<'a> {
         }
         Ok(statements)
     }
+}
+
+impl<'a> SchemaDiff<'a> {
+    /// The `REBUILD INDEX` steps of a direction from `source` to `target`: each full-text index
+    /// of both schemas, not in `redefined` and not marked for removal in `target`, whose analyzer
+    /// changed other than in its comment, or names in its `FUNCTION` a function or module that
+    /// did.
+    fn rebuilds(
+        &self,
+        source: &'a Schema,
+        target: &'a Schema,
+        redefined: &HashSet<&ResourceKey>,
+    ) -> MigrationResult<Vec<Step<'a>>> {
+        let mut changed = HashMap::<ResourceKind, HashSet<&str>>::new();
+        for change in &self.changes {
+            if let Change::Update(key) = change
+                && matches!(
+                    key.kind,
+                    ResourceKind::Analyzer | ResourceKind::Function | ResourceKind::Module
+                )
+                && differs_outside_comment(source, target, key)?
+            {
+                changed
+                    .entry(key.kind)
+                    .or_default()
+                    .insert(key.name.as_str());
+            }
+        }
+        let is_changed = |kind: ResourceKind, name: &str| {
+            changed.get(&kind).is_some_and(|names| names.contains(name))
+        };
+
+        let mut analyzers = HashSet::new();
+        for (key, definition) in target.iter() {
+            if key.kind != ResourceKind::Analyzer || source.get(key).is_none() {
+                continue;
+            }
+            let function = match structure(definition, key)?.get("function") {
+                Some(Value::String(path)) => Some(path.as_str()),
+                _ => None,
+            };
+            let function_changed = function.is_some_and(|path| match path.strip_prefix("mod::") {
+                // `mod::module::function`: the module is the first segment.
+                Some(rest) => {
+                    let module = rest.split("::").next().unwrap_or_default();
+                    is_changed(ResourceKind::Module, module)
+                        || is_changed(ResourceKind::Module, &format!("mod::{module}"))
+                }
+                None => is_changed(
+                    ResourceKind::Function,
+                    path.strip_prefix("fn::").unwrap_or(path),
+                ),
+            });
+            if function_changed || is_changed(ResourceKind::Analyzer, &key.name) {
+                analyzers.insert(key.name.as_str());
+            }
+        }
+        if analyzers.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut rebuilds = Vec::new();
+        for (key, definition) in target.iter() {
+            if key.kind != ResourceKind::Index
+                || source.get(key).is_none()
+                || redefined.contains(key)
+                || flagged(target, key)?
+            {
+                continue;
+            }
+            if let Some(Value::String(index)) = structure(definition, key)?.get("index")
+                && fulltext_analyzer(key, index)?
+                    .is_some_and(|name| analyzers.contains(name.as_str()))
+            {
+                rebuilds.push(Step::Rebuild(key));
+            }
+        }
+        Ok(rebuilds)
+    }
+}
+
+/// The analyzer a rendered index kind of `key` names, `FULLTEXT ANALYZER <name> …`, decoded;
+/// `None` for any other kind. SurrealDB writes the name bare, or between backticks with the
+/// escapes of `common::fmt::escape.rs` (`\0`, `\r`, `\t`, `\n`, `\u{8}`, `\f`, `\\` and
+/// `` \` ``). Any other text fails with [`MigrationError::UnexpectedInfoShape`] rather than
+/// skipping a rebuild.
+fn fulltext_analyzer(key: &ResourceKey, index: &str) -> MigrationResult<Option<String>> {
+    let Some(rest) = index.strip_prefix("FULLTEXT ANALYZER ") else {
+        return Ok(None);
+    };
+    let unexpected = || {
+        MigrationError::UnexpectedInfoShape(format!(
+            "the analyzer name of {key} cannot be read from `{index}`"
+        ))
+    };
+    let Some(quoted) = rest.strip_prefix('`') else {
+        return Ok(Some(rest.split(' ').next().unwrap_or_default().to_owned()));
+    };
+    let mut name = String::new();
+    let mut chars = quoted.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '`' => return Ok(Some(name)),
+            '\\' => name.push(match chars.next().ok_or_else(unexpected)? {
+                '0' => '\0',
+                'r' => '\r',
+                't' => '\t',
+                'n' => '\n',
+                'f' => '\x0C',
+                '\\' => '\\',
+                '`' => '`',
+                'u' => {
+                    let hex = chars
+                        .by_ref()
+                        .skip_while(|&c| c == '{')
+                        .take_while(|&c| c != '}')
+                        .collect::<String>();
+                    u32::from_str_radix(&hex, 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                        .ok_or_else(unexpected)?
+                }
+                _ => return Err(unexpected()),
+            }),
+            c => name.push(c),
+        }
+    }
+    Err(unexpected())
+}
+
+/// Whether the definitions of `key` in `source` and `target` differ other than in their comment.
+fn differs_outside_comment(
+    source: &Schema,
+    target: &Schema,
+    key: &ResourceKey,
+) -> MigrationResult<bool> {
+    let without_comment = |schema: &Schema| -> MigrationResult<Object> {
+        let mut structure = structure(definition(schema, key)?, key)?.clone();
+        structure.remove("comment");
+        Ok(structure)
+    };
+    Ok(without_comment(source)? != without_comment(target)?)
+}
+
+/// Whether the index `key` is marked for removal (`PREPARE REMOVE`) in `schema`.
+fn flagged(schema: &Schema, key: &ResourceKey) -> MigrationResult<bool> {
+    Ok(structure(definition(schema, key)?, key)?.get("prepare_remove") == Some(&Value::Bool(true)))
+}
+
+/// The table of the index `key`.
+fn index_table(key: &ResourceKey) -> Table {
+    Table::new(key.table.as_deref().unwrap_or_default())
+}
+
+/// The statements an index update is written as, and whether they redefine the index.
+struct IndexUpdate {
+    statements: Vec<String>,
+    redefines: bool,
+}
+
+/// How the index `key` goes from its definition in `source` to the one in `target`: an
+/// `ALTER INDEX` when only its comment changes or it becomes marked for removal, a redefinition
+/// when its mark is cleared or something else changes on an unmarked index, and
+/// [`MigrationError::UnsafeIndexUpdate`] when a redefinition would clear a mark `target` keeps
+/// or sets.
+fn index_update(
+    source: &Schema,
+    target: &Schema,
+    key: &ResourceKey,
+) -> MigrationResult<IndexUpdate> {
+    let parts = |schema: &Schema| -> MigrationResult<(Object, Option<Value>, bool)> {
+        let mut structure = structure(definition(schema, key)?, key)?.clone();
+        let comment = structure.remove("comment");
+        let flagged = structure.remove("prepare_remove") == Some(Value::Bool(true));
+        Ok((structure, comment, flagged))
+    };
+    let (from, from_comment, from_flagged) = parts(source)?;
+    let (to, to_comment, to_flagged) = parts(target)?;
+    match (from_flagged, to_flagged, from != to) {
+        (false, false, true) | (true, false, _) => Ok(IndexUpdate {
+            statements: vec![define(target, key)?],
+            redefines: true,
+        }),
+        (_, true, true) => Err(MigrationError::UnsafeIndexUpdate { key: key.clone() }),
+        (_, _, false) => {
+            let mut statement =
+                alter_index(TableIndex::new(key.name.clone())).on_table(index_table(key));
+            if to_flagged && !from_flagged {
+                statement = statement.prepare_remove();
+            }
+            if from_comment != to_comment {
+                statement = match to_comment {
+                    Some(Value::String(comment)) => statement.comment(comment),
+                    None => statement.drop_comment(),
+                    Some(_) => {
+                        return Err(MigrationError::UnexpectedInfoShape(format!(
+                            "the comment of {key} is not a string"
+                        )));
+                    }
+                };
+            }
+            Ok(IndexUpdate {
+                statements: vec![rendered(key, &statement)?],
+                redefines: false,
+            })
+        }
+    }
+}
+
+/// The `ALTER BUCKET` that takes the bucket `key` from its definition in `source` to the one in
+/// `target`, which may differ only in their comment, `READONLY` and permissions: `ALTER BUCKET`
+/// keeps the bucket's files, but a backend change would leave the open store in place, and
+/// redefining the bucket empties a `memory` one, so it fails with
+/// [`MigrationError::UnsafeBucketUpdate`].
+fn alter_bucket_metadata(
+    source: &Schema,
+    target: &Schema,
+    key: &ResourceKey,
+) -> MigrationResult<String> {
+    let parts = |schema: &Schema| -> MigrationResult<(Object, [Option<Value>; 3])> {
+        let mut structure = structure(definition(schema, key)?, key)?.clone();
+        let metadata = [
+            structure.remove("comment"),
+            structure.remove("readonly"),
+            structure.remove("permissions"),
+        ];
+        Ok((structure, metadata))
+    };
+    let (from, [from_comment, from_readonly, from_permissions]) = parts(source)?;
+    let (to, [to_comment, to_readonly, to_permissions]) = parts(target)?;
+    if from != to {
+        return Err(MigrationError::UnsafeBucketUpdate { key: key.clone() });
+    }
+    let unexpected = |what: &str| {
+        MigrationError::UnexpectedInfoShape(format!("the {what} of {key} has an unexpected shape"))
+    };
+
+    let mut statement = alter_bucket(key.name.clone());
+    if from_comment != to_comment {
+        statement = match to_comment {
+            Some(Value::String(comment)) => statement.comment(comment),
+            None => statement.drop_comment(),
+            Some(_) => return Err(unexpected("comment")),
+        };
+    }
+    if from_readonly != to_readonly {
+        statement = match to_readonly {
+            Some(Value::Bool(true)) => statement.readonly(),
+            None | Some(Value::Bool(false)) => statement.drop_readonly(),
+            Some(_) => return Err(unexpected("readonly flag")),
+        };
+    }
+    if from_permissions != to_permissions {
+        statement = match to_permissions {
+            Some(Value::Bool(true)) => statement.permissions_full(),
+            Some(Value::Bool(false)) | None => statement.permissions_none(),
+            // The server's own rendering of the condition, so it is written as it is.
+            Some(Value::String(condition)) => statement.permissions_where(Field::raw(condition)),
+            Some(_) => return Err(unexpected("permissions")),
+        };
+    }
+    rendered(key, &statement)
 }
 
 /// The definition of `key` in `schema`.

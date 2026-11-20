@@ -748,22 +748,52 @@ mod definitions {
     mod buckets {
         use super::*;
         use pretty_assertions::assert_eq;
+        use umbriel::Operatable;
 
-        #[derive(Debug, Clone)]
-        struct Bucketed {
-            readonly: bool,
+        /// Who may use the bucket.
+        #[derive(Debug, Clone, Copy)]
+        enum Access {
+            /// No `PERMISSIONS` clause.
+            Default,
+            Nobody,
+            Everyone,
+            /// `PERMISSIONS WHERE $auth IS NOT NONE`.
+            SignedIn,
         }
+
+        /// The `avatars` bucket, a `memory` one, with the comment, `READONLY` flag and
+        /// permissions given.
+        #[derive(Debug, Clone, Copy)]
+        struct Bucketed {
+            comment: Option<&'static str>,
+            readonly: bool,
+            access: Access,
+        }
+
+        const AVATARS: Bucketed = Bucketed {
+            comment: Some("Acme Corp avatars"),
+            readonly: false,
+            access: Access::Default,
+        };
 
         impl DbResources for Bucketed {
             fn buckets(&self) -> Vec<Raw> {
-                let bucket = define_bucket("avatars")
-                    .backend("memory")
-                    .comment("Acme Corp avatars");
-                vec![raw(if self.readonly {
-                    bucket.readonly()
-                } else {
-                    bucket
-                })]
+                let mut bucket = define_bucket("avatars").backend("memory");
+                if let Some(comment) = self.comment {
+                    bucket = bucket.comment(comment);
+                }
+                if self.readonly {
+                    bucket = bucket.readonly();
+                }
+                bucket = match self.access {
+                    Access::Default => bucket,
+                    Access::Nobody => bucket.permissions_none(),
+                    Access::Everyone => bucket.permissions_full(),
+                    Access::SignedIn => {
+                        bucket.permissions_where(umbriel::Param::new("auth").is_not(umbriel::NONE))
+                    }
+                };
+                vec![raw(bucket)]
             }
 
             fn tables(&self) -> Vec<Raw> {
@@ -774,7 +804,7 @@ mod definitions {
         #[tokio::test]
         async fn a_bucket_is_created_first_and_removed_last() {
             let (db, _guard) = db().await;
-            let (up, down) = round_trip_on(&db, EmptyResources, Bucketed { readonly: false }).await;
+            let (up, down) = round_trip_on(&db, EmptyResources, AVATARS).await;
             assert_order(
                 &up,
                 &["DEFINE BUCKET avatars ", "DEFINE TABLE OVERWRITE user"],
@@ -783,25 +813,150 @@ mod definitions {
             assert_order(&down, &["REMOVE TABLE user;", "REMOVE BUCKET avatars;"]);
         }
 
-        /// Regression: redefining a `memory` bucket connects a new, empty store, so no update,
-        /// however small, is written.
-        #[tokio::test]
-        async fn a_changed_bucket_fails_without_a_file() {
+        /// Whether the bucket still holds the file written before the change.
+        async fn kept(db: &Surreal<Any>) -> bool {
+            read(db, "RETURN file::exists(f\"avatars:/alice.txt\");").await
+        }
+
+        /// Migrates a database to `from`, writes a file into the bucket, then generates the
+        /// migration to `to`, applies it and rolls it back. After each step the database's schema
+        /// is the expected one and the bucket keeps its file. Returns the second migration's up
+        /// and down files.
+        async fn keeps_files(from: Bucketed, to: Bucketed) -> (String, String) {
+            let (db, _guard) = db().await;
             let (_temp, dir) = migration_dir();
             let flag = MigrationFlag::TwoWay;
-            generate(&dir, flag, Bucketed { readonly: false }, disallow_empty())
+            generate(&dir, flag, from, MockPrompter::default())
                 .await
-                .expect("generates");
-            let result = generate(&dir, flag, Bucketed { readonly: true }, disallow_empty()).await;
+                .expect("the first migration generates");
+            apply_up(&dir, &db).await;
             assert!(
-                matches!(
-                    &result,
-                    Err(MigrationError::UnsafeBucketUpdate { key: unsafe_key })
-                        if *unsafe_key == key(ResourceKind::Bucket, None, "avatars")
-                ),
-                "{result:?}"
+                succeeds(&db, "file::put(f\"avatars:/alice.txt\", 'Alice');").await,
+                "the file is written"
             );
-            assert_eq!(migration_files(&dir).len(), 2, "no migration is written");
+
+            generate(&dir, flag, to, MockPrompter::default())
+                .await
+                .expect("the change generates");
+            let files = newest_migration(&dir);
+            apply_up(&dir, &db).await;
+            assert_eq!(inspect(&db).await, schema_of(&to, flag).await);
+            assert!(kept(&db).await, "the change keeps the file");
+
+            roll_back(&dir, &db).await;
+            assert_eq!(inspect(&db).await, schema_of(&from, flag).await);
+            assert!(kept(&db).await, "the rollback keeps the file");
+            for sql in [&files.0, &files.1] {
+                assert!(!sql.contains("DEFINE BUCKET"), "{sql}");
+            }
+            files
+        }
+
+        #[tokio::test]
+        async fn bucket_comment_set_and_clear_alter_and_keep_files() {
+            let (up, down) = keeps_files(
+                Bucketed {
+                    comment: None,
+                    ..AVATARS
+                },
+                AVATARS,
+            )
+            .await;
+            assert!(
+                up.contains("ALTER BUCKET avatars COMMENT 'Acme Corp avatars';"),
+                "{up}"
+            );
+            assert!(
+                down.contains("ALTER BUCKET avatars DROP COMMENT;"),
+                "{down}"
+            );
+        }
+
+        #[tokio::test]
+        async fn bucket_readonly_set_and_remove_alter_and_keep_files() {
+            let (up, down) = keeps_files(
+                AVATARS,
+                Bucketed {
+                    readonly: true,
+                    ..AVATARS
+                },
+            )
+            .await;
+            assert!(up.contains("ALTER BUCKET avatars READONLY;"), "{up}");
+            assert!(
+                down.contains("ALTER BUCKET avatars DROP READONLY;"),
+                "{down}"
+            );
+        }
+
+        #[tokio::test]
+        async fn bucket_permissions_none_where_full_alter_and_keep_files() {
+            let nobody = Bucketed {
+                access: Access::Nobody,
+                ..AVATARS
+            };
+            let signed_in = Bucketed {
+                access: Access::SignedIn,
+                ..AVATARS
+            };
+            let everyone = Bucketed {
+                access: Access::Everyone,
+                ..AVATARS
+            };
+            let (up, down) = keeps_files(nobody, signed_in).await;
+            assert!(
+                up.contains("ALTER BUCKET avatars PERMISSIONS WHERE $auth != NONE;"),
+                "{up}"
+            );
+            assert!(
+                down.contains("ALTER BUCKET avatars PERMISSIONS NONE;"),
+                "{down}"
+            );
+            let (up, down) = keeps_files(signed_in, everyone).await;
+            assert!(
+                up.contains("ALTER BUCKET avatars PERMISSIONS FULL;"),
+                "{up}"
+            );
+            assert!(
+                down.contains("ALTER BUCKET avatars PERMISSIONS WHERE $auth != NONE;"),
+                "{down}"
+            );
+        }
+
+        /// The schema of the `avatars` bucket on `backend`, as `INFO FOR DB` lists it. Synthetic,
+        /// since only `memory` is available to the comparison databases.
+        fn avatars_on(backend: &str) -> Schema {
+            fixture(
+                "buckets",
+                "avatars",
+                &format!(
+                    "{{ name: 'avatars', backend: {backend:?}, permissions: false, \
+                     readonly: false }}"
+                ),
+                &format!("DEFINE BUCKET avatars BACKEND '{backend}' PERMISSIONS NONE"),
+            )
+        }
+
+        /// Regression: redefining a `memory` bucket connects a new, empty store, and `ALTER
+        /// BUCKET` leaves the open store in place, so a backend change is never written. No
+        /// statement runs, so the bucket's files are untouched.
+        #[test]
+        fn a_bucket_backend_change_is_rejected_and_keeps_files() {
+            let memory = avatars_on("memory");
+            let file = avatars_on("file:/data/avatars");
+            for (left, right) in [(&memory, &file), (&file, &memory)] {
+                let (_temp, dir) = migration_dir();
+                let result = generate_between(&dir, left, right);
+                assert!(
+                    matches!(
+                        &result,
+                        Err(MigrationError::UnsafeBucketUpdate { key: unsafe_key })
+                            if *unsafe_key == key(ResourceKind::Bucket, None, "avatars")
+                    ),
+                    "{result:?}"
+                );
+                assert!(migration_files(&dir).is_empty(), "no migration is written");
+            }
         }
 
         /// Regression: a reset applies its regenerated first migration to the existing
@@ -810,15 +965,10 @@ mod definitions {
         async fn a_regenerated_first_migration_keeps_an_existing_buckets_files() {
             let (_temp, dir) = migration_dir();
             let (db, _guard) = db().await;
-            let bucketed = Bucketed { readonly: false };
-            generate(
-                &dir,
-                MigrationFlag::TwoWay,
-                bucketed.clone(),
-                disallow_empty(),
-            )
-            .await
-            .expect("generates");
+            let bucketed = AVATARS;
+            generate(&dir, MigrationFlag::TwoWay, bucketed, disallow_empty())
+                .await
+                .expect("generates");
             apply_up(&dir, &db).await;
             let history = applied(&db).await;
             assert!(
@@ -1034,6 +1184,523 @@ mod definitions {
             for other in ["BUCKET", "MODULE", "CONFIG"] {
                 assert!(!up.contains(other), "{other} in {up}");
             }
+        }
+    }
+
+    /// Index changes written as `ALTER INDEX`, the `PREPARE REMOVE` mark, and the indexes an
+    /// analyzer change rebuilds. Each migration is generated between two databases defined by
+    /// hand, since a codebase cannot mark an index for removal.
+    mod indexes {
+        use super::*;
+        use pretty_assertions::assert_eq;
+        use umbriel::{
+            Render,
+            statements::{IndexStatus, define_module_file, info_for},
+        };
+
+        const BASE: &str = "DEFINE TABLE note; DEFINE ANALYZER words TOKENIZERS blank;";
+        const INDEX: &str =
+            "DEFINE INDEX note_body ON note FIELDS body FULLTEXT ANALYZER words BM25";
+        const MARK: &str = "ALTER INDEX note_body ON note PREPARE REMOVE;";
+        const LOWERCASE: &str =
+            "DEFINE ANALYZER OVERWRITE words TOKENIZERS blank FILTERS lowercase;";
+
+        fn note(index_clauses: &str) -> String {
+            format!("{BASE} {INDEX}{index_clauses};")
+        }
+
+        fn marked(index_clauses: &str) -> String {
+            format!("{} {MARK}", note(index_clauses))
+        }
+
+        /// A migration generated from a database holding `from` to one holding `to`, with both
+        /// databases kept so it can be applied.
+        struct Migrated {
+            up: String,
+            down: String,
+            from: Surreal<Any>,
+            from_schema: Schema,
+            to_schema: Schema,
+            _guards: (umbriel_tests::TestDb, umbriel_tests::TestDb),
+        }
+
+        impl Migrated {
+            /// Applies the up file to the `from` database, which then holds `to`'s schema, and
+            /// the down file, which restores `from`'s.
+            async fn applies(&self) {
+                assert!(succeeds(&self.from, &self.up).await, "{}", self.up);
+                assert_eq!(inspect(&self.from).await, self.to_schema);
+                assert!(succeeds(&self.from, &self.down).await, "{}", self.down);
+                assert_eq!(inspect(&self.from).await, self.from_schema);
+            }
+
+            fn neither_contains(&self, text: &str) {
+                assert!(!self.up.contains(text), "{text} in {}", self.up);
+                assert!(!self.down.contains(text), "{text} in {}", self.down);
+            }
+        }
+
+        async fn holding(sql: &str) -> (Surreal<Any>, umbriel_tests::TestDb) {
+            let (db, guard) = db().await;
+            assert!(succeeds(&db, sql).await, "`{sql}` is defined");
+            (db, guard)
+        }
+
+        /// Generates the `flag` migration from a database holding `from` to one holding `to`,
+        /// after a hand-written migration so it is not the first. The error leaves no new file.
+        async fn migration(from: &str, to: &str, flag: MigrationFlag) -> MigrationResult<Migrated> {
+            let (from_db, from_guard) = holding(from).await;
+            let (to_db, to_guard) = holding(to).await;
+            let (from_schema, to_schema) = (inspect(&from_db).await, inspect(&to_db).await);
+            let (_temp, dir) = migration_dir();
+            write_migration(&dir, flag, "RETURN 1;", "RETURN 1;");
+            let before = migration_files(&dir);
+            let generated = generate_from_schemas(
+                &from_schema,
+                &to_schema,
+                &"generated".into(),
+                &config(&dir).set_flag(flag),
+                &EmptyResources,
+                &disallow_empty(),
+            );
+            if let Err(error) = generated {
+                assert_eq!(migration_files(&dir), before, "no migration is written");
+                return Err(error);
+            }
+            let (up, down) = match flag {
+                MigrationFlag::TwoWay => newest_migration(&dir),
+                MigrationFlag::OneWay => {
+                    let newest = migration_files(&dir)
+                        .into_iter()
+                        .next_back()
+                        .expect("a migration");
+                    let up = fs::read_to_string(dir.join(newest)).expect("readable");
+                    (up, String::new())
+                }
+            };
+            Ok(Migrated {
+                up,
+                down,
+                from: from_db,
+                from_schema,
+                to_schema,
+                _guards: (from_guard, to_guard),
+            })
+        }
+
+        async fn two_way(from: &str, to: &str) -> Migrated {
+            migration(from, to, MigrationFlag::TwoWay)
+                .await
+                .expect("the migration generates")
+        }
+
+        #[track_caller]
+        fn assert_unsafe(result: MigrationResult<Migrated>) {
+            match result {
+                Err(MigrationError::UnsafeIndexUpdate { key: refused }) => {
+                    assert_eq!(refused, key(ResourceKind::Index, Some("note"), "note_body"));
+                }
+                Err(error) => panic!("unexpected error: {error:?}"),
+                Ok(migrated) => panic!("the change generates:\n{}", migrated.up),
+            }
+        }
+
+        async fn status(db: &Surreal<Any>) -> IndexStatus {
+            info_for()
+                .index("note_body", "note")
+                .execute(db)
+                .await
+                .expect("decoded")
+        }
+
+        #[tokio::test]
+        async fn setting_an_index_comment_alters_it() {
+            let migrated = two_way(&note(""), &note(" COMMENT 'Bodies'")).await;
+            assert!(
+                migrated
+                    .up
+                    .contains("ALTER INDEX note_body ON TABLE note COMMENT 'Bodies';"),
+                "{}",
+                migrated.up
+            );
+            assert!(
+                migrated
+                    .down
+                    .contains("ALTER INDEX note_body ON TABLE note DROP COMMENT;"),
+                "{}",
+                migrated.down
+            );
+            migrated.neither_contains("DEFINE INDEX");
+            migrated.neither_contains("REBUILD");
+            let before = status(&migrated.from).await;
+            migrated.applies().await;
+            assert_eq!(status(&migrated.from).await, before, "no new build");
+        }
+
+        #[tokio::test]
+        async fn clearing_an_index_comment_alters_it() {
+            let migrated = two_way(&note(" COMMENT 'Bodies'"), &note("")).await;
+            assert!(
+                migrated
+                    .up
+                    .contains("ALTER INDEX note_body ON TABLE note DROP COMMENT;"),
+                "{}",
+                migrated.up
+            );
+            migrated.neither_contains("DEFINE INDEX");
+            migrated.neither_contains("REBUILD");
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn a_comment_and_an_analyzer_change_alter_and_rebuild_the_index() {
+            let migrated = two_way(
+                &note(""),
+                &format!("{} {LOWERCASE}", note(" COMMENT 'Bodies'")),
+            )
+            .await;
+            assert_order(
+                &migrated.up,
+                &[
+                    "DEFINE ANALYZER OVERWRITE words",
+                    "ALTER INDEX note_body ON TABLE note COMMENT 'Bodies';",
+                    "REBUILD INDEX note_body ON TABLE note;",
+                ],
+            );
+            assert!(
+                migrated
+                    .down
+                    .contains("REBUILD INDEX note_body ON TABLE note;"),
+                "{}",
+                migrated.down
+            );
+            migrated.neither_contains("DEFINE INDEX");
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn marking_an_index_for_removal_alters_it() {
+            let migrated = two_way(&note(""), &marked("")).await;
+            assert!(
+                migrated
+                    .up
+                    .contains("ALTER INDEX note_body ON TABLE note PREPARE REMOVE;"),
+                "{}",
+                migrated.up
+            );
+            assert!(!migrated.up.contains("DEFINE INDEX"), "{}", migrated.up);
+            assert!(
+                migrated.down.contains("DEFINE INDEX OVERWRITE note_body"),
+                "{}",
+                migrated.down
+            );
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn marking_with_another_change_is_rejected() {
+            assert_unsafe(
+                migration(&note(""), &marked(" HIGHLIGHTS"), MigrationFlag::TwoWay).await,
+            );
+        }
+
+        #[tokio::test]
+        async fn unmarking_an_index_redefines_it() {
+            let migrated = two_way(&marked(""), &note("")).await;
+            assert!(
+                migrated.up.contains("DEFINE INDEX OVERWRITE note_body"),
+                "{}",
+                migrated.up
+            );
+            assert!(
+                migrated
+                    .down
+                    .contains("ALTER INDEX note_body ON TABLE note PREPARE REMOVE;"),
+                "{}",
+                migrated.down
+            );
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn unmarking_with_another_change_is_one_way_only() {
+            let one_way = migration(&marked(""), &note(" HIGHLIGHTS"), MigrationFlag::OneWay)
+                .await
+                .expect("a one-way migration generates");
+            assert!(
+                one_way.up.contains("DEFINE INDEX OVERWRITE note_body"),
+                "{}",
+                one_way.up
+            );
+            assert_unsafe(
+                migration(&marked(""), &note(" HIGHLIGHTS"), MigrationFlag::TwoWay).await,
+            );
+        }
+
+        #[tokio::test]
+        async fn a_comment_change_on_a_marked_index_alters_it() {
+            let migrated = two_way(&marked(""), &marked(" COMMENT 'Leaving'")).await;
+            assert!(
+                migrated
+                    .up
+                    .contains("ALTER INDEX note_body ON TABLE note COMMENT 'Leaving';"),
+                "{}",
+                migrated.up
+            );
+            migrated.neither_contains("DEFINE INDEX");
+            migrated.neither_contains("PREPARE REMOVE");
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn another_change_to_a_marked_index_is_rejected() {
+            assert_unsafe(
+                migration(&marked(""), &marked(" HIGHLIGHTS"), MigrationFlag::TwoWay).await,
+            );
+        }
+
+        #[tokio::test]
+        async fn recreating_a_marked_index_defines_then_marks_it() {
+            let migrated = two_way(BASE, &marked("")).await;
+            assert_order(
+                &migrated.up,
+                &[
+                    "DEFINE INDEX OVERWRITE note_body",
+                    "ALTER INDEX note_body ON TABLE note PREPARE REMOVE;",
+                ],
+            );
+            assert!(
+                migrated
+                    .down
+                    .contains("REMOVE INDEX note_body ON TABLE note;"),
+                "{}",
+                migrated.down
+            );
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn removing_a_marked_index_removes_it() {
+            let migrated = two_way(&marked(""), BASE).await;
+            assert!(
+                migrated
+                    .up
+                    .contains("REMOVE INDEX note_body ON TABLE note;"),
+                "{}",
+                migrated.up
+            );
+            assert_order(
+                &migrated.down,
+                &[
+                    "DEFINE INDEX OVERWRITE note_body",
+                    "ALTER INDEX note_body ON TABLE note PREPARE REMOVE;",
+                ],
+            );
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn an_analyzer_change_rebuilds_its_surviving_indexes() {
+            let migrated = two_way(
+                &format!("{} CREATE note:one SET body = 'Hello';", note("")),
+                &format!("{} {LOWERCASE}", note("")),
+            )
+            .await;
+            assert_order(
+                &migrated.up,
+                &[
+                    "DEFINE ANALYZER OVERWRITE words",
+                    "REBUILD INDEX note_body ON TABLE note;",
+                ],
+            );
+            assert!(
+                migrated
+                    .down
+                    .contains("REBUILD INDEX note_body ON TABLE note;"),
+                "{}",
+                migrated.down
+            );
+            migrated.neither_contains("DEFINE INDEX");
+            // Only the rebuilt index holds the lowercased `hello` the query looks for.
+            assert!(
+                succeeds(&migrated.from, &migrated.up).await,
+                "{}",
+                migrated.up
+            );
+            let found: i64 = read(
+                &migrated.from,
+                "RETURN array::len(SELECT id FROM note WHERE body @@ 'hello');",
+            )
+            .await;
+            assert_eq!(found, 1);
+        }
+
+        #[tokio::test]
+        async fn an_analyzer_comment_change_rebuilds_nothing() {
+            let migrated = two_way(
+                &note(""),
+                &format!(
+                    "{} DEFINE ANALYZER OVERWRITE words TOKENIZERS blank COMMENT 'Words';",
+                    note("")
+                ),
+            )
+            .await;
+            assert!(migrated.up.contains("ANALYZER"), "{}", migrated.up);
+            migrated.neither_contains("REBUILD");
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn an_index_removed_with_its_analyzer_change_is_not_rebuilt() {
+            let migrated = two_way(&note(""), &format!("{BASE} {LOWERCASE}")).await;
+            assert!(
+                migrated
+                    .up
+                    .contains("REMOVE INDEX note_body ON TABLE note;"),
+                "{}",
+                migrated.up
+            );
+            migrated.neither_contains("REBUILD");
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn an_index_redefined_with_its_analyzer_change_is_not_rebuilt_again() {
+            let migrated =
+                two_way(&note(""), &format!("{} {LOWERCASE}", note(" HIGHLIGHTS"))).await;
+            assert!(
+                migrated.up.contains("DEFINE INDEX OVERWRITE note_body"),
+                "{}",
+                migrated.up
+            );
+            migrated.neither_contains("REBUILD");
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn a_marked_index_is_not_rebuilt() {
+            let migrated = two_way(&marked(""), &format!("{} {LOWERCASE}", marked(""))).await;
+            assert!(
+                migrated.up.contains("DEFINE ANALYZER OVERWRITE words"),
+                "{}",
+                migrated.up
+            );
+            migrated.neither_contains("REBUILD");
+            migrated.applies().await;
+        }
+
+        /// Names SurrealDB writes bare, quoted, and quoted with each kind of escape (a tab, a
+        /// newline, a backtick, a backslash and a `\u{…}` character).
+        #[tokio::test]
+        async fn a_keyword_named_analyzer_finds_its_index() {
+            for name in [
+                "`select`",
+                "`note-words`",
+                "`note\\twords`",
+                "`note\\nwords`",
+                "`note\\`words`",
+                "`note\\\\words`",
+                "`note\\u{8}words`",
+            ] {
+                let defined = |filters: &str| {
+                    format!(
+                        "DEFINE TABLE note; DEFINE ANALYZER OVERWRITE {name} TOKENIZERS blank{filters}; \
+                         DEFINE INDEX note_body ON note FIELDS body FULLTEXT ANALYZER {name} BM25;"
+                    )
+                };
+                let migrated = two_way(&defined(""), &defined(" FILTERS lowercase")).await;
+                assert!(
+                    migrated
+                        .up
+                        .contains("REBUILD INDEX note_body ON TABLE note;"),
+                    "{name}: {}",
+                    migrated.up
+                );
+                migrated.applies().await;
+            }
+        }
+
+        /// `note`'s index over an analyzer whose `FUNCTION` is `fn::clean`, defined as `body`.
+        fn cleaned(body: &str, comment: &str) -> String {
+            format!(
+                "DEFINE FUNCTION fn::clean($text: string) {{ {body} }}{comment}; \
+                 DEFINE TABLE note; \
+                 DEFINE ANALYZER words FUNCTION fn::clean TOKENIZERS blank; \
+                 {INDEX};"
+            )
+        }
+
+        #[tokio::test]
+        async fn a_changed_fn_function_rebuilds_indexes_of_analyzers_using_it() {
+            let migrated = two_way(
+                &cleaned("RETURN $text;", ""),
+                &cleaned("RETURN string::lowercase($text);", ""),
+            )
+            .await;
+            assert_order(
+                &migrated.up,
+                &[
+                    "DEFINE FUNCTION OVERWRITE fn::clean",
+                    "REBUILD INDEX note_body ON TABLE note;",
+                ],
+            );
+            assert!(
+                migrated
+                    .down
+                    .contains("REBUILD INDEX note_body ON TABLE note;"),
+                "{}",
+                migrated.down
+            );
+            migrated.applies().await;
+        }
+
+        #[tokio::test]
+        async fn a_function_comment_change_rebuilds_nothing() {
+            let migrated = two_way(
+                &cleaned("RETURN $text;", ""),
+                &cleaned("RETURN $text;", " COMMENT 'Cleans'"),
+            )
+            .await;
+            assert!(migrated.up.contains("fn::clean"), "{}", migrated.up);
+            migrated.neither_contains("REBUILD");
+            migrated.applies().await;
+        }
+
+        /// `note`'s index over an analyzer whose `FUNCTION` is in the module `mod::text`, loaded
+        /// from `file` in a `memory` bucket. The table holds no records, so neither the analyzer
+        /// nor a rebuild runs the module, and the file need not exist.
+        fn module_cleaned(file: &str) -> String {
+            format!(
+                "DEFINE BUCKET modules BACKEND 'memory'; {} \
+                 DEFINE TABLE note; \
+                 DEFINE ANALYZER words FUNCTION mod::text::clean TOKENIZERS blank; \
+                 {INDEX};",
+                define_module_file("text", "modules", file).to_debug_sql()
+            )
+        }
+
+        #[tokio::test]
+        async fn a_changed_module_rebuilds_indexes_of_analyzers_using_it() {
+            let migrated = two_way(
+                &module_cleaned("text.wasm"),
+                &module_cleaned("text_v2.wasm"),
+            )
+            .await;
+            assert_order(
+                &migrated.up,
+                &[
+                    "DEFINE MODULE OVERWRITE mod::text",
+                    "REBUILD INDEX note_body ON TABLE note;",
+                ],
+            );
+            assert!(
+                migrated
+                    .down
+                    .contains("REBUILD INDEX note_body ON TABLE note;"),
+                "{}",
+                migrated.down
+            );
+            migrated.applies().await;
         }
     }
 }
