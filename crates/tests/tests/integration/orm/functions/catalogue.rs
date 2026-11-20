@@ -27,9 +27,13 @@ fn every_argument_form_renders() {
             array::fill!(Field::new("goals"), 0, 1, 2),
             "array::fill(goals, 0, 1, 2)"
         ),
-        // `; b: U`: only optional arguments.
+        // `; b: U`: one optional argument and nothing else.
         (count!(), "count()"),
         (count!(vec![1, 0]), "count([1, 0])"),
+        // `; b: U, c: V`: two optional arguments and nothing else.
+        (rand_fn::string!(), "rand::string()"),
+        (rand_fn::string!(8), "rand::string(8)"),
+        (rand_fn::string!(4, 8), "rand::string(4, 8)"),
         // `; [b: U, c: V]`: both arguments or neither.
         (rand_fn::float!(), "rand::float()"),
         (rand_fn::float!(1, 2), "rand::float(1, 2)"),
