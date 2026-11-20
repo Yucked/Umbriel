@@ -940,6 +940,7 @@ mod definitions {
                 "s3:/acme?use_emulator=true",
                 "gs://acme?service_account=/keys/example.json",
                 "az://acme/files?anonymous",
+                "file:/data/avatars?lowercase_paths=true",
             ] {
                 assert_eq!(credential_in_backend(accepted), None, "{accepted}");
             }

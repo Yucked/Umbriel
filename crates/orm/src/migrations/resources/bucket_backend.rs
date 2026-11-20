@@ -7,13 +7,15 @@
 //! so a parameter it does not know, however it is spelt or encoded, is refused.
 
 /// Query parameters a backend may carry: an S3 region, a key prefix, the path of a service
-/// account file (not its contents), anonymous access and the storage emulator switch.
-const ALLOWED: [&str; 5] = [
+/// account file (not its contents), anonymous access, the storage emulator switch and a file
+/// backend's key folding (`buc/store/file.rs`).
+const ALLOWED: [&str; 6] = [
     "region",
     "prefix",
     "service_account",
     "anonymous",
     "use_emulator",
+    "lowercase_paths",
 ];
 
 /// Query parameters that carry a secret, named in the refusal.
