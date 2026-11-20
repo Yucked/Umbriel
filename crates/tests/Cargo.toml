@@ -24,7 +24,7 @@ umbriel = { workspace = true, default-features = false, features = [
 ] }
 # The harness bounds every network wait (`time`), removes each test database on a runtime of its
 # own (`rt`), and defines the test namespace once (`sync`).
-tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "time"] }
 # Test database names (`umbriel_test_<uuid>`).
 uuid = { workspace = true, features = ["v4"] }
 surrealdb = { workspace = true }

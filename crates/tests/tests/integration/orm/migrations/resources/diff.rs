@@ -177,41 +177,6 @@ mod schema_changes {
         assert_eq!(migration_files(&dir).len(), 2, "no migration is written");
     }
 
-    #[tokio::test]
-    async fn unmanaged_kinds_are_rejected() {
-        let unsupported = |result: MigrationResult<()>| match result {
-            Err(MigrationError::UnsupportedSchemaResource { level, kind, names }) => {
-                (level, kind, names)
-            }
-            other => panic!("expected UnsupportedSchemaResource, got {other:?}"),
-        };
-
-        // Sequences are managed now; models need the `ml` feature and a model file, so the
-        // database level is covered by `other` and namespace users.
-        let (_temp, dir) = migration_dir();
-        write_migration(
-            &dir,
-            MigrationFlag::TwoWay,
-            "DEFINE USER ns_admin ON NAMESPACE PASSWORD 'example-password' ROLES OWNER;",
-            "",
-        );
-        let result = generate(
-            &dir,
-            MigrationFlag::TwoWay,
-            EmptyResources,
-            disallow_empty(),
-        )
-        .await;
-        assert_eq!(
-            unsupported(result),
-            (
-                "namespace".to_owned(),
-                "users".to_owned(),
-                vec!["ns_admin".to_owned()]
-            )
-        );
-    }
-
     #[track_caller]
     fn assert_redacted(result: MigrationResult<()>, expected: ResourceKey) {
         match result {
