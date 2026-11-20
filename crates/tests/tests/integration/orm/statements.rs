@@ -27,6 +27,7 @@ mod ifelse;
 mod info;
 mod insert;
 mod let_;
+mod rebuild;
 mod relate;
 mod remove;
 mod return_;

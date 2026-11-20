@@ -297,3 +297,91 @@ mod results {
         assert_eq!(kept, 1);
     }
 }
+
+/// `IndexStatus` for indexes built in the background (`CONCURRENTLY`).
+mod index_builds {
+    use super::*;
+    use std::time::Duration;
+    use umbriel::{
+        Raw,
+        statements::{IndexStatus, hnsw},
+    };
+
+    /// The index's status once its build has stopped running. The whole polling, every request
+    /// included, is bounded by [`WAIT`].
+    async fn settled(db: &Surreal<Any>, index: &str, table: &str) -> IndexStatus {
+        let polling = async {
+            loop {
+                let status = info_for()
+                    .index(index, table)
+                    .execute(db)
+                    .await
+                    .expect("decoded");
+                if matches!(
+                    status.status,
+                    IndexBuildStatus::Ready | IndexBuildStatus::Error | IndexBuildStatus::Aborted
+                ) {
+                    return status;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        };
+        tokio::time::timeout(WAIT, polling)
+            .await
+            .unwrap_or_else(|_| panic!("`{index}` is still building after {WAIT:?}"))
+    }
+
+    #[tokio::test]
+    async fn a_concurrent_build_reports_its_progress_until_ready() {
+        let (db, _guard) = db().await;
+        run(
+            &db,
+            Raw::new("FOR $n IN 1..=500 { CREATE user SET email = <string> $n + '@example.com' };"),
+        )
+        .await;
+        run(
+            &db,
+            define_index("user_email")
+                .on_table(Table::from("user"))
+                .fields(Field::new("email"))
+                .concurrently(),
+        )
+        .await;
+        let status = settled(&db, "user_email", "user").await;
+        assert_eq!(status.status, IndexBuildStatus::Ready, "{status:?}");
+        assert_eq!(status.error, None);
+        assert!(status.initial.is_some(), "{status:?}");
+        let indexed: i64 = read(
+            &db,
+            "RETURN array::len(SELECT id FROM user WITH INDEX user_email WHERE email != NONE);",
+        )
+        .await;
+        assert_eq!(indexed, 500);
+    }
+
+    /// The failure trigger: records whose embeddings do not have the index's dimension, which a
+    /// background build meets only after the statement has returned.
+    #[tokio::test]
+    async fn a_failed_build_reports_error_and_its_message() {
+        let (db, _guard) = db().await;
+        run(&db, Raw::new("CREATE doc:wrong SET embedding = [1, 2, 3];")).await;
+        run(
+            &db,
+            define_index("doc_embedding")
+                .on_table(Table::from("doc"))
+                .fields(Field::new("embedding"))
+                .hnsw(hnsw(2))
+                .concurrently(),
+        )
+        .await;
+        let status = settled(&db, "doc_embedding", "doc").await;
+        assert_eq!(status.status, IndexBuildStatus::Error, "{status:?}");
+        assert!(
+            status
+                .error
+                .as_deref()
+                .is_some_and(|error| !error.is_empty()),
+            "{status:?}"
+        );
+    }
+}

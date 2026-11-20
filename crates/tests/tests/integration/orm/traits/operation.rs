@@ -3,8 +3,10 @@
 
 use std::collections::BTreeMap;
 
+use surrealdb::{Surreal, engine::any::Any};
 use umbriel::{
-    Field, NONE, NULL, Operatable, Render, ValueLike, negate, not, truthy, types::Value,
+    Field, Match, NONE, NULL, Operatable, Render, ValueLike, negate, not, statements::Distance,
+    truthy, types::Value,
 };
 use umbriel_tests::{support::query::*, *};
 
@@ -222,17 +224,144 @@ mod operators {
             "(min < age AND age < max)"
         );
         assert_parses(&age.between(18, 30).to_debug_sql());
-        let content = Field::new("content");
-        assert_eq!(
-            content.matches("hello world").to_debug_sql(),
-            "content @@ 'hello world'"
-        );
-        let with_ref = content.matches_with_ref(1, "hello world");
-        assert_eq!(with_ref.to_debug_sql(), "content @1@ 'hello world'");
+        let with_ref = Field::new("content").matches_with(Match::reference(1), "hello world");
         assert_eq!(
             with_ref.to_query().expect("valid").sql(),
             "content @1@ $_p0"
         );
+    }
+
+    #[test]
+    fn matches_forms_render_each_reference_and_boolean_combination() {
+        let content = Field::new("content");
+        let cases = [
+            (content.matches("a b"), "content @@ 'a b'"),
+            (
+                content.matches_with(Match::default(), "a b"),
+                "content @@ 'a b'",
+            ),
+            (
+                content.matches_with(Match::reference(1), "a b"),
+                "content @1@ 'a b'",
+            ),
+            (content.matches_with(Match::OR, "a b"), "content @OR@ 'a b'"),
+            (
+                content.matches_with(Match::reference(1).or(), "a b"),
+                "content @1,OR@ 'a b'",
+            ),
+        ];
+        for (operation, expected) in cases {
+            assert_eq!(operation.to_debug_sql(), expected);
+            assert_parses(&format!("SELECT * FROM post WHERE {expected};"));
+        }
+    }
+
+    #[test]
+    fn knn_forms_render() {
+        let embedding = Field::new("embedding");
+        let cases = [
+            (embedding.knn_ef(2, 40, [1, 2]), "embedding <|2,40|> [1, 2]"),
+            (
+                embedding.knn_metric(2, Distance::Euclidean, [1, 2]),
+                "embedding <|2,EUCLIDEAN|> [1, 2]",
+            ),
+            (
+                embedding.knn_metric(2, Distance::Minkowski(3.0), [1, 2]),
+                "embedding <|2,MINKOWSKI 3|> [1, 2]",
+            ),
+        ];
+        for (operation, expected) in cases {
+            assert_eq!(operation.to_debug_sql(), expected);
+            assert_parses(&format!("SELECT * FROM doc WHERE {expected};"));
+        }
+        assert!(
+            embedding
+                .knn_metric(2, Distance::Minkowski(f64::NAN), [1, 2])
+                .to_query()
+                .is_err()
+        );
+    }
+
+    /// Two notes, one holding both terms and one holding only `world`, under a full-text index.
+    async fn notes(db: &Surreal<Any>) {
+        let setup = "
+            DEFINE ANALYZER words TOKENIZERS blank FILTERS lowercase;
+            DEFINE INDEX note_text ON note FIELDS text FULLTEXT ANALYZER words BM25 HIGHLIGHTS;
+            CREATE note:both SET text = 'hello world';
+            CREATE note:one SET text = 'world';
+        ";
+        assert!(succeeds(db, setup).await, "the notes are defined");
+    }
+
+    /// The ids of the notes matching `condition`, in order.
+    async fn matching(db: &Surreal<Any>, condition: &umbriel::Operation) -> Vec<String> {
+        read(
+            db,
+            &format!(
+                "RETURN (SELECT VALUE record::id(id) FROM note WHERE {} ORDER BY id);",
+                condition.to_debug_sql()
+            ),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn or_matches_any_term_and_and_matches_all() {
+        let (db, _guard) = db().await;
+        notes(&db).await;
+        let text = Field::new("text");
+        assert_eq!(matching(&db, &text.matches("hello world")).await, ["both"]);
+        assert_eq!(
+            matching(&db, &text.matches_with(Match::OR, "hello world")).await,
+            ["both", "one"]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_referenced_or_match_scores_and_highlights() {
+        let (db, _guard) = db().await;
+        notes(&db).await;
+        let condition = Field::new("text")
+            .matches_with(Match::reference(1).or(), "hello world")
+            .to_debug_sql();
+        let selected = |call: String| {
+            format!("RETURN (SELECT VALUE {call} FROM note WHERE {condition} ORDER BY id);")
+        };
+        let highlights: Vec<String> = read(
+            &db,
+            &selected(umbriel::functions::search::highlight!("<b>", "</b>", 1).to_debug_sql()),
+        )
+        .await;
+        assert_eq!(highlights, ["<b>hello</b> <b>world</b>", "<b>world</b>"]);
+        // BM25 scores a term found in every note at or below zero, so only their presence is
+        // checked.
+        let scores: Vec<f64> = read(
+            &db,
+            &selected(umbriel::functions::search::score!(1).to_debug_sql()),
+        )
+        .await;
+        assert_eq!(scores.len(), 2, "{scores:?}");
+    }
+
+    #[tokio::test]
+    async fn knn_brute_force_ranks_by_the_metric() {
+        let (db, _guard) = db().await;
+        let setup = "
+            CREATE doc:near SET embedding = [1, 1];
+            CREATE doc:middle SET embedding = [3, 3];
+            CREATE doc:far SET embedding = [9, 9];
+        ";
+        assert!(succeeds(&db, setup).await, "the documents are created");
+        let condition = Field::new("embedding").knn_metric(2, Distance::Euclidean, [0, 0]);
+        let found: Vec<String> = read(
+            &db,
+            &format!(
+                "RETURN (SELECT VALUE record::id(id) FROM doc WHERE {} ORDER BY id);",
+                condition.to_debug_sql()
+            ),
+        )
+        .await;
+        assert_eq!(found, ["middle", "near"]);
     }
 
     #[tokio::test]

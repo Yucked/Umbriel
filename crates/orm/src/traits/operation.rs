@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     Aliasable, ArrayLike, Conditional, GeometryLike, NumberLike, Ordinal, Render, Renderer, Setter,
-    StrandLike, ValueLike,
+    StrandLike, ValueLike, statements::Distance,
 };
 
 /// A SurrealQL binary operator.
@@ -143,6 +143,57 @@ impl Render for Operator {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Operation(Arc<OperationNode>);
 
+/// The options of a full-text match, [`Operatable::matches_with`]: the reference that
+/// `search::score`, `search::highlight` and `search::offsets` read the match by, and whether a
+/// record matches when it holds any of the terms (`OR`) rather than all of them (the default).
+///
+/// ```rust
+/// use umbriel::{*, Match};
+/// let content = Field::new("content");
+/// assert_eq!(content.matches_with(Match::OR, "a b").to_debug_sql(), "content @OR@ 'a b'");
+/// assert_eq!(
+///     content.matches_with(Match::reference(1).or(), "a b").to_debug_sql(),
+///     "content @1,OR@ 'a b'"
+/// );
+/// ```
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[must_use]
+pub struct Match {
+    reference: Option<u8>,
+    or: bool,
+}
+
+impl Match {
+    /// `@OR@`: a record matches when it holds any of the terms.
+    pub const OR: Self = Self {
+        reference: None,
+        or: true,
+    };
+
+    /// `@n@`: the match is read by `search::*` functions as `n`. SurrealDB keeps the
+    /// reference as a literal.
+    pub const fn reference(reference: u8) -> Self {
+        Self {
+            reference: Some(reference),
+            or: false,
+        }
+    }
+
+    /// `OR`: a record matches when it holds any of the terms.
+    pub const fn or(self) -> Self {
+        Self { or: true, ..self }
+    }
+}
+
+/// The parameters of a nearest-neighbour search.
+#[derive(Debug, Clone, PartialEq)]
+enum Neighbors {
+    /// `<|k,ef|>`: through the field's HNSW or DiskANN index.
+    Approximate { k: u32, ef: u32 },
+    /// `<|k,METRIC|>`: by `distance`, through an index of that distance or over every record.
+    Exact { k: u32, distance: Distance },
+}
+
 #[derive(Debug, PartialEq)]
 enum OperationNode {
     /// `lhs <operator> rhs`
@@ -164,12 +215,19 @@ enum OperationNode {
         upper: Ordinal,
         inclusive: bool,
     },
-    /// `operand @reference@ terms`; the reference is part of the operator, so it is written as a
-    /// literal.
-    MatchesWithRef {
+    /// `operand @@ terms`, `@n@`, `@OR@` or `@n,OR@`; the options are part of the operator, so
+    /// they are written as literals.
+    Matches {
         operand: ValueLike,
-        reference: u8,
+        options: Match,
         terms: StrandLike,
+    },
+    /// `operand <|k,ef|> vector` or `<|k,METRIC|>`; the parameters are part of the
+    /// operator, so they are written as literals.
+    NearestNeighbors {
+        operand: ValueLike,
+        neighbors: Neighbors,
+        vector: ArrayLike,
     },
     /// `(lhs ?? rhs)` or `(lhs ?: rhs)`: parenthesized as a whole, since these bind more loosely
     /// than `OR`, and with operation operands parenthesized too.
@@ -240,16 +298,38 @@ impl Render for Operation {
                     .push(upper)
                     .push_str(")");
             }
-            OperationNode::MatchesWithRef {
+            OperationNode::Matches {
                 operand,
-                reference,
+                options,
                 terms,
             } => {
-                out.push(operand)
-                    .push_str(" @")
-                    .push_display(reference)
-                    .push_str("@ ")
-                    .push(terms);
+                out.push(operand).push_str(" @");
+                if let Some(reference) = options.reference {
+                    out.push_display(&reference);
+                    if options.or {
+                        out.push_str(",");
+                    }
+                }
+                if options.or {
+                    out.push_str("OR");
+                }
+                out.push_str("@ ").push(terms);
+            }
+            OperationNode::NearestNeighbors {
+                operand,
+                neighbors,
+                vector,
+            } => {
+                out.push(operand).push_str(" <|");
+                match neighbors {
+                    Neighbors::Approximate { k, ef } => {
+                        out.push_display(k).push_str(",").push_display(ef);
+                    }
+                    Neighbors::Exact { k, distance } => {
+                        out.push_display(k).push_str(",").push(distance);
+                    }
+                }
+                out.push_str("|> ").push(vector);
             }
             OperationNode::Nullish { lhs, operator, rhs } => {
                 out.push_str("(");
@@ -273,6 +353,15 @@ fn between(operand: ValueLike, lower: Ordinal, upper: Ordinal, inclusive: bool) 
         operand,
         upper,
         inclusive,
+    })
+}
+
+/// `operand <|…|> vector`.
+fn nearest(operand: ValueLike, neighbors: Neighbors, vector: ArrayLike) -> Operation {
+    Operation::new(OperationNode::NearestNeighbors {
+        operand,
+        neighbors,
+        vector,
     })
 }
 
@@ -1290,38 +1379,65 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     where
         T: Into<StrandLike>,
     {
-        self.operate(Operator::Matches, terms.into())
+        self.matches_with(Match::default(), terms)
     }
 
-    /// `@[ref]@` Same as `matches` but using the matches operator with a reference checks whether the terms are found,
-    /// highlights the searched terms, and computes the full-text score.
-    ///
-    /// # Arguments
-    ///
-    /// * `reference` - The match reference number, used by `search::highlight` and `search::score`.
-    ///   It is part of the operator, so it is written as a literal.
-    /// * `terms` - The terms to search for in the full-text indexed field.
-    ///   can also be a `Field` or `Param`.
-    ///
-    /// # Example
+    /// A full-text match with options: `@n@` gives the match a reference that `search::score`,
+    /// `search::highlight` and `search::offsets` read it by, and `OR` matches records holding any
+    /// of the terms. See [`Match`].
     ///
     /// ```rust
     /// # use umbriel::*;
-    ///
     /// # let content = Field::new("content");
-    ///
-    /// let query = content.matches_with_ref(1, "hello world");
+    /// let query = content.matches_with(Match::reference(1), "hello world");
     /// assert_eq!(query.to_debug_sql(), "content @1@ 'hello world'");
     /// ```
-    fn matches_with_ref<T>(&self, reference: u8, terms: T) -> Operation
+    fn matches_with<T>(&self, options: Match, terms: T) -> Operation
     where
         T: Into<StrandLike>,
     {
-        Operation::new(OperationNode::MatchesWithRef {
+        Operation::new(OperationNode::Matches {
             operand: self.clone().into(),
-            reference,
+            options,
             terms: terms.into(),
         })
+    }
+
+    /// `<|k,ef|>`: whether the record is among the `k` nearest neighbours of `vector`, found
+    /// through the field's vector index: HNSW exploring `ef` candidates, or DiskANN with a search
+    /// list of `ef`. Without such an index the query finds nothing to search. Read the distance
+    /// with `vector::distance::knn`. (SurrealDB 3.3.4 refuses the index-only `<|k|>` form.)
+    ///
+    /// ```rust
+    /// # use umbriel::*;
+    /// # let embedding = Field::new("embedding");
+    /// assert_eq!(embedding.knn_ef(3, 40, [1, 2]).to_debug_sql(), "embedding <|3,40|> [1, 2]");
+    /// ```
+    fn knn_ef(&self, k: u32, ef: u32, vector: impl Into<ArrayLike>) -> Operation {
+        nearest(
+            self.clone().into(),
+            Neighbors::Approximate { k, ef },
+            vector.into(),
+        )
+    }
+
+    /// `<|k,METRIC|>`: like [`knn_ef`](Self::knn_ef), by `distance`: through the field's vector
+    /// index when its distance is the same, otherwise by computing it for every record.
+    ///
+    /// ```rust
+    /// # use umbriel::{*, statements::Distance};
+    /// # let embedding = Field::new("embedding");
+    /// assert_eq!(
+    ///     embedding.knn_metric(3, Distance::Cosine, [1, 2]).to_debug_sql(),
+    ///     "embedding <|3,COSINE|> [1, 2]"
+    /// );
+    /// ```
+    fn knn_metric(&self, k: u32, distance: Distance, vector: impl Into<ArrayLike>) -> Operation {
+        nearest(
+            self.clone().into(),
+            Neighbors::Exact { k, distance },
+            vector.into(),
+        )
     }
 
     /// Check whether the value of the field is between the given lower and upper bounds.
