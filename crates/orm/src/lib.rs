@@ -2,9 +2,7 @@
 #![warn(missing_docs)]
 #![recursion_limit = "256"]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-
-//! This library includes augmented surrealdb types, custom types, statements, functions, operators, castings, and other utilities to
-//! to make working with surrealdb a joy.
+#![doc = include_str!("docs/guide.md")]
 
 mod errors;
 mod execution;
@@ -17,8 +15,7 @@ pub mod kinds;
 mod operators_macros;
 mod query;
 mod render;
-/// This module contains the different types of statements that can be used to query the
-/// database.
+#[doc = include_str!("docs/statements.md")]
 pub mod statements;
 mod traits;
 /// For compile time validations
