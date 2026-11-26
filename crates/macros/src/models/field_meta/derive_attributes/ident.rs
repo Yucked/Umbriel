@@ -14,12 +14,12 @@ impl MyFieldReceiver {
 
     pub fn field_ident_normalized(
         &self,
-        struct_casing: &StructLevelCasing,
+        struct_casing: &CaseString,
     ) -> ExtractorResult<FieldIdentNormalized> {
         Ok(self.ident_meta(struct_casing)?.0)
     }
 
-    pub fn db_field_name(&self, struct_casing: &StructLevelCasing) -> ExtractorResult<DbFieldName> {
+    pub fn db_field_name(&self, struct_casing: &CaseString) -> ExtractorResult<DbFieldName> {
         Ok(self.ident_meta(struct_casing)?.1)
     }
 
@@ -43,7 +43,7 @@ impl MyFieldReceiver {
 
     fn ident_meta(
         &self,
-        struct_casing: &StructLevelCasing,
+        struct_casing: &CaseString,
     ) -> ExtractorResult<(FieldIdentNormalized, DbFieldName)> {
         let field_ident_original = self.ident()?;
         let span = field_ident_original.span();

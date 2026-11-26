@@ -29,7 +29,7 @@ impl FieldAttribute {
     /// The field's stored name as an identifier, raw when it is a keyword.
     pub fn field_ident_normalized_deserialized_rawable(
         &self,
-        struct_casing: &StructLevelCasing,
+        struct_casing: &CaseString,
     ) -> ExtractorResult<FieldIdentNormalizedDeserialized> {
         let field_ident_original = self.ident()?;
         let span = field_ident_original.span();

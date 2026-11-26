@@ -1,5 +1,5 @@
 use super::ident::{FieldAttribute, FieldIdentNormalizedDeserialized};
-use crate::models::{ExtractorResult, StructGenerics, StructLevelCasing, struct_casing};
+use crate::models::{ExtractorResult, StructGenerics, CaseString, struct_casing};
 
 use darling::{FromDeriveInput, ast::Data, util};
 use proc_macro2::TokenStream;
@@ -25,7 +25,7 @@ pub(crate) struct PickableMetadata<'a> {
 }
 
 impl TableDeriveAttributesPickable {
-    pub fn casing(&self) -> ExtractorResult<StructLevelCasing> {
+    pub fn casing(&self) -> ExtractorResult<CaseString> {
         struct_casing(&self.attrs)
     }
 
