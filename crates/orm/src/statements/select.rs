@@ -1318,20 +1318,19 @@ impl<T: Links, C: Cardinality> SelectStatement<T, C> {
     /// # #[model(node, table = "wallet")]
     /// # pub struct Wallet {
     /// #     pub id: RecordId<Self>,
-    /// #     #[orm(link_one = "Bank")]
-    /// #     pub bank: LinkOne<Bank>,
+    /// #     pub balance: i64,
     /// # }
     /// # #[model(node, table = "bank")]
     /// # pub struct Bank {
     /// #     pub id: RecordId<Self>,
     /// # }
-    /// // A wallet and its bank, and the employer: paths ending at two different models.
+    /// // The wallet, a `Wallet`, and the employer, a `Bank`: paths ending at two different models.
     /// let members = Member::select()
-    ///     .fetch_link(Member::links().wallet.then(Wallet::links().bank))
+    ///     .fetch_link(Member::links().wallet)
     ///     .fetch_link(Member::links().employer);
     /// assert_eq!(
     ///     members.to_debug_sql(),
-    ///     "SELECT * FROM member FETCH wallet.bank, worksFor;"
+    ///     "SELECT * FROM member FETCH wallet, worksFor;"
     /// );
     /// ```
     pub fn fetch_link<V>(mut self, path: LinkPath<T, V>) -> Self {
