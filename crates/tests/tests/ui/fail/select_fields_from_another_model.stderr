@@ -1,0 +1,25 @@
+error[E0277]: the trait bound `__6Wallet7balanceField: umbriel::__private::ModelField<Member, _>` is not satisfied
+  --> tests/ui/fail/select_fields_from_another_model.rs:17:59
+   |
+17 |     let _ = Member::select_fields((Member::schema().name, Wallet::schema().balance));
+   |             ---------------------                         ^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+   |             |
+   |             required by a bound introduced by this call
+   |
+help: the trait `ModelField<Member, _>` is not implemented for `__6Wallet7balanceField`
+      but trait `ModelField<Wallet, i64>` is implemented for it
+  --> tests/ui/fail/select_fields_from_another_model.rs:9:1
+   |
+ 9 | #[model(node, table = "wallet")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for that trait implementation, expected `Wallet`, found `Member`
+   = note: required for `(__6Member4nameField, __6Wallet7balanceField)` to implement `FieldTuple<Member, (std::string::String, _)>`
+note: required by a bound in `select_fields`
+  --> $WORKSPACE/crates/orm/src/traits/model.rs
+   |
+   |     fn select_fields<F, V>(fields: F) -> SelectStatement<V>
+   |        ------------- required by a bound in this associated function
+   |     where
+   |         F: FieldTuple<Self, V>,
+   |            ^^^^^^^^^^^^^^^^^^^ required by this bound in `SurrealRead::select_fields`
+   = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` (in Nightly builds, run with -Z macro-backtrace for more info)
