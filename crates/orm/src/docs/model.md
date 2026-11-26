@@ -123,6 +123,68 @@ values are rejected, as are objects that store no field and object types that de
 model's generic parameters. A flattened field takes no `#[orm(…)]` settings, and `object!` does not
 accept a model with one; use `content`, a patch or individual setters instead.
 
+# Record operations
+
+Bring [`SurrealRead`] (reads), [`SurrealCrud`] (writes) and, to create nodes, [`SurrealCrudNode`]
+into scope. Each operation borrows an [`Executor`] and returns [`Result`].
+
+| Operation | Call | Runs | Result |
+| --- | --- | --- | --- |
+| Build a typed id | `User::id(key)` | — | `RecordId<User>` |
+| Create a node | `user.create(&db)` | `CREATE … CONTENT` | `User` |
+| Read | `User::get(&db, &id)` | `SELECT` the id | `Option<User>` |
+| Read a range | `User::get_range(&db, a..b)` | `SELECT` the range | `Vec<User>` |
+| Read several ids | `User::get_many(&db, &ids)` | `SELECT` the ids | `Vec<User>`, missing ids left out |
+| Insert several | `User::insert_many(&db, users)` | `INSERT` | `Vec<User>` |
+| Create or replace | `user.save(&db)` | `UPSERT … CONTENT` | `User` |
+| Partial update | `User::patch(&db, &id, patch)` | `UPDATE … SET`, or `SELECT` when every field is `Keep` | `Option<User>` |
+| Merge | `User::merge(&db, &id, merge)` | `UPDATE … MERGE`, or `SELECT` when every field is `Keep` | `Option<User>` |
+| Delete a record | `user.delete(&db)` | `DELETE` the id | `Option<User>` |
+| Delete by id | `User::delete_by_id(&db, &id)` | `DELETE` the id | `Option<User>` |
+
+`create` and `save` consume the model. Both require a record back, and return
+[`Error::RecordNotFound`] otherwise. `create` and `insert_many` fail with
+[`Error::RecordExists`] when an id already exists.
+
+`select`, `select_value`, `select_fields`, `find_where`, `count_where`, `count_all` and
+`delete_where` return statement builders (see [`statements`](crate::statements)). Graphs are
+written with the [`relate`](crate::statements::relate) statement.
+
+# Partial updates: NONE and NULL
+
+`<Model>Patch` holds one [`Patch`] per stored field:
+
+| Value | Update |
+| --- | --- |
+| `Patch::Keep` (the default) | Leave the field unchanged |
+| `Patch::None` | Set it to `NONE`, removing it |
+| `Patch::Null` | Set it to `NULL` |
+| `Patch::Set(value)` | Bind and replace the value. A nested object is replaced, not merged |
+
+`<Model>Merge` holds one [`Merge`] per stored field, for a recursive `MERGE`:
+
+| Value | Merged |
+| --- | --- |
+| `Merge::Keep` (the default) | Left out |
+| `Merge::None` | `NONE`, removing the field |
+| `Merge::Null` | `NULL` |
+| `Merge::Set(value)` | A scalar or array replaces the field; an object combines with the stored one |
+| `Merge::Fields(…)` | Only the nested object's non-`Keep` fields (embedded objects only) |
+
+A flattened object's field is a [`FlatMerge`] (`Keep`, `Set` or `Fields`) in `<Model>Merge`, and
+a [`FlatPatch`] in `<Model>Patch`. `User::merge` reads with `SELECT` when every field is `Keep`.
+`update(…).merge(…)` always writes `MERGE {}` as built, so the table's events fire.
+
+A field typed `Option<Nullable<T>>` stores all three states:
+
+| Rust value | Stored |
+| --- | --- |
+| `None` | `NONE` |
+| `Some(Nullable::Null)` | `NULL` |
+| `Some(Nullable::Value(value))` | The value |
+
+None of these bypasses the database's field types, defaults, assertions or permissions.
+
 # Generated items
 
 Everything is generated next to the model, outside any module, so a model can be declared in a
