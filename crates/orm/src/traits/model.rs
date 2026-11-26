@@ -2,8 +2,8 @@ use surrealdb::types::{self, SurrealValue, Table, ToSql};
 
 use crate::{
     __private::ModelField,
-    Alias, All, Conditional, Error, Executor, Field, IntoNodeClause, ModelMerge, ModelPatch, Raw,
-    RecordId, RecordKey, RecordRange, Render, Result, StoredFields, TableOf,
+    Alias, All, Conditional, Error, Executor, Field, FieldTuple, IntoNodeClause, ModelMerge,
+    ModelPatch, Raw, RecordId, RecordKey, RecordRange, Render, Result, StoredFields, TableOf,
     execution::execute,
     query::table_of::select_range,
     statements::{DeleteStatement, SelectCount, SelectStatement, select, update::update},
@@ -195,6 +195,33 @@ pub trait SurrealRead: Model + Send {
         V: SurrealValue,
     {
         TableOf::<Self>::default().select_value(field)
+    }
+
+    /// `SELECT VALUE [a, b, …]` over the default table: per record, the listed fields as a tuple
+    /// of their own types, in order. `fields` is a tuple of 1 to 10 of this model's generated
+    /// schema fields, so the result's shape follows from the fields and needs no `decode`;
+    /// [`TableOf::select_fields`] reads another member.
+    ///
+    /// ```rust
+    /// # use umbriel::{
+    /// #     RecordId, Render, SchemaGetter, SurrealRead, model, statements::SelectStatement,
+    /// # };
+    /// # #[model(node, table = "member")]
+    /// # pub struct Member {
+    /// #     pub id: RecordId<Self>,
+    /// #     pub name: String,
+    /// #     pub age: u8,
+    /// # }
+    /// let fields: SelectStatement<(String, u8)> =
+    ///     Member::select_fields((Member::schema().name, Member::schema().age));
+    /// assert_eq!(fields.to_debug_sql(), "SELECT VALUE [name, age] FROM member;");
+    /// ```
+    fn select_fields<F, V>(fields: F) -> SelectStatement<V>
+    where
+        F: FieldTuple<Self, V>,
+        V: SurrealValue,
+    {
+        TableOf::<Self>::default().select_fields(fields)
     }
 
     /// Finds records of the default table by filtering; [`TableOf::find_where`] searches

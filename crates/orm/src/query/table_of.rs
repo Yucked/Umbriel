@@ -7,10 +7,11 @@ use surrealdb::types::{RecordIdKeyRange, SurrealValue, Table};
 
 use crate::{
     __private::ModelField,
-    All, Conditional, Error, Executor, Field, Filter, Model, RecordId, RecordKey, RecordRange,
-    Result, Writable, count,
+    All, Conditional, Error, Executor, Field, FieldTuple, Filter, Model, RecordId, RecordKey,
+    RecordRange, Result, Writable, count,
     statements::{
-        DeleteStatement, SelectCount, SelectStatement, delete::delete, select, select_value,
+        DeleteStatement, SelectCount, SelectStatement, delete::delete, select,
+        select::select_value_of, select_value,
     },
 };
 
@@ -220,6 +221,19 @@ impl<T: Model> TableOf<T> {
         V: SurrealValue,
     {
         select_value((*field).clone())
+            .from(self.table.clone())
+            .decode()
+    }
+
+    /// `SELECT VALUE [a, b, …] FROM table`: per record, the listed fields as a tuple of their own
+    /// types, in order. `fields` is a tuple of 1 to 10 of `T`'s generated schema fields, so the
+    /// result's shape follows from the fields and needs no `decode`.
+    pub fn select_fields<F, V>(&self, fields: F) -> SelectStatement<V>
+    where
+        F: FieldTuple<T, V>,
+        V: SurrealValue,
+    {
+        select_value_of(fields.into_array())
             .from(self.table.clone())
             .decode()
     }

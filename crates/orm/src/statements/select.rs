@@ -883,7 +883,8 @@ impl<O, C: Cardinality> SelectStatement<O, C> {
 
     /// Names the type each result decodes into. It types the decoding only: a result that does
     /// not match `P` fails with [`Error::Conversion`](crate::Error::Conversion) when it is
-    /// executed.
+    /// executed. [`SurrealRead::select_fields`](crate::SurrealRead::select_fields) types a
+    /// projection of a model's fields by the fields themselves instead.
     pub fn decode<P: SurrealValue>(self) -> SelectStatement<P, C> {
         self.retype()
     }
