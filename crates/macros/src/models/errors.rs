@@ -1,21 +1,3 @@
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum ExtractorError {
-    #[error("{0}")]
-    Syn(#[from] syn::Error),
-
-    #[error("{0}")]
-    Darling(#[from] darling::Error),
-}
-
-impl ExtractorError {
-    pub fn write_errors(self) -> proc_macro2::TokenStream {
-        match self {
-            ExtractorError::Syn(err) => err.to_compile_error(),
-            ExtractorError::Darling(err) => err.write_errors(),
-        }
-    }
-}
-
-pub type ExtractorResult<T> = std::result::Result<T, ExtractorError>;
+/// Parsing errors of the model derives. `darling::Error` converts from `syn::Error` with its span,
+/// accumulates several errors and writes them as compile errors.
+pub type ExtractorResult<T> = darling::Result<T>;
