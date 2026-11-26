@@ -167,11 +167,11 @@ impl ModelReceiver {
     }
 
     /// The struct's `#[surreal(rename_all = "…")]`.
-    pub fn casing(&self) -> ExtractorResult<StructLevelCasing> {
+    pub fn casing(&self) -> ExtractorResult<CaseString> {
         struct_casing(&self.attrs)
     }
 
-    pub fn get_table_definition_token(&self) -> ExtractorResult<TableDefinitions> {
+    pub fn get_table_definition_token(&self) -> ExtractorResult<TokenStream> {
         let ModelReceiver {
             ref drop,
             ref schemafull,
@@ -184,7 +184,7 @@ impl ModelReceiver {
             ..
         } = *self;
 
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
 
         if (define.is_some())
             && (drop.is_some()
@@ -273,6 +273,6 @@ impl ModelReceiver {
         };
 
         // Definitions write their values inline; `inline` keeps the builder's errors.
-        Ok(quote!(#crate_name::Raw::inline(&#definition)).into())
+        Ok(quote!(#crate_name::Raw::inline(&#definition)))
     }
 }
