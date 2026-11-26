@@ -65,16 +65,12 @@ impl<'a> ModelAttributes<'a> {
         self.data_type
     }
 
-    pub fn casing(&self) -> ExtractorResult<StructLevelCasing> {
+    pub fn casing(&self) -> ExtractorResult<CaseString> {
         self.receiver.casing()
     }
 
-    pub fn struct_no_bounds(&self) -> ExtractorResult<CustomTypeNoSelf> {
-        self.construct_struct_type_without_bounds()
-            .replace_self_with_current_struct_concrete_type(self)
-    }
-
-    fn construct_struct_type_without_bounds(&self) -> CustomType {
+    /// The struct's type with its generic parameters as arguments and no bounds: `Struct<'a, T>`.
+    pub fn construct_struct_type_without_bounds(&self) -> CustomType {
         let mut path = Path::from(self.ident());
         let generics = self.generics().to_basic_generics_ref();
 
