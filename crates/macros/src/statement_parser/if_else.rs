@@ -233,7 +233,7 @@ impl IfElseWithoutIfKeywordMetaAst {
             else_meta,
             generated_ident: _,
         } = self;
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
 
         let if_cond_expr = &if_meta.condition;
         let if_body = &if_meta.body.generate_code();

@@ -19,7 +19,7 @@ pub fn model_attribute(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 fn expand_model_attribute(args: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
-    let crate_name = get_crate_name(false);
+    let crate_name = get_crate_name();
     let args = syn::parse::Parser::parse2(Punctuated::<Meta, Token![,]>::parse_terminated, args)?;
 
     let mut kind = None;
@@ -117,7 +117,7 @@ impl ToTokens for ModelReceiver {
 
 impl ModelReceiver {
     fn expand(&self) -> ExtractorResult<TokenStream> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let model_attributes = ModelAttributes::new(self)?;
         let data_type = model_attributes.to_data_type();
         let struct_name_ident = &self.ident();
@@ -371,7 +371,7 @@ impl ModelReceiver {
 
     /// `Model`, its patch type and the helpers `object!` checks keys with.
     fn record_model_tokens(&self, code_gen: &Codegen) -> ExtractorResult<TokenStream> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let struct_name_ident = &self.ident();
         let (impl_generics, ty_generics, where_clause) = self.generics().split_for_impl();
         let struct_marker = self.generics().phantom_marker_type();
@@ -566,7 +566,7 @@ impl ModelReceiver {
     /// nested in the merge of a model that embeds it; a node's or edge's also implements
     /// `ModelMerge`.
     fn merge_struct_tokens(&self, code_gen: &Codegen) -> ExtractorResult<TokenStream> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let struct_name_ident = &self.ident();
         let (impl_generics, ty_generics, where_clause) = self.generics().split_for_impl();
         let struct_marker = self.generics().phantom_marker_type();
@@ -627,7 +627,7 @@ impl ModelReceiver {
     }
 
     fn node_tokens(&self, code_gen: &Codegen) -> ExtractorResult<TokenStream> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let struct_name_ident = &self.ident();
         let (impl_generics, ty_generics, where_clause) = self.generics().split_for_impl();
         let table = self.table()?.expect("a node has a table").as_string();
@@ -673,7 +673,7 @@ impl ModelReceiver {
     }
 
     fn edge_tokens(&self, code_gen: &Codegen) -> ExtractorResult<TokenStream> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let struct_name_ident = &self.ident();
         let (impl_generics, ty_generics, where_clause) = self.generics().split_for_impl();
         let table = self.table()?.expect("an edge has a table").as_string();

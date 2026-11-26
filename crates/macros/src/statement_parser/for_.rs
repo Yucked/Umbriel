@@ -140,7 +140,7 @@ impl ForLoopMetaParser {
         // let iterable = match iterable {
         //     Iterable::Expr(expr) => quote!(expr),
         //     Iterable::Ident(ident) => {
-        //         let crate_name = get_crate_name(false);
+        //         let crate_name = get_crate_name();
         //         quote!(#crate_name::iterable::Iterable::from(#ident))
         //     }
         // };
@@ -149,7 +149,7 @@ impl ForLoopMetaParser {
             query_chain_var_ident,
         } = body.generate_code();
 
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
 
         let whole_stmts = quote!(
         {

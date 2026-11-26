@@ -32,7 +32,7 @@ fn is_read_only(input: &DeriveInput) -> syn::Result<bool> {
 /// Unless the union is `#[models(read_only)]`, it also implements `WritableModels`, with a check
 /// that every variant's model is `Writable`, spanned on the variant's type so a view is named.
 pub(crate) fn derive_models(input: &DeriveInput) -> syn::Result<TokenStream> {
-    let crate_name = get_crate_name(false);
+    let crate_name = get_crate_name();
     let read_only = is_read_only(input)?;
     let ident = &input.ident;
     if !input.generics.params.is_empty() {

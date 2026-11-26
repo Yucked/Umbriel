@@ -33,7 +33,7 @@ impl MyFieldReceiver {
             return Ok(None);
         }
 
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let field_ty = self
             .ty()
             // .remove_non_static_lifetime_and_reference()

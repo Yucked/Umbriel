@@ -107,7 +107,7 @@ impl Codegen<'_> {
     }
 
     fn get_field_value_setter_impl(&self) -> ExtractorResult<FieldSetterImplTokens> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let field_receiver = self.field_receiver();
         let table_attributes = self.table_derive_attributes();
         let casing = &table_attributes.casing()?;
@@ -263,7 +263,7 @@ impl Codegen<'_> {
         field_receiver: &MyFieldReceiver,
         model_attributes: &ModelAttributes,
     ) -> ExtractorResult<ArrayElementFieldSetterToken> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let field_wrapper = field_receiver.field_wrapper_ident(model_attributes)?;
         let (impl_generics, ty_generics, where_clause) = model_attributes
             .generics()
@@ -311,7 +311,7 @@ impl Codegen<'_> {
         field_receiver: &MyFieldReceiver,
         model_attributes: &ModelAttributes,
     ) -> ExtractorResult<FieldSetterNumericImpl> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let field_wrapper = field_receiver.field_wrapper_ident(model_attributes)?;
         let field_type = field_receiver
             .ty()

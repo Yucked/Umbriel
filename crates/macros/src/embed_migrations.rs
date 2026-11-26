@@ -47,7 +47,7 @@ fn expand(input: TokenStream) -> syn::Result<TokenStream> {
     files.retain(|path| path.is_file());
     files.sort();
 
-    let crate_name = get_crate_name(false);
+    let crate_name = get_crate_name();
     let entries = files.iter().map(|path| {
         let name = path
             .file_name()

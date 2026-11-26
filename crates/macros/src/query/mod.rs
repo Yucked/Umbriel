@@ -320,7 +320,7 @@ fn expand(args: TokenStream) -> Result<TokenStream> {
 
     // Binding names are parameter names chosen by the caller: an invalid one, including one using
     // the prefix reserved for bound values, fails compilation at the name.
-    let crate_name = crate::helpers::get_crate_name(false);
+    let crate_name = crate::helpers::get_crate_name();
     let mut name_checks = TokenStream::new();
     for Binding { key, value } in bindings {
         let name = key.to_string();

@@ -55,7 +55,7 @@ impl FieldTypeParser {
 
     /// The argument type the generated call helper accepts.
     pub fn to_lib_type(&self) -> proc_macro2::TokenStream {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         if self.is_option() {
             return quote!(::std::option::Option<#crate_name::ValueLike>);
         }
@@ -129,7 +129,7 @@ impl DefineFunctionStatementParser {
             args,
             body,
         } = self;
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
 
         // Each argument is a parameter named by the caller: an invalid name, including one using
         // the prefix reserved for bound values, fails compilation at the name.
