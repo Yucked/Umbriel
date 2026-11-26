@@ -1155,7 +1155,13 @@ mod compiles_fetch_inputs {
             &values(Member::select().fetch(&[wallet.clone(), employer.clone()])),
             two,
         );
-        assert_sql(&values(Member::select().fetch(&[&wallet, &employer])), two);
+        // The borrowed array is the input form under test: `From<&[&Field; N]>`.
+        #[expect(
+            clippy::needless_borrows_for_generic_args,
+            reason = "checks that the `&[&Field; N]` input still compiles"
+        )]
+        let borrowed = Member::select().fetch(&[&wallet, &employer]);
+        assert_sql(&values(borrowed), two);
         assert_sql(
             &values(Member::select().fetch(vec![wallet.clone(), employer.clone()])),
             two,
