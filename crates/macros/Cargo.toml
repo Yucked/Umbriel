@@ -19,11 +19,6 @@ syn = { workspace = true }
 quote = { workspace = true }
 darling = { workspace = true }
 heck = { workspace = true }
-strum = { workspace = true }
-strum_macros = { workspace = true }
-thiserror = { workspace = true }
-paste = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
 # Compile-time SurrealQL syntax validation, contained in `src/surql.rs`.
 surrealdb-syn = { workspace = true }
 # Parsed field types are converted to the SDK's `Kind` and emitted as tokens.
