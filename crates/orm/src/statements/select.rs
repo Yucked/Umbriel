@@ -22,7 +22,8 @@ use surrealdb::types::{self, SurrealValue, Table, Value};
 
 use crate::{
     Aliasable, All, Conditional, DatetimeLike, DurationLike, Executor, Field, Filter, Function,
-    Model, NumberLike, Projections, RecordId, RecordRange, Render, Renderer, Result, ValueLike,
+    LinkPath, Links, Model, NumberLike, Projections, RecordId, RecordRange, Render, Renderer,
+    Result, ValueLike,
     kinds::KindOf,
     traits::statements::{fetch_projections, link_projections},
 };
@@ -1222,8 +1223,8 @@ impl<O, C: Cardinality> SelectStatement<O, C> {
     /// ```
     ///
     /// Fetching replaces links with records, so the result is untyped until
-    /// [`decode`](Self::decode) names it. A model's own links decode either way; for those,
-    /// [`load_links`](Self::load_links) keeps the model type.
+    /// [`decode`](Self::decode) names it. To fetch a model's links, nested ones included, and
+    /// keep the model type, use [`fetch_link`](Self::fetch_link) with a typed path.
     pub fn fetch(mut self, fetchables: impl Into<Fetchables>) -> SelectStatement<Value, C> {
         self.select
             .fetch
@@ -1285,6 +1286,57 @@ impl<O: 'static, C: Cardinality> SelectStatement<O, C> {
     /// number of records it processed.
     pub fn explain_full(self) -> Explained {
         Explained::new(self, true)
+    }
+}
+
+impl<T: Links, C: Cardinality> SelectStatement<T, C> {
+    /// Adds `path` to the `FETCH` clause and keeps the model type, so the result decodes as `T`
+    /// with every record along the path fetched into `T`'s links.
+    ///
+    /// SurrealDB fetches each link the path walks, so `wallet.bank` fetches the wallet and then
+    /// its bank, and a path over a link list fetches every element. Chain calls to fetch several
+    /// paths, which may end at different models; they render as one `FETCH` clause.
+    ///
+    /// The guarantee is compatibility with `T`: the path is a chain of `T`'s links, so the fetched
+    /// records decode into them. It does not prove that the query reads `T`'s table (a statement
+    /// [`decode`](Self::decode)d as `T` may read anything) or that the projection keeps the
+    /// linked fields. Nor does it prove a record was fetched: a missing record, or one the caller
+    /// may not read, decodes as [`Reference::Null`](crate::Reference::Null), so
+    /// [`value()`](crate::Reference::value) stays an `Option`.
+    ///
+    /// ```rust
+    /// # use umbriel::{LinkOne, Links, RecordId, Render, SurrealRead, model};
+    /// # #[model(node, table = "member")]
+    /// # pub struct Member {
+    /// #     pub id: RecordId<Self>,
+    /// #     #[orm(link_one = "Wallet")]
+    /// #     pub wallet: LinkOne<Wallet>,
+    /// #     #[orm(link_one = "Bank")]
+    /// #     #[surreal(rename = "worksFor")]
+    /// #     pub employer: LinkOne<Bank>,
+    /// # }
+    /// # #[model(node, table = "wallet")]
+    /// # pub struct Wallet {
+    /// #     pub id: RecordId<Self>,
+    /// #     #[orm(link_one = "Bank")]
+    /// #     pub bank: LinkOne<Bank>,
+    /// # }
+    /// # #[model(node, table = "bank")]
+    /// # pub struct Bank {
+    /// #     pub id: RecordId<Self>,
+    /// # }
+    /// // A wallet and its bank, and the employer: paths ending at two different models.
+    /// let members = Member::select()
+    ///     .fetch_link(Member::links().wallet.then(Wallet::links().bank))
+    ///     .fetch_link(Member::links().employer);
+    /// assert_eq!(
+    ///     members.to_debug_sql(),
+    ///     "SELECT * FROM member FETCH wallet.bank, worksFor;"
+    /// );
+    /// ```
+    pub fn fetch_link<V>(mut self, path: LinkPath<T, V>) -> Self {
+        self.select.fetch.push(path.into_field());
+        self
     }
 }
 

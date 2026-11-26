@@ -253,6 +253,12 @@ pub mod __private {
     /// types, and the checks it enables then no longer hold.
     pub trait ModelField<M, V>: std::ops::Deref<Target = crate::Field> {}
 
+    /// The one-hop path over the link field stored as `name`, for the link paths `#[model]`
+    /// generates. Only the derive calls it, so every path follows a real link field.
+    pub fn link_path<From, To>(name: &'static str) -> crate::LinkPath<From, To> {
+        crate::LinkPath::new(name)
+    }
+
     /// Glob-imported by `#[model]`: the `SurrealValue` derive names the trait unqualified, and
     /// `Value` too in the code it generates for `#[surreal(flatten)]` fields.
     pub mod surreal_value {

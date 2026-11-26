@@ -92,6 +92,47 @@ pub trait Model: Sized + SurrealValue + 'static {
     fn get_field_meta() -> Vec<FieldMetadata>;
 }
 
+/// The typed paths of a model's record links, which
+/// [`SelectStatement::fetch_link`](crate::statements::SelectStatement::fetch_link) fetches.
+///
+/// `#[model]` implements it for every node and edge. `links()` returns a struct with one
+/// [`LinkPath`](crate::LinkPath) per `LinkOne`, `LinkSelf` and `LinkMany` field, named after the
+/// Rust field and rendering its stored name. A field that is not a link has no path. It is a
+/// trait of its own rather than part of [`Model`], so a `Model` written by hand needs nothing
+/// new; such a model has no typed paths until it implements this too.
+///
+/// ```rust
+/// # use umbriel::{LinkOne, Links, RecordId, Render, model};
+/// #[model(node, table = "member")]
+/// pub struct Member {
+///     pub id: RecordId<Self>,
+///     #[orm(link_one = "Wallet")]
+///     pub wallet: LinkOne<Wallet>,
+/// }
+///
+/// #[model(node, table = "wallet")]
+/// pub struct Wallet {
+///     pub id: RecordId<Self>,
+///     #[orm(link_one = "Bank")]
+///     pub bank: LinkOne<Bank>,
+/// }
+///
+/// #[model(node, table = "bank")]
+/// pub struct Bank {
+///     pub id: RecordId<Self>,
+/// }
+///
+/// let path = Member::links().wallet.then(Wallet::links().bank);
+/// assert_eq!(path.to_debug_sql(), "wallet.bank");
+/// ```
+pub trait Links: Model {
+    /// The generated struct of this model's link paths.
+    type Paths;
+
+    /// This model's link paths.
+    fn links() -> Self::Paths;
+}
+
 /// Reads of a model's records, run through the SDK's typed methods, plus statement builders for
 /// queries over the model's table. Every model has them, views included.
 ///

@@ -1,6 +1,71 @@
+use std::marker::PhantomData;
+
 use surrealdb::types::{self, Kind, SurrealValue, Value};
 
-use crate::{Model, Node, RecordId};
+use crate::{Field, Model, Node, RecordId, Render, Renderer};
+
+/// A typed path through record links, from a `From` record to the `To` record its last link
+/// reaches: one link field per hop.
+///
+/// Paths come from [`Links::links`](crate::Links::links), which `#[model]` generates with one
+/// path per `LinkOne`, `LinkSelf` and `LinkMany` field, under the field's stored name.
+/// [`then`](Self::then) adds a hop, and
+/// [`SelectStatement::fetch_link`](crate::statements::SelectStatement::fetch_link) fetches every
+/// record along the path while keeping the statement's model type.
+///
+/// A path holds only link fields, so it never holds a graph step, which `FETCH` skips.
+pub struct LinkPath<From, To> {
+    field: Field,
+    hops: PhantomData<fn() -> (From, To)>,
+}
+
+impl<From, To> LinkPath<From, To> {
+    /// The one-hop path over the link stored as `name`. Only `#[model]` builds paths, through
+    /// `__private::link_path`, so a path always follows a real link field.
+    pub(crate) fn new(name: &'static str) -> Self {
+        Self {
+            field: Field::new(name),
+            hops: PhantomData,
+        }
+    }
+
+    /// This path followed by `next`, which must start at the record this path reaches:
+    /// `Member::links().wallet.then(Wallet::links().bank)` is `wallet.bank`.
+    #[must_use]
+    pub fn then<W>(mut self, next: LinkPath<To, W>) -> LinkPath<From, W> {
+        self.field.extend(next.field);
+        LinkPath {
+            field: self.field,
+            hops: PhantomData,
+        }
+    }
+
+    pub(crate) fn into_field(self) -> Field {
+        self.field
+    }
+}
+
+// Manual impls avoid derive's bounds on `From` and `To`, which the path never holds.
+impl<From, To> std::fmt::Debug for LinkPath<From, To> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("LinkPath").field(&self.field).finish()
+    }
+}
+
+impl<From, To> Clone for LinkPath<From, To> {
+    fn clone(&self) -> Self {
+        Self {
+            field: self.field.clone(),
+            hops: PhantomData,
+        }
+    }
+}
+
+impl<From, To> Render for LinkPath<From, To> {
+    fn render(&self, out: &mut Renderer) {
+        self.field.render(out);
+    }
+}
 
 /// A reference to a foreign node: its id, the fetched record, or nothing.
 #[derive(Debug, Clone, Default)]
