@@ -377,3 +377,71 @@ mod relations {
         assert!(stored);
     }
 }
+
+/// A `Model` written by hand, without the derive, still compiles: typed link paths come from the
+/// separate `Links` trait, so `Model` gains no required item.
+mod compiles_hand_written_model {
+    use umbriel::FieldMetadata;
+
+    use super::*;
+
+    #[derive(Debug, Clone, SurrealValue)]
+    #[surreal(crate = "umbriel::types")]
+    pub struct Note {
+        pub id: RecordId<Note>,
+        pub text: String,
+    }
+
+    impl Model for Note {
+        type StructRenamedCreator = ();
+
+        const TABLE: &'static str = "note";
+        const TABLE_PREFIX: Option<&'static str> = None;
+
+        fn record_id(&self) -> &RecordId<Self> {
+            &self.id
+        }
+
+        fn get_serializable_fields() -> Vec<Field> {
+            vec![Field::new("id"), Field::new("text")]
+        }
+
+        fn get_linked_fields() -> Vec<Field> {
+            Vec::new()
+        }
+
+        fn get_link_one_fields() -> Vec<Field> {
+            Vec::new()
+        }
+
+        fn get_link_self_fields() -> Vec<Field> {
+            Vec::new()
+        }
+
+        fn get_link_one_and_self_fields() -> Vec<Field> {
+            Vec::new()
+        }
+
+        fn get_link_many_fields() -> Vec<Field> {
+            Vec::new()
+        }
+
+        fn define_table() -> Raw {
+            Raw::new("DEFINE TABLE note;")
+        }
+
+        fn define_fields() -> Vec<Raw> {
+            Vec::new()
+        }
+
+        fn get_field_meta() -> Vec<FieldMetadata> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn a_hand_written_model_needs_no_links() {
+        assert_eq!(Note::TABLE, "note");
+        assert_sql(&Note::select(), "SELECT * FROM note;");
+    }
+}

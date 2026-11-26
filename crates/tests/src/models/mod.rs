@@ -1,5 +1,6 @@
 mod alien;
 mod attributes;
+mod membership;
 mod planet;
 mod spaceship;
 mod user;
@@ -9,6 +10,7 @@ mod weapon;
 
 pub use alien::*;
 pub use attributes::*;
+pub use membership::*;
 pub use planet::*;
 pub use spaceship::*;
 pub use user::*;

@@ -406,8 +406,15 @@ impl ModelReceiver {
             patch_defaults,
             patch_setters,
             record_id_field,
+            link_path_fields,
+            link_path_inits,
             ..
         } = code_gen;
+        let links_ident = struct_name_ident.links_ident();
+        let links_doc = format!(
+            "The typed link paths of [`{}`], from `Links::links()`: one per link field.",
+            self.ident
+        );
         let CommonIdents {
             struct_with_renamed_serialized_fields,
             stored_fields,
@@ -527,6 +534,27 @@ impl ModelReceiver {
                     ::std::iter::IntoIterator::into_iter([#( #field_metadata ),*])
                         #( .chain(<#flattened_objects as #crate_name::Object>::field_meta_on(#_____table.clone())) )*
                         .collect()
+                }
+            }
+
+            #[doc = #links_doc]
+            // The paths take the model's own field names, which `#[allow]`s on the model don't
+            // cover here.
+            #[allow(non_snake_case)]
+            #vis struct #links_ident #impl_generics #where_clause {
+                #( #link_path_fields, )*
+                #[doc(hidden)]
+                #vis #_____struct_marker_ident: #struct_marker,
+            }
+
+            impl #impl_generics #crate_name::Links for #struct_name_ident #ty_generics #where_clause {
+                type Paths = #links_ident #ty_generics;
+
+                fn links() -> Self::Paths {
+                    #links_ident {
+                        #( #link_path_inits, )*
+                        #_____struct_marker_ident: ::std::marker::PhantomData,
+                    }
                 }
             }
 

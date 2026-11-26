@@ -1,0 +1,13 @@
+error[E0599]: the method `fetch_link` exists for struct `SelectStatement`, but its trait bounds were not satisfied
+  --> tests/ui/fail/fetch_link_on_values.rs:17:47
+   |
+17 |     let _ = select(All).from(Member::table()).fetch_link(Member::links().wallet);
+   |                                               ^^^^^^^^^^
+   |
+  ::: $CARGO/surrealdb-types-$VERSION/src/value/mod.rs
+   |
+   | pub enum Value {
+   | -------------- doesn't satisfy `umbriel::surrealdb_types::Value: Links`
+   |
+   = note: the following trait bounds were not satisfied:
+           `umbriel::surrealdb_types::Value: Links`

@@ -218,3 +218,71 @@ fn load_links_rejects_fields_that_are_not_links() {
     ));
     assert!(alice().load_links(vec![Alien::schema().weapon]).is_ok());
 }
+
+/// Typed link paths, from `Links::links()`, render the fields they walk.
+mod link_paths {
+    use umbriel::{Links, statements::SelectStatement};
+
+    use super::*;
+
+    #[test]
+    fn link_paths_render_each_hop() {
+        assert_eq!(Member::links().wallet.to_debug_sql(), "wallet");
+        assert_eq!(
+            Member::links()
+                .wallet
+                .then(Wallet::links().bank)
+                .to_debug_sql(),
+            "wallet.bank"
+        );
+        assert_eq!(
+            Club::links()
+                .members
+                .then(Member::links().wallet)
+                .to_debug_sql(),
+            "members.wallet"
+        );
+        assert_eq!(
+            Member::links()
+                .mentor
+                .then(Member::links().wallet)
+                .to_debug_sql(),
+            "mentor.wallet"
+        );
+        assert_eq!(
+            Club::links()
+                .members
+                .then(Member::links().wallet)
+                .then(Wallet::links().bank)
+                .to_debug_sql(),
+            "members.wallet.bank"
+        );
+    }
+
+    #[test]
+    fn a_renamed_link_renders_its_database_name() {
+        assert_eq!(Member::links().employer.to_debug_sql(), "worksFor");
+        assert_eq!(Alien::links().space_ships.to_debug_sql(), "spaceShips");
+    }
+
+    #[test]
+    fn chained_fetch_links_render_one_clause() {
+        let statement: SelectStatement<Member> = Member::select()
+            .fetch_link(Member::links().wallet.then(Wallet::links().bank))
+            .fetch_link(Member::links().employer);
+        assert_sql(
+            &statement,
+            "SELECT * FROM member FETCH wallet.bank, worksFor;",
+        );
+    }
+
+    #[test]
+    fn a_repeated_path_renders_each_time() {
+        assert_sql(
+            &Member::select()
+                .fetch_link(Member::links().wallet)
+                .fetch_link(Member::links().wallet),
+            "SELECT * FROM member FETCH wallet, wallet;",
+        );
+    }
+}

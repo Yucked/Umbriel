@@ -1115,3 +1115,253 @@ mod clauses_and_results {
         assert!(matches!(fetched.get("account"), Some(Value::Object(_))));
     }
 }
+
+/// Every input `fetch` took before typed link paths still compiles, renders the same `FETCH`
+/// clause, and still gives untyped values.
+mod compiles_fetch_inputs {
+    use umbriel::{ValueLike, statements::SelectStatement};
+
+    use super::*;
+
+    /// A caller's own conversion into a field.
+    struct Handle;
+
+    impl From<Handle> for Field {
+        fn from(_: Handle) -> Self {
+            Field::new("wallet")
+        }
+    }
+
+    fn values(statement: SelectStatement<Value>) -> SelectStatement<Value> {
+        statement
+    }
+
+    #[test]
+    fn every_fetch_input_renders_as_before() {
+        let wallet = Field::new("wallet");
+        let employer = Field::new("worksFor");
+        let one = "SELECT * FROM member FETCH wallet;";
+        let two = "SELECT * FROM member FETCH wallet, worksFor;";
+
+        assert_sql(&values(Member::select().fetch(wallet.clone())), one);
+        assert_sql(&values(Member::select().fetch(&wallet)), one);
+        assert_sql(&values(Member::select().fetch(Handle)), one);
+        assert_sql(
+            &values(Member::select().fetch([wallet.clone(), employer.clone()])),
+            two,
+        );
+        assert_sql(&values(Member::select().fetch([&wallet, &employer])), two);
+        assert_sql(
+            &values(Member::select().fetch(&[wallet.clone(), employer.clone()])),
+            two,
+        );
+        assert_sql(&values(Member::select().fetch(&[&wallet, &employer])), two);
+        assert_sql(
+            &values(Member::select().fetch(vec![wallet.clone(), employer.clone()])),
+            two,
+        );
+        assert_sql(
+            &values(Member::select().fetch(vec![&wallet, &employer])),
+            two,
+        );
+        assert_sql(
+            &values(Member::select().fetch(vec![
+                ValueLike::from(wallet.clone()),
+                ValueLike::from(employer.clone()),
+            ])),
+            two,
+        );
+        assert_sql(
+            &values(select(All).from(Member::table()).fetch(wallet)),
+            one,
+        );
+    }
+}
+
+/// `fetch_link` keeps the model type: the result decodes into the model with no `decode`.
+mod compiles_fetch_link {
+    use umbriel::{Links, statements::SelectStatement};
+
+    use super::*;
+
+    fn members(statement: SelectStatement<Member>) -> SelectStatement<Member> {
+        statement
+    }
+
+    #[test]
+    fn fetch_link_keeps_the_model_type() {
+        let statement = members(
+            Member::find_where(Member::schema().name.equal("Alice"))
+                .fetch_link(Member::links().wallet),
+        );
+        assert_sql(
+            &statement,
+            "SELECT * FROM member WHERE name = 'Alice' FETCH wallet;",
+        );
+    }
+}
+
+/// `fetch_link` against the server: nested and multi-hop paths decode into the model's links.
+mod fetch_links {
+    use umbriel::{Links, Reference};
+
+    use super::*;
+
+    /// Alice (wallet at Acme Corp, works for Globex, mentored by Bob), Bob (wallet at Acme Corp),
+    /// Carol (wallet at a bank that doesn't exist), the Chess club (Alice and Bob) and the empty
+    /// Quiet club.
+    async fn membership() -> (Surreal<Any>, TestDb) {
+        let (db, guard) = db().await;
+        run(
+            &db,
+            Raw::new(
+                "CREATE bank:acme SET name = 'Acme Corp'; \
+                 CREATE bank:globex SET name = 'Globex'; \
+                 CREATE wallet:alice SET balance = 5, bank = bank:acme; \
+                 CREATE wallet:bob SET balance = 7, bank = bank:acme; \
+                 CREATE wallet:carol SET balance = 1, bank = bank:missing; \
+                 CREATE member:bob SET name = 'Bob', wallet = wallet:bob; \
+                 CREATE member:alice SET name = 'Alice', wallet = wallet:alice, \
+                     worksFor = bank:globex, mentor = member:bob; \
+                 CREATE member:carol SET name = 'Carol', wallet = wallet:carol; \
+                 CREATE club:chess SET name = 'Chess', members = [member:alice, member:bob]; \
+                 CREATE club:quiet SET name = 'Quiet', members = [];",
+            ),
+        )
+        .await;
+        (db, guard)
+    }
+
+    async fn member(
+        db: &Surreal<Any>,
+        name: &str,
+        statement: impl FnOnce(
+            umbriel::statements::SelectStatement<Member>,
+        ) -> umbriel::statements::SelectStatement<Member>,
+    ) -> Member {
+        let mut found: Vec<Member> =
+            statement(Member::find_where(Member::schema().name.equal(name)))
+                .execute(db)
+                .await
+                .expect("read");
+        assert_eq!(found.len(), 1, "one member named {name}");
+        found.remove(0)
+    }
+
+    async fn club(db: &Surreal<Any>, name: &str) -> Club {
+        let mut found: Vec<Club> = Club::find_where(Club::schema().name.equal(name))
+            .fetch_link(Club::links().members.then(Member::links().wallet))
+            .execute(db)
+            .await
+            .expect("read");
+        assert_eq!(found.len(), 1, "one club named {name}");
+        found.remove(0)
+    }
+
+    #[tokio::test]
+    async fn fetch_link_through_two_links_decodes_both_hops() {
+        let (db, _guard) = membership().await;
+        let alice = member(&db, "Alice", |statement| {
+            statement.fetch_link(Member::links().wallet.then(Wallet::links().bank))
+        })
+        .await;
+        let wallet = alice.wallet.value().expect("wallet fetched");
+        assert_eq!(wallet.balance, 5);
+        assert_eq!(
+            wallet.bank.value().map(|bank| bank.name.as_str()),
+            Some("Acme Corp")
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_link_through_a_link_list_fans_out() {
+        let (db, _guard) = membership().await;
+        let chess = club(&db, "Chess").await;
+        let mut balances = chess
+            .members
+            .values_truthy()
+            .into_iter()
+            .map(|member| member.wallet.value().expect("wallet fetched").balance)
+            .collect::<Vec<_>>();
+        balances.sort_unstable();
+        assert_eq!(balances, [5, 7]);
+    }
+
+    #[tokio::test]
+    async fn fetch_link_through_a_self_link_recurses() {
+        let (db, _guard) = membership().await;
+        let alice = member(&db, "Alice", |statement| {
+            statement.fetch_link(Member::links().mentor.then(Member::links().wallet))
+        })
+        .await;
+        let bob = alice.mentor.value().expect("mentor fetched");
+        assert_eq!(bob.name, "Bob");
+        assert_eq!(bob.wallet.value().map(|wallet| wallet.balance), Some(7));
+        assert!(
+            alice.wallet.value().is_none(),
+            "Alice's own wallet is not fetched"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_links_to_two_target_models() {
+        let (db, _guard) = membership().await;
+        let alice = member(&db, "Alice", |statement| {
+            statement
+                .fetch_link(Member::links().wallet)
+                .fetch_link(Member::links().employer)
+        })
+        .await;
+        assert_eq!(alice.wallet.value().map(|wallet| wallet.balance), Some(5));
+        assert_eq!(
+            alice.employer.value().map(|bank| bank.name.as_str()),
+            Some("Globex")
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_link_through_a_renamed_link() {
+        let (db, _guard) = membership().await;
+        let alice = member(&db, "Alice", |statement| {
+            statement.fetch_link(Member::links().employer)
+        })
+        .await;
+        assert_eq!(
+            alice.employer.value().map(|bank| bank.name.as_str()),
+            Some("Globex")
+        );
+        assert!(alice.wallet.value().is_none());
+    }
+
+    #[tokio::test]
+    async fn a_missing_record_on_the_second_hop_decodes_as_null() {
+        let (db, _guard) = membership().await;
+        let carol = member(&db, "Carol", |statement| {
+            statement.fetch_link(Member::links().wallet.then(Wallet::links().bank))
+        })
+        .await;
+        let wallet = carol.wallet.value().expect("wallet fetched");
+        assert!(matches!(*wallet.bank, Reference::Null));
+    }
+
+    #[tokio::test]
+    async fn an_empty_link_list_fetches_nothing() {
+        let (db, _guard) = membership().await;
+        let quiet = club(&db, "Quiet").await;
+        assert!(quiet.members.keys().is_empty());
+    }
+
+    #[tokio::test]
+    async fn fetch_with_a_field_still_returns_values() {
+        let (db, _guard) = membership().await;
+        let rows: Vec<Value> = Member::find_where(Member::schema().name.equal("Alice"))
+            .fetch(Field::new("wallet"))
+            .execute(&db)
+            .await
+            .expect("read");
+        let [Value::Object(alice)] = rows.as_slice() else {
+            panic!("one object: {rows:?}");
+        };
+        assert!(matches!(alice.get("wallet"), Some(Value::Object(_))));
+    }
+}

@@ -21,6 +21,8 @@ pub struct MyFieldReceiver {
     /// Get the ident of the field. For fields in tuple or newtype structs or
     /// enum bodies, this can be `None`.
     pub ident: Option<Ident>,
+    /// The field's own visibility, which the items generated for it take.
+    pub vis: syn::Visibility,
     /// This magic field name pulls the type from the input.
     pub ty: Type,
     /// The field's `#[surreal(…)]` attributes, read for its stored name.

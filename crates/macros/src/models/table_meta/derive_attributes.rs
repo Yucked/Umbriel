@@ -20,6 +20,11 @@ impl StructIdent {
         format_ident!("{}Merge", self.to_string())
     }
 
+    /// The model's link paths type, `<Model>Links`, generated next to a node or edge.
+    pub fn links_ident(&self) -> Ident {
+        format_ident!("{}Links", self.to_string())
+    }
+
     /// The model's schema type, `<Model>Schema`, generated next to the model.
     pub fn schema_ident(&self) -> Ident {
         format_ident!("{}Schema", self.to_string())

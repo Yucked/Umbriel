@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/fail/link_path_hop_mismatch.rs:26:43
+   |
+26 |     let _ = Member::links().employer.then(Wallet::links().bank);
+   |                                      ---- ^^^^^^^^^^^^^^^^^^^^ expected `LinkPath<Bank, _>`, found `LinkPath<Wallet, Bank>`
+   |                                      |
+   |                                      arguments to this method are incorrect
+   |
+   = note: expected struct `LinkPath<Bank, _>`
+              found struct `LinkPath<Wallet, Bank>`
+note: method defined here
+  --> $WORKSPACE/crates/orm/src/query/links.rs
+   |
+   |     pub fn then<W>(mut self, next: LinkPath<To, W>) -> LinkPath<From, W> {
+   |            ^^^^

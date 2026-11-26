@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/fail/fetch_link_from_another_model.rs:24:41
+   |
+24 |     let _ = Member::select().fetch_link(Wallet::links().bank);
+   |                              ---------- ^^^^^^^^^^^^^^^^^^^^ expected `LinkPath<Member, _>`, found `LinkPath<Wallet, Bank>`
+   |                              |
+   |                              arguments to this method are incorrect
+   |
+   = note: expected struct `LinkPath<Member, _>`
+              found struct `LinkPath<Wallet, Bank>`
+note: method defined here
+  --> $WORKSPACE/crates/orm/src/statements/select.rs
+   |
+   |     pub fn fetch_link<V>(mut self, path: LinkPath<T, V>) -> Self {
+   |            ^^^^^^^^^^

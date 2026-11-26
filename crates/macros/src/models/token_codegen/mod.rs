@@ -159,6 +159,10 @@ pub struct Codegen<'a> {
     pub merge_defaults: Vec<TokenStream>,
     /// Adds the entry of a merge field that is not `Keep`.
     pub merge_entries: Vec<TokenStream>,
+    /// e.g `pub wallet: umbriel::LinkPath<Member, Wallet>` in `<Model>Links`, one per link field.
+    pub link_path_fields: Vec<TokenStream>,
+    /// e.g `wallet: umbriel::__private::link_path("wallet")`, under the field's stored name.
+    pub link_path_inits: Vec<TokenStream>,
     pub renamed_serialized_fields_kv: Vec<RenamedSerializedFields>,
     /// The Rust field holding the record's `id`.
     pub record_id_field: Option<syn::Ident>,
