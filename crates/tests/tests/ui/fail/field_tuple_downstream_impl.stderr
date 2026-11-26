@@ -1,0 +1,32 @@
+error[E0277]: the trait bound `(u8,): umbriel::query::projection::sealed::Sealed<Member, std::string::String>` is not satisfied
+  --> tests/ui/fail/field_tuple_downstream_impl.rs:11:37
+   |
+11 | impl FieldTuple<Member, String> for (u8,) {
+   |                                     ^^^^^ the trait `umbriel::query::projection::sealed::Sealed<Member, std::string::String>` is not implemented for `(u8,)`
+   |
+   = help: the following other types implement trait `umbriel::query::projection::sealed::Sealed<M, V>`:
+             `(F0,)` implements `umbriel::query::projection::sealed::Sealed<M, (V0,)>`
+             `(F0, F1)` implements `umbriel::query::projection::sealed::Sealed<M, (V0, V1)>`
+             `(F0, F1, F2)` implements `umbriel::query::projection::sealed::Sealed<M, (V0, V1, V2)>`
+             `(F0, F1, F2, F3)` implements `umbriel::query::projection::sealed::Sealed<M, (V0, V1, V2, V3)>`
+             `(F0, F1, F2, F3, F4)` implements `umbriel::query::projection::sealed::Sealed<M, (V0, V1, V2, V3, V4)>`
+             `(F0, F1, F2, F3, F4, F5)` implements `umbriel::query::projection::sealed::Sealed<M, (V0, V1, V2, V3, V4, V5)>`
+             `(F0, F1, F2, F3, F4, F5, F6)` implements `umbriel::query::projection::sealed::Sealed<M, (V0, V1, V2, V3, V4, V5, V6)>`
+             `(F0, F1, F2, F3, F4, F5, F6, F7)` implements `umbriel::query::projection::sealed::Sealed<M, (V0, V1, V2, V3, V4, V5, V6, V7)>`
+           and $N others
+note: required by a bound in `FieldTuple`
+  --> $WORKSPACE/crates/orm/src/query/projection.rs
+   |
+   | pub trait FieldTuple<M, V>: sealed::Sealed<M, V> {
+   |                             ^^^^^^^^^^^^^^^^^^^^ required by this bound in `FieldTuple`
+   = note: `FieldTuple` is a "sealed trait", because to implement it you also need to implement `umbriel::query::projection::sealed::Sealed`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
+   = help: the following types implement the trait:
+             (F0,)
+             (F0, F1)
+             (F0, F1, F2)
+             (F0, F1, F2, F3)
+             (F0, F1, F2, F3, F4)
+             (F0, F1, F2, F3, F4, F5)
+             (F0, F1, F2, F3, F4, F5, F6)
+             (F0, F1, F2, F3, F4, F5, F6, F7)
+           and $N others
