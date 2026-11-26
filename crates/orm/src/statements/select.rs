@@ -662,7 +662,12 @@ pub fn select(selectables: impl Into<Selectables>) -> SelectStatementInit {
 /// [`decode`](SelectStatement::decode) names its type; a model's
 /// [`select_value`](crate::SurrealRead::select_value) types it by the field.
 pub fn select_value(selectable_value: impl Into<Field>) -> SelectStatementInit {
-    let mut select_statement = select(selectable_value);
+    select_value_of(ValueLike::from(selectable_value.into()))
+}
+
+/// `SELECT VALUE expression`, for the typed projections that build the expression themselves.
+pub(crate) fn select_value_of(value: ValueLike) -> SelectStatementInit {
+    let mut select_statement = select(vec![value]);
     select_statement.selection_type = SelectionType::SelectValue;
     select_statement
 }
