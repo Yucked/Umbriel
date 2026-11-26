@@ -2,6 +2,7 @@ use surrealdb::types::{ConnectionError, QueryError};
 use thiserror::Error;
 
 /// Errors returned by Umbriel.
+#[doc = include_str!("docs/errors.md")]
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
