@@ -1216,7 +1216,7 @@ mod fetch_links {
     /// Alice (wallet at Acme Corp, works for Globex, mentored by Bob), Bob (wallet at Acme Corp),
     /// Carol (wallet at a bank that doesn't exist), the Chess club (Alice and Bob) and the empty
     /// Quiet club.
-    async fn membership() -> (Surreal<Any>, TestDb) {
+    pub(super) async fn membership() -> (Surreal<Any>, TestDb) {
         let (db, guard) = db().await;
         run(
             &db,
@@ -1369,5 +1369,77 @@ mod fetch_links {
             panic!("one object: {rows:?}");
         };
         assert!(matches!(alice.get("wallet"), Some(Value::Object(_))));
+    }
+}
+
+/// `select_fields` against the server: each record's fields decode into the tuple, in order.
+mod select_fields {
+    use umbriel::LinkOne;
+
+    use super::{fetch_links::membership, *};
+
+    #[tokio::test]
+    async fn select_fields_decodes_each_field_in_order() {
+        let (db, _guard) = membership().await;
+        let rows: Vec<(String, LinkOne<Wallet>)> =
+            Member::select_fields((Member::schema().name, Member::schema().wallet))
+                .where_(Member::schema().name.equal("Alice"))
+                .execute(&db)
+                .await
+                .expect("read");
+        let [(name, wallet)] = rows.as_slice() else {
+            panic!("one row: {rows:?}");
+        };
+        assert_eq!(name, "Alice");
+        assert_eq!(wallet.key(), Some(&Wallet::id("alice")));
+        assert!(wallet.value().is_none(), "a link stays its id");
+    }
+
+    #[tokio::test]
+    async fn a_renamed_field_is_read_by_its_stored_name() {
+        let (db, _guard) = membership().await;
+        let rows: Vec<(LinkOne<Bank>,)> = Member::select_fields((Member::schema().worksFor,))
+            .where_(Member::schema().name.equal("Alice"))
+            .execute(&db)
+            .await
+            .expect("read");
+        let [(employer,)] = rows.as_slice() else {
+            panic!("one row: {rows:?}");
+        };
+        assert_eq!(employer.key(), Some(&Bank::id("globex")));
+    }
+
+    #[tokio::test]
+    async fn a_missing_field_decodes_as_its_empty_value() {
+        let (db, _guard) = membership().await;
+        let rows: Vec<(String, LinkOne<Bank>)> =
+            Member::select_fields((Member::schema().name, Member::schema().worksFor))
+                .where_(Member::schema().name.equal("Bob"))
+                .execute(&db)
+                .await
+                .expect("read");
+        let [(name, employer)] = rows.as_slice() else {
+            panic!("one row: {rows:?}");
+        };
+        assert_eq!(name, "Bob");
+        assert!(employer.key().is_none(), "Bob works for no one");
+    }
+
+    #[tokio::test]
+    async fn select_fields_orders_the_records() {
+        let (db, _guard) = membership().await;
+        let rows: Vec<(String,)> = Member::select_fields((Member::schema().name,))
+            .order_by(order(Member::schema().name).desc())
+            .execute(&db)
+            .await
+            .expect("read");
+        assert_eq!(
+            rows,
+            [
+                ("Carol".to_owned(),),
+                ("Bob".to_owned(),),
+                ("Alice".to_owned(),)
+            ]
+        );
     }
 }
