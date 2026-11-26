@@ -24,6 +24,7 @@ impl<C: Connection> sealed::Sealed for Transaction<C> {}
 /// Through a [`Transaction`], statements and model methods run inside it and persist only when
 /// it commits. The trait is sealed: those two types are its only implementors. Its methods
 /// forward to the SDK methods of the same name.
+#[doc = include_str!("docs/execution.md")]
 pub trait Executor: sealed::Sealed + Sync {
     /// The SDK connection the handle runs on.
     type Connection: Connection;
