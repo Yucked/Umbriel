@@ -14,6 +14,7 @@ mod merge;
 mod param;
 mod params_standard;
 mod patch;
+mod projection;
 mod record_id;
 mod table_of;
 mod value_like;
