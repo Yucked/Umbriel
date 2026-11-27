@@ -80,16 +80,13 @@ impl MigrationConfig {
 
     /// The migration type from the directory's files; an error unless all are of one type.
     pub fn detect_migration_type(&self) -> MigrationResult<MigrationFlag> {
-        let filenames = self.get_migrations_filenames(false)?;
-        let oneway = filenames.unidirectional();
-        let twoway = filenames.bidirectional();
-
-        match (oneway.is_empty(), twoway.is_empty()) {
-            (false, true) => Ok(MigrationFlag::OneWay),
-            (true, false) => Ok(MigrationFlag::TwoWay),
-            (false, false) | (true, true) => Err(MigrationError::AmbiguousMigrationDirection {
-                one_way_filecount: oneway.len(),
-                two_way_filecount: twoway.len(),
+        let (one_way, two_way) = self.get_migrations_filenames(false)?.count_by_direction();
+        match (one_way, two_way) {
+            (1.., 0) => Ok(MigrationFlag::OneWay),
+            (0, 1..) => Ok(MigrationFlag::TwoWay),
+            _ => Err(MigrationError::AmbiguousMigrationDirection {
+                one_way_filecount: one_way,
+                two_way_filecount: two_way,
             }),
         }
     }
