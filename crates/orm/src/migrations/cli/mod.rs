@@ -1,4 +1,3 @@
-mod arg_parser;
 /// The database connection arguments.
 pub mod config;
 mod down;
@@ -11,7 +10,6 @@ mod up;
 
 use std::path::PathBuf;
 
-pub use arg_parser::*;
 pub use down::{Down, RollbackStrategy, RollbackStrategyStruct};
 pub use generate::Generate;
 pub use init::Init;
@@ -41,13 +39,8 @@ pub struct Migrator {
     #[builder(default, setter(strip_option))]
     subcmd: Option<SubCommand>,
 
-    /// Optional custom migrations dir
-    #[arg(
-        global = true,
-        short,
-        long,
-        help = "Optional custom migrations directory"
-    )]
+    /// Optional custom migrations directory
+    #[arg(global = true, short, long)]
     #[builder(default, setter(strip_option))]
     pub dir: Option<PathBuf>,
 
@@ -55,14 +48,9 @@ pub struct Migrator {
     #[arg(global = true, short, long, action = ArgAction::Count, default_value_t=3)]
     pub(crate) verbose: u8,
 
-    #[arg(
-        value_enum,
-        global = true,
-        long,
-        help = "If to be strict or lax. Strictness validates the migration files against the database e.g doing checksum checks to make sure.\
-            that file contents and valid and also checking filenames. Lax does not.",
-        default_value_t = Mode::Strict,
-    )]
+    /// Strict checks the migration files against the history (checksums and file names); lax
+    /// doesn't
+    #[arg(value_enum, global = true, long, default_value_t = Mode::Strict)]
     pub(crate) mode: Mode,
 
     #[command(flatten)]
