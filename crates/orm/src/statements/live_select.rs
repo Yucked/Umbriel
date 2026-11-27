@@ -146,6 +146,23 @@ pub enum LiveEvent<O> {
 /// The SDK replays sign-in, `USE` and variables when a WebSocket reconnects, but not live
 /// queries: after a reconnect the stream stays open and receives nothing, and the SDK gives no
 /// signal of the reconnect. [`resubscribe`](Self::resubscribe) registers the query again.
+///
+/// ```rust,no_run
+/// use futures::StreamExt;
+/// use umbriel::{All, Table, statements::{LiveEvent, live, select}};
+///
+/// # async fn watch(db: &umbriel::Surreal<umbriel::engine::any::Any>) -> umbriel::Result<()> {
+/// let mut notes = live(select(All).from(Table::from("note"))).subscribe(db).await?;
+/// while let Some(event) = notes.next().await {
+///     match event? {
+///         LiveEvent::Create(note) | LiveEvent::Update(note) => println!("now {note:?}"),
+///         LiveEvent::Delete(note) => println!("gone {note:?}"),
+///         LiveEvent::Error(message) => println!("the live query failed: {message:?}"),
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[must_use = "streams do nothing unless you poll them"]
 pub struct LiveStream<O, C: Connection> {
     db: Surreal<C>,
