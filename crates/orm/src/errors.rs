@@ -125,6 +125,19 @@ pub enum Error {
     #[error("no record returned from {0}")]
     RecordNotFound(String),
 
+    /// [`LiveStream::resubscribe`](crate::statements::LiveStream::resubscribe) switched to a new
+    /// subscription, but ending the old one failed: the old live query may still be registered on
+    /// the server, with no stream left to deliver to. The stream already delivers from the new
+    /// subscription.
+    #[error("the replaced live query `{query_id}` may still be registered: {source}")]
+    StaleSubscription {
+        /// The old live query's id.
+        query_id: surrealdb::types::Uuid,
+        /// Why ending it failed.
+        #[source]
+        source: Box<Error>,
+    },
+
     /// A migration failed.
     #[cfg(feature = "migrations")]
     #[error(transparent)]
@@ -174,8 +187,9 @@ impl Error {
     ///   validation, thrown, not-allowed, not-found, already-exists, configuration, or a
     ///   statement that was not executed (`QueryError::NotExecuted`);
     /// - failures after a successful run ([`Error::Conversion`],
-    ///   [`Error::TooManyItemsReturned`], [`Error::RecordNotFound`]) are [`Retry::Never`]: the
-    ///   operation finished, so running it again repeats it;
+    ///   [`Error::TooManyItemsReturned`], [`Error::RecordNotFound`],
+    ///   [`Error::StaleSubscription`]) are [`Retry::Never`]: the operation finished, so running
+    ///   it again repeats it;
     /// - every other SDK error is [`Retry::Uncertain`]: a failed transport, a timeout, a
     ///   cancellation, an unknown commit outcome (SurrealDB 3.3.4 reports it as a query error
     ///   without a kind), and errors without structured details, such as an embedded
@@ -197,7 +211,8 @@ impl Error {
             | Self::TableNotInFamily { .. }
             | Self::Conversion(_)
             | Self::FieldsUnfetchableNotARecordLink(_)
-            | Self::RecordNotFound(_) => Retry::Never,
+            | Self::RecordNotFound(_)
+            | Self::StaleSubscription { .. } => Retry::Never,
             #[cfg(feature = "migrations")]
             Self::Migration(error) => match error.as_ref() {
                 crate::migrations::MigrationError::ProblemWithQuery(error) => error.retry(),
