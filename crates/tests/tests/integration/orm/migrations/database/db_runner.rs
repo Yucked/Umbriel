@@ -203,7 +203,7 @@ mod down {
             .two_way()
             .run_down_migrations(
                 &db,
-                RollbackOptions::new().strategy(RollbackStrategy::Number(3)),
+                RollbackOptions::default().strategy(RollbackStrategy::Number(3)),
             )
             .await;
         assert!(failed.is_err(), "{failed:?}");
@@ -216,7 +216,7 @@ mod down {
             .two_way()
             .run_down_migrations(
                 &db,
-                RollbackOptions::new()
+                RollbackOptions::default()
                     .strategy(RollbackStrategy::Number(2))
                     .mode(Mode::Lax),
             )
@@ -247,7 +247,7 @@ mod down {
             .two_way()
             .run_down_migrations(
                 &db,
-                RollbackOptions::new()
+                RollbackOptions::default()
                     .strategy(RollbackStrategy::Number(2))
                     .mode(Mode::Lax),
             )
