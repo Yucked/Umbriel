@@ -1,6 +1,4 @@
-use surrealdb::types::Duration;
-
-use crate::{Ident, Name, Renderer};
+use crate::{DurationLike, Ident, Name, Renderer};
 
 use super::{DefineOptions, Statement, impl_define_kind, impl_definition};
 
@@ -42,7 +40,7 @@ pub struct DefineSequenceStatement {
     options: DefineOptions,
     batch: Option<u32>,
     start: Option<i64>,
-    timeout: Option<Duration>,
+    timeout: Option<DurationLike>,
 }
 
 impl DefineSequenceStatement {
@@ -58,8 +56,9 @@ impl DefineSequenceStatement {
         self
     }
 
-    /// `TIMEOUT @duration`: how long `sequence::nextval` waits to reserve a batch.
-    pub fn timeout(mut self, timeout: impl Into<Duration>) -> Self {
+    /// `TIMEOUT @duration`: how long `sequence::nextval` waits to reserve a batch. SurrealDB
+    /// 3.3.4 parses it as an expression, like every other `TIMEOUT`.
+    pub fn timeout(mut self, timeout: impl Into<DurationLike>) -> Self {
         self.timeout = Some(timeout.into());
         self
     }
@@ -77,7 +76,7 @@ impl Statement for DefineSequenceStatement {
             out.push_str(" START ").push_display(&start);
         }
         if let Some(timeout) = &self.timeout {
-            out.push_str(" TIMEOUT ").push_syntax(timeout);
+            out.push_str(" TIMEOUT ").push(timeout);
         }
     }
 }
