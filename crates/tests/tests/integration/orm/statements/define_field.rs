@@ -127,6 +127,31 @@ mod rendering {
                 .default_always(0),
             "DEFAULT, VALUE or ASSERT",
         );
+        // S08b: a field has no delete permission, alone or among others.
+        for fors in [
+            vec![umbriel::CrudType::Delete],
+            vec![umbriel::CrudType::Select, umbriel::CrudType::Delete],
+        ] {
+            assert_render_error(
+                &define_field(Field::new("name")).on_table("sale").permissions(
+                    umbriel::statements::for_permission(fors)
+                        .where_(Field::new("owner").equal("alice")),
+                ),
+                "no `delete` permission",
+            );
+        }
+    }
+
+    /// S08b: the server refuses `FOR delete` on a field too, which the render error mirrors.
+    #[tokio::test]
+    async fn the_server_refuses_a_delete_permission_on_a_field() {
+        let (db, _guard) = db().await;
+        let refused = umbriel::Raw::new(
+            "DEFINE FIELD name ON TABLE sale PERMISSIONS FOR delete WHERE true;",
+        )
+        .run(&db)
+        .await;
+        assert!(refused.is_err(), "SurrealDB refuses FOR delete on a field");
     }
 
     #[test]
