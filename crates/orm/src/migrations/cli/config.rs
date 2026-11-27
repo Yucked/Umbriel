@@ -5,7 +5,6 @@ use surrealdb::opt::{
     Config, WaitFor,
     capabilities::{Capabilities, ExperimentalFeature},
 };
-use typed_builder::TypedBuilder;
 
 use surrealdb::engine::any::{Any, connect};
 
@@ -70,7 +69,7 @@ impl From<Experimental> for ExperimentalFeature {
 }
 
 /// The database the command line connects to and its credentials.
-#[derive(Args, Debug, Clone, TypedBuilder)]
+#[derive(Args, Debug, Clone)]
 pub struct DatabaseConnection {
     /// URL or path to connect to a database instance. Supports various backends.
     /// Examples:
@@ -88,55 +87,64 @@ pub struct DatabaseConnection {
 
     /// Database name
     #[arg(global = true, long, default_value_t = String::from("test"))]
-    #[builder(default = "test".into())]
     pub(crate) db: String,
 
     /// Namespace name
     #[arg(global = true, long, default_value_t = String::from("test"))]
-    #[builder(default = "test".into())]
     pub(crate) ns: String,
 
     /// User name
     #[arg(global = true, short, long, default_value_t = String::from("root"))]
-    #[builder(default = "root".into())]
     pub(crate) user: String,
 
     /// Password
     #[arg(global = true, short, long, default_value_t = String::from("root"))]
-    #[builder(default = "root".into())]
     pub(crate) pass: String,
 
     /// Experimental features an embedded engine allows, such as `files` for buckets and
     /// `surrealism` for modules. None by default. A server keeps its own capabilities, so this
     /// has no effect on a remote URL.
     #[arg(global = true, long, value_enum, value_delimiter = ',')]
-    #[builder(default)]
     pub(crate) allow_experimental: Vec<Experimental>,
 
     #[arg(skip)]
-    #[builder(default, setter(strip_option))]
     pub(crate) db_connection: Option<Surreal<Any>>,
 
     /// The namespace `init`, `generate` and `reset` create their comparison databases in (see
     /// [`Comparison`]). Required by those commands; no default.
     #[arg(global = true, long)]
-    #[builder(default, setter(strip_option))]
     pub(crate) comparison_ns: Option<String>,
 
     /// The namespace-level user the generator signs in as, on the same URL: an `OWNER`, since the
     /// generator defines a user of its own in each comparison database (see [`Comparison`]). Its
     /// password is read from `UMBRIEL_COMPARISON_PASS`.
     #[arg(global = true, long)]
-    #[builder(default, setter(strip_option))]
     pub(crate) comparison_user: Option<String>,
 
     /// A comparison already connected, used instead of connecting with the arguments above.
     #[arg(skip)]
-    #[builder(default, setter(strip_option))]
     pub(crate) comparison: Option<Comparison<Any>>,
 }
 
 impl DatabaseConnection {
+    /// A connection made in code: `db`, already signed in with its namespace and database
+    /// selected, and `comparison` for the commands that compare schemas. `url` is the server's
+    /// address, as the command line would name it.
+    pub fn connected(url: UrlDb, db: Surreal<Any>, comparison: Comparison<Any>) -> Self {
+        Self {
+            url,
+            db: "test".to_owned(),
+            ns: "test".to_owned(),
+            user: "root".to_owned(),
+            pass: "root".to_owned(),
+            allow_experimental: Vec::new(),
+            db_connection: Some(db),
+            comparison_ns: None,
+            comparison_user: None,
+            comparison: Some(comparison),
+        }
+    }
+
     /// Connects, signs in, and selects the namespace and database. The in-memory engine is
     /// started with the credentials as its root user; a server is signed in to as a database
     /// user.
@@ -195,7 +203,7 @@ impl DatabaseConnection {
         self.db_connection.as_ref()
     }
 
-    /// The comparison the generator uses: the one given to the builder, or a connection to the
+    /// The comparison the generator uses: the one given to [`connected`](Self::connected), or a connection to the
     /// URL signed in as `--comparison-user` (password from `UMBRIEL_COMPARISON_PASS`) in
     /// `--comparison-ns`. The connection is made once and reused.
     ///
