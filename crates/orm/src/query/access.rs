@@ -1,84 +1,36 @@
-use std::fmt::{self, Display};
+use crate::keywords::keywords;
 
-use crate::{Render, Renderer};
-
-/// A JWT signature algorithm.
-#[expect(missing_docs, reason = "each variant is the algorithm's own name")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum JwtAlgorithm {
-    EDDSA,
-    ES256,
-    ES384,
-    ES512,
-    HS256,
-    HS384,
-    HS512,
-    PS256,
-    PS384,
-    PS512,
-    RS256,
-    RS384,
-    RS512,
-}
-
-impl JwtAlgorithm {
-    /// The algorithm's SurrealQL keyword.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            JwtAlgorithm::EDDSA => "EDDSA",
-            JwtAlgorithm::ES256 => "ES256",
-            JwtAlgorithm::ES384 => "ES384",
-            JwtAlgorithm::ES512 => "ES512",
-            JwtAlgorithm::HS256 => "HS256",
-            JwtAlgorithm::HS384 => "HS384",
-            JwtAlgorithm::HS512 => "HS512",
-            JwtAlgorithm::PS256 => "PS256",
-            JwtAlgorithm::PS384 => "PS384",
-            JwtAlgorithm::PS512 => "PS512",
-            JwtAlgorithm::RS256 => "RS256",
-            JwtAlgorithm::RS384 => "RS384",
-            JwtAlgorithm::RS512 => "RS512",
-        }
+keywords! {
+    /// A JWT signature algorithm.
+    #[expect(missing_docs, reason = "each variant is the algorithm's own name")]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum JwtAlgorithm: render {
+        EDDSA => "EDDSA",
+        ES256 => "ES256",
+        ES384 => "ES384",
+        ES512 => "ES512",
+        HS256 => "HS256",
+        HS384 => "HS384",
+        HS512 => "HS512",
+        PS256 => "PS256",
+        PS384 => "PS384",
+        PS512 => "PS512",
+        RS256 => "RS256",
+        RS384 => "RS384",
+        RS512 => "RS512",
     }
 }
 
-impl Display for JwtAlgorithm {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl Render for JwtAlgorithm {
-    fn render(&self, out: &mut Renderer) {
-        out.push_str(self.as_str());
-    }
-}
-
-/// The level an access method, a user, a removal or an `INFO` applies to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Level {
-    /// `ROOT`
-    Root,
-    /// `NAMESPACE`: the current namespace.
-    Namespace,
-    /// `DATABASE`: the current database.
-    Database,
-}
-
-impl Level {
-    /// The level's SurrealQL keyword.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Level::Root => "ROOT",
-            Level::Namespace => "NAMESPACE",
-            Level::Database => "DATABASE",
-        }
-    }
-}
-
-impl Render for Level {
-    fn render(&self, out: &mut Renderer) {
-        out.push_str(self.as_str());
+keywords! {
+    /// The level an access method, a user, a removal or an `INFO` applies to.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum Level: render {
+        /// `ROOT`
+        Root => "ROOT",
+        /// `NAMESPACE`: the current namespace.
+        Namespace => "NAMESPACE",
+        /// `DATABASE`: the current database.
+        Database => "DATABASE",
     }
 }
 

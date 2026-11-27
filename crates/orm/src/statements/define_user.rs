@@ -2,7 +2,7 @@ use std::fmt::{self, Display};
 
 use surrealdb::types::Value;
 
-use crate::{Level, Name, Renderer, User};
+use crate::{Level, Name, Renderer, User, keywords::keywords};
 
 use super::{
     DefineOptions, Statement,
@@ -104,24 +104,16 @@ impl DefineUserInit {
     }
 }
 
-/// A system user's role.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UserRole {
-    /// Owner
-    Owner,
-    /// Editor
-    Editor,
-    /// Viewer
-    Viewer,
-}
-
-impl Display for UserRole {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            UserRole::Owner => "OWNER",
-            UserRole::Editor => "EDITOR",
-            UserRole::Viewer => "VIEWER",
-        })
+keywords! {
+    /// A system user's role.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum UserRole {
+        /// Owner
+        Owner => "OWNER",
+        /// Editor
+        Editor => "EDITOR",
+        /// Viewer
+        Viewer => "VIEWER",
     }
 }
 

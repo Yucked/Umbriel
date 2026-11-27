@@ -1,9 +1,8 @@
-use std::fmt::{self, Display};
-
 use surrealdb::types::Value;
 
 use crate::{
     DurationLike, ObjectLike, Render, Renderer, StrandLike, ValueLike,
+    keywords::keywords,
     render::{is_identifier, push_path},
 };
 
@@ -13,33 +12,22 @@ use super::{
     impl_define_options, impl_definition,
 };
 
-/// An HTTP method an API action answers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ApiMethod {
-    /// `DELETE`
-    Delete,
-    /// `GET`
-    Get,
-    /// `PATCH`
-    Patch,
-    /// `POST`
-    Post,
-    /// `PUT`
-    Put,
-    /// `TRACE`
-    Trace,
-}
-
-impl Display for ApiMethod {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Delete => "DELETE",
-            Self::Get => "GET",
-            Self::Patch => "PATCH",
-            Self::Post => "POST",
-            Self::Put => "PUT",
-            Self::Trace => "TRACE",
-        })
+keywords! {
+    /// An HTTP method an API action answers.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum ApiMethod {
+        /// `DELETE`
+        Delete => "DELETE",
+        /// `GET`
+        Get => "GET",
+        /// `PATCH`
+        Patch => "PATCH",
+        /// `POST`
+        Post => "POST",
+        /// `PUT`
+        Put => "PUT",
+        /// `TRACE`
+        Trace => "TRACE",
     }
 }
 
@@ -157,42 +145,33 @@ impl ApiConfig {
 
 impl_permissions!(single: ApiConfig);
 
-/// The format `api::req::body` parses a request body from, or `api::res::body` writes a
-/// response body in. `Auto` follows the request's `Content-Type` or `Accept` header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum BodyStrategy {
-    /// `auto`
-    Auto,
-    /// `json`
-    Json,
-    /// `cbor`
-    Cbor,
-    /// `flatbuffers`
-    Flatbuffers,
-    /// `plain`: UTF-8 text.
-    Plain,
-    /// `bytes`
-    Bytes,
-    /// `native`: SurrealDB's own format.
-    Native,
+keywords! {
+    /// The format `api::req::body` parses a request body from, or `api::res::body` writes a
+    /// response body in. `Auto` follows the request's `Content-Type` or `Accept` header.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[non_exhaustive]
+    pub enum BodyStrategy {
+        /// `auto`
+        Auto => "auto",
+        /// `json`
+        Json => "json",
+        /// `cbor`
+        Cbor => "cbor",
+        /// `flatbuffers`
+        Flatbuffers => "flatbuffers",
+        /// `plain`: UTF-8 text.
+        Plain => "plain",
+        /// `bytes`
+        Bytes => "bytes",
+        /// `native`: SurrealDB's own format.
+        Native => "native",
+    }
 }
 
 impl BodyStrategy {
     /// The name SurrealDB reads, as a string value.
     fn value(self) -> ValueLike {
-        ValueLike::value(
-            match self {
-                Self::Auto => "auto",
-                Self::Json => "json",
-                Self::Cbor => "cbor",
-                Self::Flatbuffers => "flatbuffers",
-                Self::Plain => "plain",
-                Self::Bytes => "bytes",
-                Self::Native => "native",
-            }
-            .to_owned(),
-        )
+        ValueLike::value(self.as_str().to_owned())
     }
 }
 

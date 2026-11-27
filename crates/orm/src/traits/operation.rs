@@ -2,139 +2,89 @@ use std::sync::Arc;
 
 use crate::{
     Aliasable, ArrayLike, Conditional, GeometryLike, NumberLike, Ordinal, Render, Renderer, Setter,
-    StrandLike, ValueLike, statements::Distance,
+    StrandLike, ValueLike, keywords::keywords, statements::Distance,
 };
 
-/// A SurrealQL binary operator.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Operator {
-    /// `=`
-    Equal,
-    /// `!=`
-    NotEqual,
-    /// `==`
-    Exact,
-    /// `?=`
-    AnyEqual,
-    /// `*=`
-    AllEqual,
-    /// `<`
-    LessThan,
-    /// `<=`
-    LessThanOrEqual,
-    /// `>`
-    MoreThan,
-    /// `>=`
-    MoreThanOrEqual,
-    /// `+`
-    Add,
-    /// `-`
-    Sub,
-    /// `*`
-    Mul,
-    /// `/`
-    Div,
-    /// `**`
-    Pow,
-    /// `&&`
-    TruthyAnd,
-    /// `||`
-    TruthyOr,
-    /// `AND`
-    And,
-    /// `OR`
-    Or,
-    /// `IS`
-    Is,
-    /// `IS NOT`
-    IsNot,
-    /// `CONTAINS`
-    Contain,
-    /// `CONTAINSNOT`
-    NotContain,
-    /// `CONTAINSALL`
-    ContainAll,
-    /// `CONTAINSANY`
-    ContainAny,
-    /// `CONTAINSNONE`
-    ContainNone,
-    /// `INSIDE`
-    Inside,
-    /// `NOTINSIDE`
-    NotInside,
-    /// `ALLINSIDE`
-    AllInside,
-    /// `ANYINSIDE`
-    AnyInside,
-    /// `NONEINSIDE`
-    NoneInside,
-    /// `OUTSIDE`
-    Outside,
-    /// `INTERSECTS`
-    Intersects,
-    /// `@@`
-    Matches,
-    /// `+=`
-    Inc,
-    /// `-=`
-    Dec,
-    /// `%`
-    Modulo,
-    /// `??`
-    NullCoalescing,
-    /// `?:`
-    TernaryCondition,
-}
-
-impl Operator {
-    /// The operator's SurrealQL token.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Equal => "=",
-            Self::NotEqual => "!=",
-            Self::Exact => "==",
-            Self::AnyEqual => "?=",
-            Self::AllEqual => "*=",
-            Self::LessThan => "<",
-            Self::LessThanOrEqual => "<=",
-            Self::MoreThan => ">",
-            Self::MoreThanOrEqual => ">=",
-            Self::Add => "+",
-            Self::Sub => "-",
-            Self::Mul => "*",
-            Self::Div => "/",
-            Self::Pow => "**",
-            Self::TruthyAnd => "&&",
-            Self::TruthyOr => "||",
-            Self::And => "AND",
-            Self::Or => "OR",
-            Self::Is => "IS",
-            Self::IsNot => "IS NOT",
-            Self::Contain => "CONTAINS",
-            Self::NotContain => "CONTAINSNOT",
-            Self::ContainAll => "CONTAINSALL",
-            Self::ContainAny => "CONTAINSANY",
-            Self::ContainNone => "CONTAINSNONE",
-            Self::Inside => "INSIDE",
-            Self::NotInside => "NOTINSIDE",
-            Self::AllInside => "ALLINSIDE",
-            Self::AnyInside => "ANYINSIDE",
-            Self::NoneInside => "NONEINSIDE",
-            Self::Outside => "OUTSIDE",
-            Self::Intersects => "INTERSECTS",
-            Self::Matches => "@@",
-            Self::Inc => "+=",
-            Self::Dec => "-=",
-            Self::Modulo => "%",
-            Self::NullCoalescing => "??",
-            Self::TernaryCondition => "?:",
-        }
-    }
-}
-
-impl Render for Operator {
-    fn render(&self, out: &mut Renderer) {
-        out.push_str(self.as_str());
+keywords! {
+    /// A SurrealQL binary operator.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Operator: render {
+        /// `=`
+        Equal => "=",
+        /// `!=`
+        NotEqual => "!=",
+        /// `==`
+        Exact => "==",
+        /// `?=`
+        AnyEqual => "?=",
+        /// `*=`
+        AllEqual => "*=",
+        /// `<`
+        LessThan => "<",
+        /// `<=`
+        LessThanOrEqual => "<=",
+        /// `>`
+        MoreThan => ">",
+        /// `>=`
+        MoreThanOrEqual => ">=",
+        /// `+`
+        Add => "+",
+        /// `-`
+        Sub => "-",
+        /// `*`
+        Mul => "*",
+        /// `/`
+        Div => "/",
+        /// `**`
+        Pow => "**",
+        /// `&&`
+        TruthyAnd => "&&",
+        /// `||`
+        TruthyOr => "||",
+        /// `AND`
+        And => "AND",
+        /// `OR`
+        Or => "OR",
+        /// `IS`
+        Is => "IS",
+        /// `IS NOT`
+        IsNot => "IS NOT",
+        /// `CONTAINS`
+        Contain => "CONTAINS",
+        /// `CONTAINSNOT`
+        NotContain => "CONTAINSNOT",
+        /// `CONTAINSALL`
+        ContainAll => "CONTAINSALL",
+        /// `CONTAINSANY`
+        ContainAny => "CONTAINSANY",
+        /// `CONTAINSNONE`
+        ContainNone => "CONTAINSNONE",
+        /// `INSIDE`
+        Inside => "INSIDE",
+        /// `NOTINSIDE`
+        NotInside => "NOTINSIDE",
+        /// `ALLINSIDE`
+        AllInside => "ALLINSIDE",
+        /// `ANYINSIDE`
+        AnyInside => "ANYINSIDE",
+        /// `NONEINSIDE`
+        NoneInside => "NONEINSIDE",
+        /// `OUTSIDE`
+        Outside => "OUTSIDE",
+        /// `INTERSECTS`
+        Intersects => "INTERSECTS",
+        /// `@@`
+        Matches => "@@",
+        /// `+=`
+        Inc => "+=",
+        /// `-=`
+        Dec => "-=",
+        /// `%`
+        Modulo => "%",
+        /// `??`
+        NullCoalescing => "??",
+        /// `?:`
+        TernaryCondition => "?:",
     }
 }
 

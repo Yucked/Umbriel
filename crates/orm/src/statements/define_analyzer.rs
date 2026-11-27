@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::{Ident, Name, Renderer, render::push_path};
+use crate::{Ident, Name, Renderer, keywords::keywords, render::push_path};
 
 use super::{DefineOptions, Statement, impl_define_options, impl_definition};
 
@@ -32,69 +32,39 @@ impl Display for Tokenizer {
     }
 }
 
-/// A language for the `segment` tokenizer.
-#[expect(missing_docs, reason = "each variant is the language's own name")]
-#[derive(Debug, Clone)]
-pub enum SegmentLanguage {
-    Chinese,
-    Japanese,
-    Korean,
-}
-
-impl Display for SegmentLanguage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            SegmentLanguage::Chinese => "CHINESE",
-            SegmentLanguage::Japanese => "JAPANESE",
-            SegmentLanguage::Korean => "KOREAN",
-        })
+keywords! {
+    /// A language for the `segment` tokenizer.
+    #[expect(missing_docs, reason = "each variant is the language's own name")]
+    #[derive(Debug, Clone)]
+    pub enum SegmentLanguage {
+        Chinese => "CHINESE",
+        Japanese => "JAPANESE",
+        Korean => "KOREAN",
     }
 }
 
-/// A language for the snowball stemming filter.
-#[expect(missing_docs, reason = "each variant is the language's own name")]
-#[derive(Debug, Clone)]
-pub enum SnowballLanguage {
-    Arabic,
-    Danish,
-    Dutch,
-    English,
-    French,
-    German,
-    Greek,
-    Hungarian,
-    Italian,
-    Norwegian,
-    Portuguese,
-    Romanian,
-    Russian,
-    Spanish,
-    Swedish,
-    Tamil,
-    Turkish,
-}
-
-impl Display for SnowballLanguage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            SnowballLanguage::Arabic => "arabic",
-            SnowballLanguage::Danish => "danish",
-            SnowballLanguage::Dutch => "dutch",
-            SnowballLanguage::English => "english",
-            SnowballLanguage::French => "french",
-            SnowballLanguage::German => "german",
-            SnowballLanguage::Greek => "greek",
-            SnowballLanguage::Hungarian => "hungarian",
-            SnowballLanguage::Italian => "italian",
-            SnowballLanguage::Norwegian => "norwegian",
-            SnowballLanguage::Portuguese => "portuguese",
-            SnowballLanguage::Romanian => "romanian",
-            SnowballLanguage::Russian => "russian",
-            SnowballLanguage::Spanish => "spanish",
-            SnowballLanguage::Swedish => "swedish",
-            SnowballLanguage::Tamil => "tamil",
-            SnowballLanguage::Turkish => "turkish",
-        })
+keywords! {
+    /// A language for the snowball stemming filter.
+    #[expect(missing_docs, reason = "each variant is the language's own name")]
+    #[derive(Debug, Clone)]
+    pub enum SnowballLanguage {
+        Arabic => "arabic",
+        Danish => "danish",
+        Dutch => "dutch",
+        English => "english",
+        French => "french",
+        German => "german",
+        Greek => "greek",
+        Hungarian => "hungarian",
+        Italian => "italian",
+        Norwegian => "norwegian",
+        Portuguese => "portuguese",
+        Romanian => "romanian",
+        Russian => "russian",
+        Spanish => "spanish",
+        Swedish => "swedish",
+        Tamil => "tamil",
+        Turkish => "turkish",
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::{Render, Renderer};
+use crate::keywords::keywords;
 
 /// Direction of the connection edge
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,23 +19,15 @@ impl EdgeDirection {
     }
 }
 
-/// Arrow for relation edge direction
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Arrow {
-    /// Right arrow
-    Right,
-    /// Left arrow
-    Left,
-    /// `<->`: edges in both directions.
-    Both,
-}
-
-impl Render for Arrow {
-    fn render(&self, out: &mut Renderer) {
-        out.push_str(match self {
-            Arrow::Right => "->",
-            Arrow::Left => "<-",
-            Arrow::Both => "<->",
-        });
+keywords! {
+    /// Arrow for relation edge direction
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Arrow: render {
+        /// Right arrow
+        Right => "->",
+        /// Left arrow
+        Left => "<-",
+        /// `<->`: edges in both directions.
+        Both => "<->",
     }
 }
