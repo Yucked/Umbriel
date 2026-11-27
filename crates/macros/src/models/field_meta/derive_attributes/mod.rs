@@ -1,5 +1,4 @@
 mod db_field_types;
-mod generics;
 mod ident;
 
 use darling::FromField;
