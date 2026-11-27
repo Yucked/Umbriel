@@ -86,7 +86,7 @@ impl EmbeddedMigrationsOneWay {
                         file.name.to_string(),
                     ));
                 }
-                Ok(MigrationFileOneWay::new(meta))
+                MigrationFileOneWay::new(meta)
             })
             .collect()
     }

@@ -43,8 +43,19 @@ pub struct MigrationFileOneWay(FileMetadata);
 
 impl MigrationFileOneWay {
     /// Wraps a one-way file.
-    pub fn new(file: FileMetadata) -> Self {
-        Self(file)
+    ///
+    /// # Errors
+    ///
+    /// [`MigrationError::InvalidMigrationName`] when the file is the up or down half of a two-way
+    /// migration.
+    pub fn new(file: FileMetadata) -> MigrationResult<Self> {
+        if !file.name.is_unidirectional() {
+            return Err(MigrationError::InvalidMigrationName(format!(
+                "`{}` is half of a two-way migration, not a one-way one",
+                file.name
+            )));
+        }
+        Ok(Self(file))
     }
 
     /// The file's name.
@@ -73,7 +84,6 @@ impl FileMetadata {
         Self { name, content }
     }
 }
-
 
 /// A migration of either kind.
 #[derive(Debug, Clone)]
@@ -111,7 +121,7 @@ impl MigrationFile {
                 let file = MigrationFileOneWay::new(FileMetadata {
                     name: MigrationFilename::create_oneway(timestamp, migration_basename)?,
                     content: up_queries.clone(),
-                });
+                })?;
                 MigrationFile::OneWay(file)
             }
         };
