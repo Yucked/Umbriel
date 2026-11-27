@@ -9,10 +9,10 @@
 //! use umbriel::{*, functions::vector};
 //! let embedding = Field::new("embedding");
 //! assert_eq!(
-//!     vector::similarity::cosine!(embedding, [1, 0, 0]).to_debug_sql(),
+//!     vector::similarity::cosine(embedding, [1, 0, 0]).to_debug_sql(),
 //!     "vector::similarity::cosine(embedding, [1, 0, 0])"
 //! );
-//! assert_eq!(vector::sum!([[1, 2], [3, 4]]).to_debug_sql(), "vector::sum([[1, 2], [3, 4]])");
+//! assert_eq!(vector::sum([[1, 2], [3, 4]]).to_debug_sql(), "vector::sum([[1, 2], [3, 4]])");
 //! ```
 
 use crate::kinds;
@@ -43,25 +43,6 @@ functions! { $ "vector" "::", vector, vector;
     /// The element-wise sum of every vector in `vectors`; `NONE` when there are none.
     sum(vectors: ArrayLike) -> kinds::Optional<kinds::Array<kinds::Number>>;
 }
-
-// The paths `vector` exported before its functions moved to the catalogue: the distance and
-// similarity functions at the module root, and each two-vector macro under its full name.
-pub use distance::{
-    chebyshev as vector_distance_chebyshev, chebyshev_fn as distance_chebyshev_fn,
-    euclidean as vector_distance_euclidean, euclidean_fn as distance_euclidean_fn,
-    hamming as vector_distance_hamming, hamming_fn as distance_hamming_fn,
-    manhattan as vector_distance_manhattan, manhattan_fn as distance_manhattan_fn,
-    minkowski as vector_distance_minkowski, minkowski_fn as distance_minkowski_fn,
-};
-pub use similarity::{
-    cosine as vector_similarity_cosine, cosine_fn as similarity_cosine_fn,
-    jaccard as vector_similarity_jaccard, jaccard_fn as similarity_jaccard_fn,
-};
-pub use {
-    add as vector_add, angle as vector_angle, cross as vector_cross, divide as vector_divide,
-    dot as vector_dot, multiply as vector_multiply, project as vector_project,
-    subtract as vector_subtract,
-};
 
 /// Distances between vectors, `vector::distance::*`.
 pub mod distance {
