@@ -1,25 +1,19 @@
-// Statement syntax
-// RELATE [ ONLY ] [ OR UPDATE ] @from_record -> @table | @edge_record -> @to_record
-// 	[ CONTENT @value
-// 	  | SET @field = @value ...
-// 	]
-// The parser also accepts `MERGE`, `PATCH`, `REPLACE` and `UNSET`, which the engine applies as for
-// every other write (`doc/alter.rs` `process_record_data` in 3.3.4), keeping `in` and `out`.
-// 	[ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... | RETURN VALUE @statement_param ]
-// 	[ TIMEOUT @duration ]
-// ;
+//! `RELATE`. Syntax: <https://surrealdb.com/docs/surrealql/statements/relate>. The parser also
+//! accepts `MERGE`, `PATCH`, `REPLACE` and `UNSET`, which the engine applies as for every other
+//! write (`doc/alter.rs` `process_record_data` in 3.3.4), keeping `in` and `out`.
+
 use std::marker::PhantomData;
 
-use surrealdb::types::{SurrealValue, ToSql};
+use surrealdb::types::ToSql;
 
 use crate::{
-    DurationLike, Edge, Field, ModelMerge, PatchOp, Renderer, Setter, ValueLike,
+    DurationLike, Edge, Field, Renderer,
     query::field::{EdgeStep, Relation},
 };
 
 use super::{
     Cardinality, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
-    data::{ContentIds, DataClause, Unsettables},
+    data::{ContentIds, DataClause, data_clause_methods},
     impl_statement,
     returning::return_methods,
 };
@@ -182,69 +176,12 @@ fn push_content_errors(content: &ContentIds, relation: &Relation<'_>, out: &mut 
     }
 }
 
-/// Implements the data clauses and `TIMEOUT` both RELATE builders share.
+/// Implements the data clauses and `TIMEOUT` both RELATE builders share. The engine keeps an
+/// edge's `in` and `out` under every data clause; under `OR UPDATE` they apply to the existing
+/// edge. `CONTENT`'s id, `in` and `out` are checked against the path when it is rendered.
 macro_rules! relate_clauses {
     ($statement:ident) => {
-        impl<T: Edge, R: ReturnMode, C: Cardinality> $statement<T, R, C> {
-            /// Sets the edge's content (`CONTENT`). Its id, `in` and `out` must agree with the
-            /// record ids the path was built from: the edge record, or a record in the edge
-            /// table, and the endpoints. Otherwise the statement fails when it is rendered.
-            pub fn content(mut self, content: T) -> Self {
-                self.body.data = Some(DataClause::content(content));
-                self
-            }
-
-            /// Sets fields of the edge (`SET`), including incrementing and decrementing numeric
-            /// values and adding or removing values from arrays, as `UPDATE`'s
-            /// [`set`](crate::statements::UpdateStatement::set) does. Repeated calls add to the
-            /// assignments.
-            pub fn set(mut self, settables: impl Into<Vec<Setter>>) -> Self {
-                self.body.data = Some(DataClause::set(self.body.data.take(), settables.into()));
-                self
-            }
-
-            /// Merges the non-`Keep` fields of a generated `<Edge>Merge` into the edge (`MERGE`):
-            /// into a new edge, or into the existing one under `OR UPDATE`.
-            pub fn merge(mut self, merge: impl ModelMerge<Model = T>) -> Self {
-                self.body.data = Some(DataClause::Merge(ValueLike::new(merge.into_object())));
-                self
-            }
-
-            /// Applies JSON Patch operations to the edge (`PATCH`); repeated calls add to the
-            /// operations.
-            pub fn patch(mut self, patch_op: impl Into<Vec<PatchOp>>) -> Self {
-                self.body.data = Some(DataClause::patch(self.body.data.take(), patch_op.into()));
-                self
-            }
-
-            /// Replaces the edge's fields with the given value (`REPLACE`), respecting `READONLY`
-            /// fields. The engine keeps the edge's `in` and `out`.
-            pub fn replace(mut self, replacement: impl SurrealValue) -> Self {
-                self.body.data = Some(DataClause::Replace(ValueLike::value(replacement)));
-                self
-            }
-
-            /// Removes fields from the edge (`UNSET`); under `OR UPDATE` it removes stored
-            /// properties of the existing edge. Repeated calls add to the fields.
-            pub fn unset(mut self, fields: impl Into<Unsettables>) -> Self {
-                self.body.data = Some(DataClause::unset(self.body.data.take(), fields.into().0));
-                self
-            }
-
-            /// Sets the timeout duration for the query, bound as a query parameter.
-            pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
-                self.body.timeout = Some(duration.into());
-                self
-            }
-
-            fn with_mode<M: ReturnMode>(self, mode: M) -> $statement<T, M, C> {
-                $statement {
-                    body: self.body,
-                    mode,
-                    cardinality: PhantomData,
-                }
-            }
-        }
+        data_clause_methods!(Edge, $statement, "edge");
 
         impl_statement!([T: Edge, R: ReturnMode, C: Cardinality] $statement<T, R, C>);
 
