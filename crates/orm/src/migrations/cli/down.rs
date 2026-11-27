@@ -9,12 +9,8 @@ pub struct Down {
     #[command(flatten)]
     strategy: RollbackStrategyStruct,
 
-    #[arg(
-        global = true,
-        long,
-        help = "If to prune migration files after rollback",
-        default_value_t = false
-    )]
+    /// Delete the rolled-back migration files afterwards
+    #[arg(global = true, long, default_value_t = false)]
     pub(crate) prune: bool,
 }
 
@@ -29,23 +25,18 @@ impl Down {
 #[derive(Args, Debug, Clone, TypedBuilder)]
 #[group(required = false, multiple = false)]
 pub struct RollbackStrategyStruct {
-    /// Rollback to the previous migration
-    #[arg(long, help = "Rollback to the previous migration")]
+    /// Roll back the last applied migration
+    #[arg(long)]
     #[builder(default)]
     pub(crate) previous: bool,
 
-    /// Rollback by count/number
-    #[arg(short, long, help = "Rollback by the number specified")]
+    /// Roll back this many applied migrations
+    #[arg(short, long)]
     #[builder(default, setter(strip_option))]
     pub(crate) number: Option<u32>,
 
-    /// Rollback till a specific migration ID
-    #[arg(
-        short,
-        long,
-        value_parser = mig_name_parser,
-        help = "Rollback till a specific migration ID"
-    )]
+    /// Roll back till a specific migration, named by its timestamp and name
+    #[arg(short, long)]
     #[builder(default, setter(strip_option))]
     pub(crate) till: Option<MigrationFilename>,
 }
