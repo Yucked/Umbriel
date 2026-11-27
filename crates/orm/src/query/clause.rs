@@ -7,7 +7,7 @@ use crate::{
     statements::{LetStatement, Subquery},
 };
 
-use super::Filter;
+use crate::Filter;
 
 /// Use to generate a filter for a query. Can be used as part of a statement
 /// or filtering of a node or edge.
@@ -557,7 +557,7 @@ impl AnyEdgeFilter {
 /// # pub type StudentWritesBook = Writes<Student, Book>;
 /// let likes = Table::new("likes");
 /// let path = Student::with(Student::id("alice"))
-///     .writes__(any_other_edges(&[likes]).where_(Field::new("count").lte(50)))
+///     .writes__(any_other_edges(&[likes]).where_(Field::new("count").less_than_or_equal(50)))
 ///     .book(E);
 /// assert_eq!(
 ///     Field::from(path).to_debug_sql(),
