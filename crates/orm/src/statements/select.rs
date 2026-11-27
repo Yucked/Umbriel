@@ -810,6 +810,56 @@ impl SelectStatementInit {
         }
     }
 
+    /// Writes the statement as `LIVE SELECT`, which SurrealDB 3.3.4 parses as
+    /// `LIVE SELECT [DIFF | @fields] FROM @table [WHERE @condition] [FETCH @fields]`
+    /// (`parse_live_stmt`): one target, and none of the other clauses, each of which is a render
+    /// error here. With `diff`, the projection is replaced by `DIFF`, so it must be `*`.
+    pub(crate) fn render_live(&self, diff: bool, only: bool, out: &mut Renderer) {
+        let unsupported = [
+            (only, "ONLY"),
+            (!self.omitted_fields.is_empty(), "OMIT"),
+            (self.index_hint.is_some(), "WITH"),
+            (!self.split.is_empty(), "SPLIT"),
+            (!self.group_by.is_empty() || self.group_all, "GROUP"),
+            (!self.order_by.is_empty() || self.order_rand, "ORDER BY"),
+            (self.limit.is_some(), "LIMIT"),
+            (self.start.is_some(), "START"),
+            (self.version.is_some(), "VERSION"),
+            (self.timeout.is_some(), "TIMEOUT"),
+            (self.for_update, "FOR UPDATE"),
+            (self.tempfiles, "TEMPFILES"),
+        ];
+        for (_, clause) in unsupported.iter().filter(|(present, _)| *present) {
+            out.push_error(format!("LIVE SELECT does not take {clause}"));
+        }
+        if self.targets.len() != 1 {
+            out.push_error("LIVE SELECT takes exactly one table");
+        }
+
+        out.push_str("LIVE SELECT ");
+        if diff {
+            let all = self.selection_type == SelectionType::Select
+                && self.projections.len() == 1
+                && self.projections.iter().all(ValueLike::is_all);
+            if !all {
+                out.push_error("LIVE SELECT DIFF replaces the projection, which must be `*`");
+            }
+            out.push_str("DIFF");
+        } else {
+            if self.selection_type == SelectionType::SelectValue {
+                out.push_str("VALUE ");
+            }
+            out.push(&self.projections);
+        }
+        out.push_str(" FROM ").push(&self.targets);
+        if let Some(condition) = &self.where_ {
+            out.push_str(" WHERE ").push(condition);
+        }
+        if !self.fetch.is_empty() {
+            out.push_str(" FETCH ").push(&self.fetch);
+        }
+    }
+
     /// The combinations SurrealDB documents `FOR UPDATE` as refusing.
     fn push_for_update_errors(&self, grouped: bool, out: &mut Renderer) {
         if !self.record_targets {
@@ -1375,6 +1425,27 @@ impl<T: Model, C: Cardinality> SelectStatement<T, C> {
 impl<O, C: Cardinality> Statement for SelectStatement<O, C> {
     fn render_body(&self, out: &mut Renderer) {
         self.select.render_select(C::ONLY, out);
+    }
+}
+
+impl<O: SurrealValue + 'static, C: Cardinality> SelectStatement<O, C> {
+    /// Streams the selected rows, each decoded into `O`, then the statement's end. See
+    /// [`RowStream`](crate::RowStream) for what the items guarantee: a row is provisional until
+    /// the end, and a row that doesn't decode is an error of that row only.
+    ///
+    /// # Errors
+    ///
+    /// The statement's render errors, or the SDK's refusal to start the query.
+    pub fn stream(&self, db: &impl Executor) -> Result<crate::RowStream<O>> {
+        crate::execution::stream_query(db, self.to_query()?, crate::execution::decode::<O>)
+    }
+}
+
+impl<O, C: Cardinality> SelectStatement<O, C> {
+    /// The clauses `LIVE SELECT` is rendered from, and whether the statement has `ONLY`, which
+    /// `LIVE SELECT` refuses.
+    pub(crate) fn into_live_parts(self) -> (SelectStatementInit, bool) {
+        (self.select, C::ONLY)
     }
 }
 
