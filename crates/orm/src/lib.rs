@@ -12,7 +12,6 @@ mod data_model;
 pub mod functions;
 mod helpers;
 pub mod kinds;
-mod operators_macros;
 mod query;
 mod render;
 #[doc = include_str!("docs/statements.md")]
@@ -21,17 +20,66 @@ mod traits;
 /// For compile time validations
 pub mod validators;
 
-pub use data_model::*;
-pub use errors::*;
-pub use execution::Executor;
+pub use data_model::{Cast, Constant, cast, cast_dynamic};
+pub use errors::{Error, Result, Retry, StatementContext};
+pub use execution::{Executor, RowStream, StreamEvent};
 pub use functions::count;
-pub use helpers::*;
-pub use query::*;
+pub use query::access::{JwtAlgorithm, Level, OnDatabase, OnLevel, OnNamespace, OnRoot};
+pub use query::alias::{Alias, AliasName, Aliasable};
+pub use query::arrow::{Arrow, EdgeDirection};
+pub use query::bracket::{Bracket, bracket};
+pub use query::clause::{
+    All, AnyEdgeFilter, Clause, ClauseType, E, EdgeClause, Empty, Index, IntoNodeClause, Last,
+    NodeAliasClause, NodeClause, ObjectClause, any_other_edges, index, where_,
+};
+pub use query::closure::{Closure, closure};
+pub use query::crud_type::CrudType;
+pub use query::data_types::{
+    ArrayLike, BoolLike, BytesLike, ClosureLike, DatetimeLike, DurationLike, FileLike,
+    GeometryLike, IndexName, NONE, NULL, NumberLike, ObjectLike, RecordIdLike, SetLike, StrandLike,
+    TableLike,
+};
+pub use query::expression::Expression;
+pub use query::field::{Destructure, Field, Graph, IdiomPart, Lookup, Recurse, ShortestTarget};
+pub use query::filter::{Filter, cond};
+pub use query::flatten::{FlatPatch, StoredFields};
+pub use query::function::{Function, MlVersion, MlVersionError};
+pub use query::idiom::{Access, Database, Event, Ident, Name, Namespace, TableIndex, Tables, User};
+pub use query::interval::Interval;
+pub use query::links::{LinkMany, LinkOne, LinkPath, LinkSelf, Reference, Relate};
+pub use query::merge::{FlatMerge, Merge, MergeFields, MergeObject, ModelMerge};
+pub use query::ordinal::Ordinal;
+pub use query::param::{Param, ParamNameError};
+pub use query::params_standard::{
+    ParamAccess, ParamAction, ParamAfter, ParamAuth, ParamBefore, ParamEvent, ParamFile,
+    ParamInput, ParamParent, ParamReference, ParamRequest, ParamSession, ParamTarget, ParamThis,
+    ParamToken, ParamValue, access, action, after, auth, before, event, file, input, parent,
+    reference, request, session, target, this, token, value,
+};
+pub use query::patch::{ModelPatch, Nullable, Patch};
+pub use query::projection::{FieldTuple, Projections};
+pub use query::record_id::{RecordId, RecordKey, RecordRange};
+pub use query::table_of::{TableOf, TableSpec};
+pub use query::value_like::ValueLike;
 pub use render::{Fragment, GENERATED_PARAM_PREFIX, Query, Render, Renderer};
 pub use statements::select::CanOrder;
-pub use statements::utils::*;
+pub use statements::utils::{Block, Chainable, QueryChain, block, chain};
 pub use statements::{Models, WritableModels};
-pub use traits::*;
+pub use traits::access::RecordAccessDefinition;
+pub use traits::db_resources::DbResources;
+pub use traits::general::{AllGetter, Conditional, Queryable};
+pub use traits::model::{
+    Edge, FieldMetadata, Links, Model, Node, Object, SchemaGetter, SurrealCrud, SurrealCrudNode,
+    SurrealRead, Writable,
+};
+pub use traits::operation::{Match, Operatable, Operation, Operator, negate, not, truthy};
+pub use traits::patch_op::{PatchOp, PatchOpConversionError, Patchable};
+pub use traits::raw::Raw;
+pub use traits::setter::{
+    ElementField, Setter, SetterArg, SetterArray, SetterAssignable, SetterNumeric,
+};
+pub use traits::statements::Runnable;
+pub use traits::table_resources::{FieldChangeMeta, TableResources};
 
 /// SurrealDB's value types (`Value`, `RecordId`, `Datetime`, `Kind`, …) and the `SurrealValue`
 /// conversion trait models derive.
@@ -72,7 +120,7 @@ pub mod migrations;
 #[doc = include_str!("docs/model.md")]
 pub use umbriel_macros::model;
 
-pub use umbriel_macros::{Models, Pickable, TableResources, pick};
+pub use umbriel_macros::{Models, Pickable, pick};
 
 /// # Example
 ///
@@ -124,7 +172,7 @@ pub use umbriel_macros::query;
 /// // Branches and loops are written as in Rust.
 /// let age = Field::new("age");
 /// let query = chain! {
-///     if age.gte(18) {
+///     if age.greater_than_or_equal(18) {
 ///         select(All).from(Table::from("adult"));
 ///     } else {
 ///         select(All).from(Table::from("child"));
@@ -214,6 +262,22 @@ pub use umbriel_macros::for_;
 #[doc(hidden)]
 pub mod test_support {
     pub use crate::execution::{classify, select_failure};
+
+    /// The live event a notification with `action` and `data` reports, decoded into `O`; `None`
+    /// for `Killed`. Exposed because SurrealDB 3.3.4 never sends `Action::Error`.
+    pub fn live_event<O: crate::types::SurrealValue>(
+        action: crate::types::Action,
+        data: crate::types::Value,
+    ) -> Option<crate::Result<crate::statements::LiveEvent<O>>> {
+        crate::statements::live_select::live_event(action, data, crate::execution::decode::<O>)
+    }
+
+    /// A `DIFF` notification's operations, decoded by their `op`.
+    pub fn decode_patches(
+        value: crate::types::Value,
+    ) -> crate::Result<Vec<surrealdb::opt::PatchOp>> {
+        crate::statements::live_select::decode_patches(value)
+    }
     #[cfg(feature = "migrations")]
     pub use crate::migrations::{
         database::{
@@ -229,7 +293,6 @@ pub mod test_support {
 #[doc(hidden)]
 pub mod internal_tools {
     pub use paste::paste;
-    pub use typed_builder;
 }
 
 /// Items `#[model]` expands to; not part of the public API.
