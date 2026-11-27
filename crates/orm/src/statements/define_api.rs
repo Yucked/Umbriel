@@ -3,12 +3,14 @@ use std::fmt::{self, Display};
 use surrealdb::types::Value;
 
 use crate::{
-    Conditional, DurationLike, Filter, ObjectLike, Render, Renderer, StrandLike, ValueLike,
+    DurationLike, ObjectLike, Render, Renderer, StrandLike, ValueLike,
     render::{is_identifier, push_path},
 };
 
 use super::{
-    DefineOptions, Statement, for_permission::PermissionValue, impl_define_options, impl_definition,
+    DefineOptions, Statement,
+    for_permission::{PermissionValue, impl_permissions},
+    impl_define_options, impl_definition,
 };
 
 /// An HTTP method an API action answers.
@@ -151,25 +153,9 @@ impl ApiConfig {
     pub fn res_headers(self, headers: impl Into<ObjectLike>) -> Self {
         self.middleware("api::res::headers", [ValueLike::from(headers.into())])
     }
-
-    /// `PERMISSIONS NONE`.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions = Some(PermissionValue::None);
-        self
-    }
-
-    /// `PERMISSIONS FULL`.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions = Some(PermissionValue::Full);
-        self
-    }
-
-    /// `PERMISSIONS WHERE @condition`.
-    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
-        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
-        self
-    }
 }
+
+impl_permissions!(single: ApiConfig);
 
 /// The format `api::req::body` parses a request body from, or `api::res::body` writes a
 /// response body in. `Auto` follows the request's `Content-Type` or `Accept` header.
@@ -263,13 +249,10 @@ pub(crate) fn push_methods(out: &mut Renderer, methods: &[ApiMethod]) {
         out.push_error("an API action needs at least one method");
         return;
     }
-    out.push_str(" FOR ");
-    for (index, method) in methods.iter().enumerate() {
-        if index > 0 {
-            out.push_str(", ");
-        }
-        out.push_display(method);
-    }
+    out.push_str(" FOR ")
+        .push_joined_with(methods, ", ", |out, method| {
+            out.push_display(method);
+        });
 }
 
 impl Render for ApiAction {
