@@ -734,3 +734,230 @@ mod sdk_transactions {
         assert!(names(&db).await.is_empty());
     }
 }
+
+/// Result streams (#20, K10): rows and statement ends, the error contract, and what dropping or
+/// cancelling does.
+mod streams {
+    use futures::StreamExt;
+    use umbriel::{Field, Render, RowStream, StreamEvent, Table, statements::select_value};
+
+    use super::*;
+
+    /// Every item of `stream`, bounded by [`WAIT`].
+    async fn collect<T>(stream: RowStream<T>) -> Vec<umbriel::Result<StreamEvent<T>>> {
+        tokio::time::timeout(WAIT, stream.collect::<Vec<_>>())
+            .await
+            .expect("the stream ends")
+    }
+
+    /// The decoded rows of statement `index`.
+    fn rows<T: Clone>(items: &[umbriel::Result<StreamEvent<T>>], index: usize) -> Vec<T> {
+        items
+            .iter()
+            .filter_map(|item| match item {
+                Ok(StreamEvent::Row {
+                    statement,
+                    value: Ok(value),
+                }) if *statement == index => Some(value.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Whether statement `index` ended, and how.
+    fn ended_ok<T>(items: &[umbriel::Result<StreamEvent<T>>], index: usize) -> Option<bool> {
+        items.iter().find_map(|item| match item {
+            Ok(StreamEvent::End {
+                statement, result, ..
+            }) if *statement == index => Some(result.is_ok()),
+            _ => None,
+        })
+    }
+
+    async fn count(db: &Surreal<Any>) -> i64 {
+        read(db, "RETURN count(SELECT * FROM n);").await
+    }
+
+    /// L1: a typed statement's rows, then its end.
+    #[tokio::test]
+    async fn a_typed_statement_streams_rows_then_ends() {
+        let (db, _guard) = db().await;
+        assert!(succeeds(&db, "CREATE n:1 SET v = 1; CREATE n:2 SET v = 2;").await);
+        let items = collect(
+            select_value(Field::new("v"))
+                .from(Table::from("n"))
+                .decode::<i64>()
+                .stream(&db)
+                .expect("started"),
+        )
+        .await;
+        let mut values = rows(&items, 0);
+        values.sort_unstable();
+        assert_eq!(values, [1, 2]);
+        assert_eq!(ended_ok(&items, 0), Some(true));
+        assert!(
+            matches!(
+                items.last(),
+                Some(Ok(StreamEvent::End { statement: 0, .. }))
+            ),
+            "the end comes last"
+        );
+    }
+
+    /// L2: a failed statement ends with its error, and the next statement still streams.
+    #[tokio::test]
+    async fn a_failed_statement_ends_with_its_error_and_the_next_runs() {
+        let (db, _guard) = db().await;
+        let items = collect(
+            Raw::new("RETURN 1; THROW 'refused'; RETURN 3;")
+                .to_query()
+                .expect("renders")
+                .stream(&db)
+                .expect("started"),
+        )
+        .await;
+        assert_eq!(ended_ok(&items, 1), Some(false));
+        let refused = items.iter().find_map(|item| match item {
+            Ok(StreamEvent::End {
+                statement: 1,
+                result: Err(error),
+                ..
+            }) => Some(error.to_string()),
+            _ => None,
+        });
+        assert!(refused.is_some_and(|text| text.contains("refused")));
+        assert_eq!(ended_ok(&items, 2), Some(true));
+        assert_eq!(
+            rows(&items, 2),
+            [umbriel::types::SurrealValue::into_value(3i64)]
+        );
+    }
+
+    /// L3: inside a transaction, the statements after a failure end with errors too, and nothing
+    /// commits. The indexes SurrealDB gives `BEGIN` and `COMMIT` aren't assumed.
+    #[tokio::test]
+    async fn a_failure_in_a_transaction_cancels_the_rest() {
+        let (db, _guard) = db().await;
+        let items = collect(
+            Raw::new("BEGIN; CREATE n:1; THROW 'refused'; CREATE n:2; COMMIT;")
+                .to_query()
+                .expect("renders")
+                .stream(&db)
+                .expect("started"),
+        )
+        .await;
+        let ends = items
+            .iter()
+            .filter_map(|item| match item {
+                Ok(StreamEvent::End { result, .. }) => Some(result.is_ok()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(ends.iter().any(|ok| !ok), "the THROW fails: {ends:?}");
+        assert_eq!(
+            ends.last(),
+            Some(&false),
+            "the last statement doesn't succeed"
+        );
+        assert_eq!(count(&db).await, 0);
+    }
+
+    /// L4: a row that doesn't decode is an error of that row; the stream goes on.
+    #[tokio::test]
+    async fn an_undecodable_row_is_an_error_of_that_row() {
+        let (db, _guard) = db().await;
+        assert!(succeeds(&db, "CREATE n:1 SET v = 1; CREATE n:2 SET v = 'two';").await);
+        let items = collect(
+            select_value(Field::new("v"))
+                .from(Table::from("n"))
+                .decode::<i64>()
+                .stream(&db)
+                .expect("started"),
+        )
+        .await;
+        assert!(items.iter().any(|item| matches!(
+            item,
+            Ok(StreamEvent::Row {
+                value: Err(Error::Conversion(_)),
+                ..
+            })
+        )));
+        assert_eq!(rows(&items, 0), [1]);
+        assert_eq!(ended_ok(&items, 0), Some(true));
+    }
+
+    /// L5: a query that can't start fails before the stream exists, classified.
+    #[test]
+    fn a_stream_on_an_unconnected_client_fails_to_start() {
+        let client = Surreal::<Any>::init();
+        let started = Raw::new("RETURN 1;")
+            .to_query()
+            .expect("renders")
+            .stream(&client);
+        assert!(
+            matches!(started, Err(Error::Connection { .. })),
+            "{:?}",
+            started.err()
+        );
+    }
+
+    /// L6a: undoing work is explicit: `CANCEL` in the script, or a transaction handle's
+    /// `cancel`.
+    #[tokio::test]
+    async fn cancelling_commits_nothing() {
+        let (db, _guard) = db().await;
+        let items = collect(
+            Raw::new("BEGIN; CREATE n:1; SELECT * FROM n; CANCEL;")
+                .to_query()
+                .expect("renders")
+                .stream(&db)
+                .expect("started"),
+        )
+        .await;
+        assert!(
+            items.iter().all(Result::is_ok),
+            "every item belongs to a statement"
+        );
+        assert_eq!(count(&db).await, 0);
+
+        let tx = db.clone().begin().await.expect("begins");
+        Raw::new("CREATE n:2;").run(&tx).await.expect("created");
+        let items = collect(
+            select_value(Field::new("id"))
+                .from(Table::from("n"))
+                .stream(&tx)
+                .expect("started"),
+        )
+        .await;
+        assert_eq!(
+            rows(&items, 0).len(),
+            1,
+            "the transaction sees its own write"
+        );
+        tx.cancel().await.expect("cancelled");
+        assert_eq!(count(&db).await, 0);
+    }
+
+    /// L6b: over WebSocket the result arrives once the query has finished, so dropping an
+    /// autocommitted stream after its first row cancels nothing: the writes are committed, and
+    /// the session runs the next query. This pins replay; it is not a rollback test.
+    #[tokio::test]
+    async fn dropping_a_replayed_stream_keeps_its_writes() {
+        let (db, _guard) = db().await;
+        let mut stream = Raw::new("CREATE n:1; CREATE n:2; SELECT * FROM n;")
+            .to_query()
+            .expect("renders")
+            .stream(&db)
+            .expect("started");
+        let first = tokio::time::timeout(WAIT, stream.next())
+            .await
+            .expect("an item");
+        assert!(first.is_some_and(|item| item.is_ok()));
+        drop(stream);
+        assert_eq!(count(&db).await, 2);
+        assert!(
+            succeeds(&db, "RETURN 1;").await,
+            "the session runs the next query"
+        );
+    }
+}
