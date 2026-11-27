@@ -20,12 +20,8 @@ pub struct Reset {
     #[arg(long)]
     pub(crate) run: bool,
 
-    /// Two way migration
-    #[arg(
-        short,
-        long,
-        help = "Whether to reinitialize as Unidirectional(Up only) Bidirectional(up & down) migration(S)"
-    )]
+    /// Reinitialize as two-way migrations (an up and a down file each) instead of one-way ones
+    #[arg(short, long)]
     pub(crate) reversible: bool,
 }
 
@@ -56,9 +52,11 @@ impl Reset {
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
     ) {
-        let file_manager = cli
-            .file_manager()
-            .set_flag(MigrationFlag::from(self.reversible));
+        let file_manager = cli.file_manager().set_flag(if self.reversible {
+            MigrationFlag::TwoWay
+        } else {
+            MigrationFlag::OneWay
+        });
         let comparison = cli.comparison().await;
         let migration = MigratorDatabase::first_migration(
             &comparison,
