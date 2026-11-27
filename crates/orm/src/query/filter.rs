@@ -2,7 +2,7 @@ use std::{borrow::Cow, sync::Arc};
 
 use crate::{Conditional, Render, Renderer, ValueLike};
 
-use super::Empty;
+use crate::Empty;
 
 /// Creates a new filter from a given `filterable` input.
 ///
@@ -86,7 +86,7 @@ macro_rules! cond {
         $field.add($value)
     };
     ($field:ident - $value:expr) => {
-        $field.minus($value)
+        $field.subtract($value)
     };
     ($field:ident * $value:expr) => {
         $field.multiply($value)
@@ -170,11 +170,11 @@ macro_rules! cond {
     };
 
     ($field:ident IN $value:expr) => {
-        $field.in_($value)
+        $field.inside($value)
     };
 
     ($field:ident in $value:expr) => {
-        $field.in_($value)
+        $field.inside($value)
     };
 
     ($field:ident NOTINSIDE $value:expr) => {
@@ -260,7 +260,7 @@ macro_rules! cond {
         $field.add($value)
     };
     (($field:ident - $value:expr)) => {
-        $field.minus($value)
+        $field.subtract($value)
     };
     (($field:ident * $value:expr)) => {
         $field.multiply($value)
@@ -350,11 +350,11 @@ macro_rules! cond {
 
 
     (($field:ident IN $value:expr)) => {
-        $field.in_($value)
+        $field.inside($value)
     };
 
     (($field:ident in $value:expr)) => {
-        $field.in_($value)
+        $field.inside($value)
     };
 
 
