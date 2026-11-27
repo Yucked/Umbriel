@@ -29,7 +29,7 @@ pub struct User {
 
 let UserSchema { age, .. } = User::schema();
 
-let adults: Vec<User> = User::find_where(age.gte(18))
+let adults: Vec<User> = User::find_where(age.greater_than_or_equal(18))
     .order_by(order(&age).desc())
     .limit(10)
     .execute(&db)
@@ -204,9 +204,12 @@ let name: Option<String> = response.take(0)?;
 Enable the `migrations` feature, list your models, and hand them to the CLI:
 
 ```rust
-use umbriel::{DbResources, create_table_resources, migrations::Migrator};
+use umbriel::{DbResources, TableResources, create_table_resources, migrations::Migrator};
 
-// Each listed model also has #[derive(TableResources)].
+// Each listed model implements `TableResources`: empty, or with its events and indexes.
+impl TableResources for User {}
+impl TableResources for Team {}
+
 struct Resources;
 
 impl DbResources for Resources {
