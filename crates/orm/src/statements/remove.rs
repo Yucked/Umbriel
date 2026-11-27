@@ -1,16 +1,13 @@
 //! `REMOVE` statements. Each takes `IF EXISTS`, which makes removing a missing resource a no-op
 //! instead of an error.
 
-use std::{
-    borrow::Cow,
-    fmt::{self, Display},
-};
+use std::borrow::Cow;
 
 use surrealdb::types::Table;
 
 use crate::{
-    Access, AccessLevel, Database, Event, Field, Ident, Name, Namespace, Param, Renderer,
-    TableIndex, User, render::push_function_path,
+    Access, Database, Event, Field, Ident, Level, Name, Namespace, Param, Renderer, TableIndex,
+    User, render::push_function_path,
 };
 
 use super::{Statement, define_api::push_api_path, define_module::ModuleName, impl_definition};
@@ -55,59 +52,52 @@ fn push_table(out: &mut Renderer, table: Option<&Name<Table>>) {
 ///
 /// let statement = remove_access("account").on_database().if_exists();
 /// assert_eq!(statement.to_debug_sql(), "REMOVE ACCESS IF EXISTS account ON DATABASE;");
-///
-/// // The level is required.
-/// assert!(remove_access("account").to_query().is_err());
 /// ```
-pub fn remove_access(name: impl Into<Name<Access>>) -> RemoveAccessStatement {
-    RemoveAccessStatement {
-        name: name.into(),
-        level: None,
-        if_exists: false,
+pub fn remove_access(name: impl Into<Name<Access>>) -> RemoveAccessInit {
+    RemoveAccessInit(name.into())
+}
+
+/// A `REMOVE ACCESS` awaiting its level.
+#[must_use]
+pub struct RemoveAccessInit(Name<Access>);
+
+impl RemoveAccessInit {
+    fn on(self, level: Level) -> RemoveAccessStatement {
+        RemoveAccessStatement {
+            name: self.0,
+            level,
+            if_exists: false,
+        }
+    }
+
+    /// Removes the access method defined on the root.
+    pub fn on_root(self) -> RemoveAccessStatement {
+        self.on(Level::Root)
+    }
+
+    /// Removes the access method defined on the current namespace.
+    pub fn on_namespace(self) -> RemoveAccessStatement {
+        self.on(Level::Namespace)
+    }
+
+    /// Removes the access method defined on the current database.
+    pub fn on_database(self) -> RemoveAccessStatement {
+        self.on(Level::Database)
     }
 }
 
 /// A `REMOVE ACCESS` statement.
+#[must_use]
 pub struct RemoveAccessStatement {
     name: Name<Access>,
-    level: Option<AccessLevel>,
+    level: Level,
     if_exists: bool,
-}
-
-impl RemoveAccessStatement {
-    /// Removes the access method defined on the root.
-    pub fn on_root(mut self) -> Self {
-        self.level = Some(AccessLevel::Root);
-        self
-    }
-
-    /// Removes the access method defined on the current namespace.
-    pub fn on_namespace(mut self) -> Self {
-        self.level = Some(AccessLevel::Namespace);
-        self
-    }
-
-    /// Removes the access method defined on the current database.
-    pub fn on_database(mut self) -> Self {
-        self.level = Some(AccessLevel::Database);
-        self
-    }
 }
 
 impl Statement for RemoveAccessStatement {
     fn render_body(&self, out: &mut Renderer) {
         push_head(out, "ACCESS", self.if_exists);
-        out.push(&self.name);
-        match self.level {
-            Some(level) => {
-                out.push_str(" ON ").push(&level);
-            }
-            None => {
-                out.push_error(
-                    "REMOVE ACCESS needs a level: `on_root`, `on_namespace` or `on_database`",
-                );
-            }
-        }
+        out.push(&self.name).push_str(" ON ").push(&self.level);
     }
 }
 
@@ -512,49 +502,29 @@ pub fn remove_user(user: impl Into<Name<User>>) -> RemoveUserStatementInit {
     RemoveUserStatementInit { user: user.into() }
 }
 
-/// The level a user is removed from.
-#[derive(Clone, Copy)]
-pub enum UserPermissionScope {
-    /// The current namespace
-    Namespace,
-    /// The current database
-    Database,
-    /// The root level
-    Root,
-}
-
-impl Display for UserPermissionScope {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            UserPermissionScope::Namespace => "NAMESPACE",
-            UserPermissionScope::Database => "DATABASE",
-            UserPermissionScope::Root => "ROOT",
-        })
-    }
-}
-
 /// A REMOVE USER statement awaiting its level.
+#[must_use]
 pub struct RemoveUserStatementInit {
     user: Name<User>,
 }
 
 impl RemoveUserStatementInit {
-    /// Specify to remove the User from root
+    /// Removes the root user.
     pub fn on_root(self) -> RemoveUserStatement {
-        self.on(UserPermissionScope::Root)
+        self.on(Level::Root)
     }
 
-    /// Specify to remove the User from namespace
+    /// Removes the user of the current namespace.
     pub fn on_namespace(self) -> RemoveUserStatement {
-        self.on(UserPermissionScope::Namespace)
+        self.on(Level::Namespace)
     }
 
-    /// Specify to remove the User from database
+    /// Removes the user of the current database.
     pub fn on_database(self) -> RemoveUserStatement {
-        self.on(UserPermissionScope::Database)
+        self.on(Level::Database)
     }
 
-    fn on(self, on: UserPermissionScope) -> RemoveUserStatement {
+    fn on(self, on: Level) -> RemoveUserStatement {
         RemoveUserStatement {
             user: self.user,
             on,
@@ -563,17 +533,18 @@ impl RemoveUserStatementInit {
     }
 }
 
-/// Remove User statement
+/// A `REMOVE USER` statement.
+#[must_use]
 pub struct RemoveUserStatement {
     user: Name<User>,
-    on: UserPermissionScope,
+    on: Level,
     if_exists: bool,
 }
 
 impl Statement for RemoveUserStatement {
     fn render_body(&self, out: &mut Renderer) {
         push_head(out, "USER", self.if_exists);
-        out.push(&self.user).push_str(" ON ").push_display(&self.on);
+        out.push(&self.user).push_str(" ON ").push(&self.on);
     }
 }
 
