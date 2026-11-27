@@ -1,8 +1,9 @@
 //! SurrealDB's built-in functions, grouped by namespace as SurrealQL groups them.
 //!
-//! Each function `ns::name` has three forms, all rendering the same call:
-//! - `ns::name!(args)`, a macro that also takes its optional arguments left out;
-//! - `ns::name_fn(args)`, the function the macro calls;
+//! A function `ns::name` is called as:
+//! - `ns::name(args)`, a plain function, when its arguments are fixed;
+//! - `ns::name!(args)`, a macro that also takes its optional arguments left out, when it has
+//!   optional or any number of arguments, with `ns::name_fn(args)` the function it calls;
 //! - where SurrealDB 3.3.4 dispatches the function as a method, `receiver.name(args)` on the
 //!   receiver's typed expression, e.g. `StrandLike::from(name).len()` renders `name.len()`.
 //!
