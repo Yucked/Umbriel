@@ -127,7 +127,8 @@ pub enum Error {
 
     /// [`LiveStream::resubscribe`](crate::statements::LiveStream::resubscribe) switched to a new
     /// subscription, but ending the old one failed: the old live query may still be registered on
-    /// the server, with no stream left to deliver to. The stream already delivers from the new
+    /// the server, with no stream left to deliver to. A best-effort `KILL` of it is sent once
+    /// more, unreported, as `resubscribe` returns. The stream already delivers from the new
     /// subscription.
     #[error("the replaced live query `{query_id}` may still be registered: {source}")]
     StaleSubscription {
