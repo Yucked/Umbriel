@@ -1,6 +1,5 @@
 use crate::migrations::*;
 use chrono::Utc;
-use std::ops::Deref;
 
 /// A two-way migration's up and down files.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -150,30 +149,6 @@ impl MigrationFile {
         };
 
         Ok(())
-    }
-}
-
-/// A migration not yet applied.
-#[derive(Debug, Clone)]
-pub struct PendingMigrationFile(MigrationFile);
-
-impl Deref for PendingMigrationFile {
-    type Target = MigrationFile;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<PendingMigrationFile> for MigrationFile {
-    fn from(m: PendingMigrationFile) -> Self {
-        m.0
-    }
-}
-
-impl From<MigrationFile> for PendingMigrationFile {
-    fn from(m: MigrationFile) -> Self {
-        Self(m)
     }
 }
 
