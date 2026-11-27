@@ -71,7 +71,7 @@ impl<'a> FieldTypeInference<'a> {
         field_ty: &CustomType,
         relation_type: RelationType,
     ) -> ExtractorResult<DbFieldTypeAstMeta> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let binding = field_ty.replace_self_with_current_struct_concrete_type(self.model_attrs)?;
         let ty = &binding.inner();
         let assert = |assertion: proc_macro2::TokenStream| quote!(#crate_name::validators::#assertion::<#ty>(););
@@ -103,8 +103,7 @@ impl<'a> FieldTypeInference<'a> {
                 static_assertion_token: quote!(
                     #option_assertion
                     #item_static_assertion
-                )
-                .into(),
+                ),
             }
         } else if field_ty.type_ident().is_ok_and(|ident| ident == "Nullable") {
             // `Nullable<T>` holds `NULL` or a value: `null | T`.
@@ -129,8 +128,7 @@ impl<'a> FieldTypeInference<'a> {
                 static_assertion_token: quote!(
                     #null_assertion
                     #item_static_assertion
-                )
-                .into(),
+                ),
             }
         } else if field_ty.is_array() {
             let array_length = field_ty
@@ -174,8 +172,7 @@ impl<'a> FieldTypeInference<'a> {
                 static_assertion_token: quote!(
                     #array_assertion
                     #item_static_assertion
-                )
-                .into(),
+                ),
             }
         } else if field_ty.raw_type_is_set() {
             let item = field_ty
@@ -201,8 +198,7 @@ impl<'a> FieldTypeInference<'a> {
                 static_assertion_token: quote!(
                     #set_assertion
                     #item_static_assertion
-                )
-                .into(),
+                ),
             }
         } else if field_ty.raw_type_is_object() {
             // A map has no marker to check beyond converting to and from a value.
@@ -235,7 +231,7 @@ impl<'a> FieldTypeInference<'a> {
                     <#ty as #crate_name::types::SurrealValue>::kind_of()
                 )
                 .into(),
-                static_assertion_token: assert(quote!(assert_type_is_record_id)).into(),
+                static_assertion_token: assert(quote!(assert_type_is_record_id)),
             }
         } else if let Some(foreign_type) = self.refereces_a_nested_object(&relation_type)? {
             // Guess if its a foreign Table type by comparing the type path segment with the foreign
@@ -300,7 +296,7 @@ impl<'a> FieldTypeInference<'a> {
         db_field_name: &DbFieldName,
         model_attrs: &ModelAttributes,
     ) -> ExtractorResult<DbFieldTypeAstMeta> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let model_type = model_attrs.to_data_type();
         let ty = &field_ty.inner();
 
@@ -339,7 +335,7 @@ impl<'a> FieldTypeInference<'a> {
         field_ty: &CustomType,
         relation_type: &RelationType,
     ) -> ExtractorResult<Option<DbFieldTypeAstMeta>> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let ty = &field_ty.inner();
         // The linked model's table is only known once the generated code compiles, so the
         // macro's own copy of the type leaves the record's tables empty. The id's own kind is
@@ -365,11 +361,14 @@ impl<'a> FieldTypeInference<'a> {
                 DbFieldTypeAstMeta {
                     field_type_db_original: Kind::option(Kind::Record(vec![])),
                     field_type_db_token: optional_record_of(quote!(#ref_node)).into(),
-                    static_assertion_token: quote!(#crate_name::validators::assert_type_eq_all!(#field_ty, #crate_name::LinkOne<#ref_node>);).into(),
+                    static_assertion_token: quote!(#crate_name::validators::assert_type_eq_all!(#field_ty, #crate_name::LinkOne<#ref_node>);),
                 }
             }
             RelationType::LinkSelf(self_node) => {
-                let current_struct_type = self.model_attrs.struct_no_bounds()?;
+                let current_struct_type =
+                    self.model_attrs
+                        .construct_struct_type_without_bounds()
+                        .replace_self_with_current_struct_concrete_type(self.model_attrs)?;
                 let self_node = self_node.turbo_fishize()?;
 
                 DbFieldTypeAstMeta {
@@ -378,8 +377,7 @@ impl<'a> FieldTypeInference<'a> {
                     static_assertion_token: quote!(
                         #crate_name::validators::assert_type_eq_all!(#crate_name::LinkSelf<#current_struct_type>, #crate_name::LinkSelf<#self_node>);
                         #crate_name::validators::assert_type_eq_all!(#field_ty, #crate_name::LinkSelf<#self_node>);
-                    )
-                    .into(),
+                    ),
                 }
             }
             RelationType::LinkMany(ref_node)
@@ -396,8 +394,7 @@ impl<'a> FieldTypeInference<'a> {
                     .into(),
                     static_assertion_token: quote!(
                         #crate_name::validators::assert_type_eq_all!(#field_ty, #crate_name::LinkMany<#ref_node>);
-                    )
-                    .into(),
+                    ),
                 }
             }
             // NOTE: Nested objects and nested arrays of objects are handled in the type path token
