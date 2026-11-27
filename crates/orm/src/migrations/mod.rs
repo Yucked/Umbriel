@@ -83,12 +83,14 @@
 pub mod cli;
 pub(crate) mod database;
 mod error;
+pub(crate) mod files;
 pub(crate) mod resources;
 pub(crate) mod schema;
 
 pub use cli::*;
 pub use database::*;
 pub use error::*;
+pub use files::*;
 pub use resources::*;
 pub use schema::{Definition, ResourceKey, ResourceKind, Schema};
 
