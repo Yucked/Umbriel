@@ -243,6 +243,13 @@ pub async fn connect(endpoint: Endpoint) -> Surreal<Any> {
     db
 }
 
+/// A connection to `endpoint` with no one signed in and nothing selected, for the sign-ins of
+/// record users, bearer keys and system users other than root.
+pub async fn guest(endpoint: Endpoint) -> Surreal<Any> {
+    let url = endpoint.url();
+    bounded(&format!("connecting to {url}"), any::connect(url.as_str())).await
+}
+
 /// The test namespace is defined once per process: concurrent definitions of one name can
 /// conflict.
 static NAMESPACE_DEFINED: OnceCell<()> = OnceCell::const_new();
