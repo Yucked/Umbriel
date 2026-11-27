@@ -79,13 +79,6 @@ impl FromMeta for CustomType {
     }
 }
 
-// impl Parse for CustomType {
-//     // TODO: Handle type parsing if frommeta does not work or manually implement fromMeta
-//     fn parse(input: ParseStream) -> syn::Result<Self> {
-//         todo!()
-//     }
-// }
-
 impl From<Type> for CustomType {
     fn from(ty: Type) -> Self {
         Self(ty)
@@ -240,21 +233,6 @@ impl CustomType {
             ),
         )
     }
-
-    // pub fn get_generics_meta<'a>(
-    //     &self,
-    //     model_attributes: &'a ModelAttributes,
-    // ) -> FieldGenericsMeta<'a> {
-    //     let binding =
-    //         GenericTypeExtractor::extract_generics_for_complex_type(model_attributes, &self);
-    //     let (field_impl_generics, field_ty_generics, field_where_clause) =
-    //         &binding.split_for_impl();
-    //     FieldGenericsMeta {
-    //         field_impl_generics,
-    //         field_ty_generics,
-    //         field_where_clause: field_where_clause.cloned(),
-    //     }
-    // }
 
     pub fn replace_self_with_current_struct_concrete_type(
         &self,
@@ -457,11 +435,6 @@ impl CustomType {
         self.is_array_const() || self.is_vec()
     }
 
-    // TODO: Remove this?
-    // pub fn is_list(&self) -> bool {
-    //     self.is_array() || self.is_set()
-    // }
-
     pub fn raw_type_is_optional(&self) -> bool {
         let ty = self.inner();
         match ty {
@@ -635,9 +608,6 @@ impl CustomType {
                     _ => return None,
                 }
             }
-            // syn:Type::Array(array) => {
-            //     array.elem.as_ref()
-            // },
             _ => return None,
         };
 
@@ -687,7 +657,7 @@ enum RustType {
 
 impl Display for RustType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ty = match self {
+        f.write_str(match self {
             RustType::Vec => "Vec",
             RustType::Option => "Option",
             RustType::HashSet => "HashSet",
@@ -695,7 +665,6 @@ impl Display for RustType {
             RustType::HashMap => "HashMap",
             RustType::BTreeMap => "BTreeMap",
             RustType::DateTime => "DateTime",
-        };
-        write!(f, "{ty}")
+        })
     }
 }
