@@ -435,7 +435,7 @@ fn plan_migration(
 
     let diff = SchemaDiff::new(left, right, codebase_resources, prompter)?;
     let mut up = diff.statements(&Direction::Up)?;
-    let down = if migration_flag.is_twoway() {
+    let down = if migration_flag == MigrationFlag::TwoWay {
         diff.statements(&Direction::Down)?
     } else {
         Vec::new()

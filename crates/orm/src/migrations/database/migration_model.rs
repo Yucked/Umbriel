@@ -259,7 +259,7 @@ impl Migration {
 
         let checksum_down = define(checksum_down, Kind::String);
 
-        if migration_type.is_twoway() {
+        if migration_type == MigrationFlag::TwoWay {
             fields.push(checksum_down);
         }
 

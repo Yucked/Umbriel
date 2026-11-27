@@ -320,7 +320,7 @@ impl Project {
 
     /// Whether the project's migrations are two-way.
     pub fn reversible(&self) -> bool {
-        self.flag.is_twoway()
+        self.flag == MigrationFlag::TwoWay
     }
 
     /// Runs `command` as the CLI does, on the project's database and comparison.
