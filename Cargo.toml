@@ -6,7 +6,7 @@ members = ["crates/orm", "crates/macros", "crates/tests"]
 version = "0.1.0"
 edition = "2024"
 # Only the latest stable toolchain is supported; older compilers are not tested.
-rust-version = "1.99"
+rust-version = "1.100"
 authors = ["Yucked"]
 description = "A pure Rust ORM for SurrealDB."
 

@@ -7,7 +7,7 @@
 Expressive queries, ORM models, migrations, schema tooling and graph relations, all checked at
 compile time.
 
-![Rust 1.99+](https://img.shields.io/badge/rust-1.99%2B-f74c00?style=flat-square&logo=rust&logoColor=white)
+![Rust 1.100+](https://img.shields.io/badge/rust-1.100%2B-f74c00?style=flat-square&logo=rust&logoColor=white)
 ![Edition 2024](https://img.shields.io/badge/edition-2024-f74c00?style=flat-square)
 ![SurrealDB 3.3.4+](https://img.shields.io/badge/SurrealDB-3.3.4%2B-ff00a0?style=flat-square&logo=surrealdb&logoColor=white)
 ![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success?style=flat-square)
