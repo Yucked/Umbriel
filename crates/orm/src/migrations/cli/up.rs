@@ -3,11 +3,9 @@ use crate::migrations::*;
 use clap::Args;
 use typed_builder::TypedBuilder;
 
-/// Run migrations
-/// cargo run -- up
-/// cargo run -- up -l
-/// cargo run -- up -n 2
-/// cargo run -- up -t 2021-09-09-xxxxx
+/// Applies pending migrations: all of them (`up`, `up --latest`), a number of them
+/// (`up --number 2`), or those up to and including one (`up --till
+/// 20240101120000_create_users`), named by its timestamp and name.
 #[derive(Args, Debug, TypedBuilder, Clone, Default)]
 pub struct Up {
     #[command(flatten)]
@@ -25,23 +23,18 @@ impl Up {
 #[derive(Args, Debug, Clone, TypedBuilder)]
 #[group(required = false, multiple = false)]
 pub struct FastForwardDelta {
-    /// Run forward to the latest migration
-    #[arg(long, help = "Run forward to the next migration")]
+    /// Apply every pending migration
+    #[arg(long)]
     #[builder(default)]
     pub(crate) latest: bool,
 
-    /// Run forward by count/number
-    #[arg(short, long, help = "Run forward by the number specified")]
+    /// Apply this many pending migrations
+    #[arg(short, long)]
     #[builder(default, setter(strip_option))]
     pub(crate) number: Option<u32>,
 
-    /// Run forward till a specific migration ID
-    #[arg(
-        short,
-        long,
-        value_parser = mig_name_parser,
-        help = "Run forward till a specific migration ID"
-    )]
+    /// Apply pending migrations up to and including this one
+    #[arg(short, long)]
     #[builder(default, setter(strip_option))]
     pub(crate) till: Option<MigrationFilename>,
 }
