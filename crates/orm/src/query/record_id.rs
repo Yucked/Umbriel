@@ -207,7 +207,11 @@ impl<T> Deref for RecordId<T> {
     }
 }
 
-/// A random id, as SurrealDB would generate.
+/// A random id in the model's table, as [`RecordId::rand`] gives and SurrealDB would generate.
+///
+/// So a model that derives `Default` gets a new random id each time `Default::default()` builds
+/// one: two defaults are two different records. Write [`RecordId::rand`], or a fixed key, where
+/// the id matters.
 impl<T: Model> Default for RecordId<T> {
     fn default() -> Self {
         Self::rand()
@@ -338,7 +342,7 @@ impl<T: Model> Render for RecordRange<T> {
         if is_range(&self.range.start) || is_range(&self.range.end) {
             out.push_error("record range bounds must be single keys");
         }
-        out.push_value(&Value::RecordId(types::RecordId::new(
+        out.push_owned_value(Value::RecordId(types::RecordId::new(
             self.table.clone(),
             RecordIdKey::Range(Box::new(self.range.clone())),
         )));
