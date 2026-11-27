@@ -4,33 +4,15 @@ use crate::{Name, Renderer};
 
 use super::{
     DefineOptions, Statement,
-    for_permission::{Permissions, PermissionsClause},
+    for_permission::{PermissionsClause, impl_permissions},
     impl_define_options, impl_definition,
     select::SelectStatement,
 };
 
-// DEFINE TABLE statement
-// The DEFINE TABLE statement allows you to declare your table by name, enabling you to apply strict controls to a table's schema by making it SCHEMAFULL, create a foreign table view, and set permissions specifying what operations can be performed on the field.
-//
-// Statement syntax
-// DEFINE TABLE [ OVERWRITE | IF NOT EXISTS ] @name
-// 	[ DROP ]
-// 	[ SCHEMAFULL | SCHEMALESS ]
-// 	[ TYPE [ ANY | NORMAL | RELATION [ IN | FROM ] @table [ OUT | TO ] @table [ ENFORCED ] ] ]
-// 	[ AS SELECT @projections
-// 		FROM @tables
-// 		[ WHERE @condition ]
-// 		[ GROUP [ BY ] @groups ]
-// 	]
-// 	[ COMMENT @string ]
-// 	[ PERMISSIONS [ NONE | FULL
-// 		| FOR select @expression
-// 		| FOR create @expression
-// 		| FOR update @expression
-// 		| FOR delete @expression
-// 	] ]
+impl_permissions!(per_for: DefineTableStatement);
 
-/// Define the API for the Table builder
+/// A `DEFINE TABLE` statement. Syntax:
+/// <https://surrealdb.com/docs/surrealql/statements/define/table>.
 pub struct DefineTableStatement {
     table: Name<Table>,
     options: DefineOptions,
@@ -222,26 +204,6 @@ impl DefineTableStatement {
     /// Defines the table as a view over a select statement.
     pub fn as_(mut self, select_statement: impl Into<SelectStatement>) -> Self {
         self.as_ = Some(select_statement.into());
-        self
-    }
-
-    /// Set permission as NONE
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions.none();
-        self
-    }
-
-    /// Set permission as FULL
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions.full();
-        self
-    }
-
-    /// set specific permissions for the table with constraint for certain table access types.
-    /// Events include type inluding CREATE, UPDATE, SELECT and DELETE.
-    /// Additional permission chaining accumulates
-    pub fn permissions(mut self, fors: impl Into<Permissions>) -> Self {
-        self.permissions.push(fors);
         self
     }
 }
