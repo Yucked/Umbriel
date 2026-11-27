@@ -26,17 +26,13 @@ use umbriel_tests::{
 };
 
 fn prompter() -> MockPrompter {
-    MockPrompter::builder()
-        .allow_empty_migrations_gen(true)
-        .rename_or_delete_single_field_change(RenameOrDelete::Rename)
-        .build()
+    MockPrompter::new(true, RenameOrDelete::Rename)
 }
 
 fn config(dir: &Path) -> MigrationConfig {
-    MigrationConfig::builder()
-        .mode(Mode::Strict)
-        .custom_path(Some(dir.to_path_buf()))
-        .build()
+    MigrationConfig::new()
+        .set_mode(Mode::Strict)
+        .set_custom_path(dir)
 }
 
 /// A codebase whose only table SurrealDB refuses to define.
@@ -293,13 +289,13 @@ async fn a_failure_after_both_creations_removes_both() {
             2,
             "{databases:?}"
         );
-        Err(MigrationError::IoError("synthetic".to_owned()))
+        Err(MigrationError::InvalidTimestamp("synthetic".to_owned()))
     })
     .await
     .expect_err("the preparation fails");
 
     assert!(
-        matches!(&error, MigrationError::IoError(message) if message == "synthetic"),
+        matches!(&error, MigrationError::InvalidTimestamp(message) if message == "synthetic"),
         "{error:?}"
     );
     assert_eq!(
@@ -328,7 +324,7 @@ async fn a_removal_that_times_out_still_removes_the_rest() {
     let error = remove_comparison(
         "comparison",
         removals,
-        Err::<(), _>(MigrationError::IoError("synthetic".to_owned())),
+        Err::<(), _>(MigrationError::InvalidTimestamp("synthetic".to_owned())),
     )
     .await
     .expect_err("a removal timed out");
@@ -349,7 +345,7 @@ async fn a_removal_that_times_out_still_removes_the_rest() {
         "{cleanup:?}"
     );
     assert!(
-        matches!(generation.as_deref(), Some(MigrationError::IoError(message)) if message == "synthetic"),
+        matches!(generation.as_deref(), Some(MigrationError::InvalidTimestamp(message)) if message == "synthetic"),
         "{generation:?}"
     );
 }
