@@ -135,8 +135,9 @@ pub enum LiveEvent<O> {
 ///   stream goes on;
 /// - a transport failure is the stream's last item: the stream ends after it.
 ///
-/// The stream ends when the live query does: after [`kill`](Self::kill), when the session is
-/// invalidated or signs in as someone else (SurrealDB 3.1.0), or with the connection.
+/// The stream ends when the live query does: after [`kill`](Self::kill), or with the connection.
+/// In SurrealDB 3.3.4, invalidating the session doesn't end it: the query stays registered and
+/// the stream stays open until it is killed or dropped.
 ///
 /// Dropping the stream ends the live query as best effort: the SDK sends a `KILL` from a task of
 /// its own and logs a failure, with nothing returned to the caller. [`kill`](Self::kill) runs
@@ -165,14 +166,14 @@ impl<O, C: Connection> LiveStream<O, C> {
     ///
     /// The SDK ends the stream on SurrealDB's `Killed` notification. If that has already arrived
     /// when the `KILL` returns, the stream is dropped with nothing left to end. If not, dropping
-    /// it makes the SDK send a second `KILL`, which finds nothing and is logged as a warning.
+    /// it makes the SDK send a second `KILL`, for a query that is already gone.
     /// Umbriel doesn't wait for the notification: without a timer of its own the wait couldn't be
     /// bounded.
     ///
     /// # Errors
     ///
-    /// The `KILL`'s failure: [`Error::NotAllowed`] for a session that doesn't own the query, or
-    /// a failure for an id the server no longer holds.
+    /// The `KILL`'s failure, such as [`Error::NotAllowed`] for a session that doesn't own the
+    /// query. SurrealDB 3.3.4 accepts a `KILL` of an id it no longer holds.
     pub async fn kill(mut self) -> Result<()> {
         kill(self.query_id).run(&self.db).await?;
         drain_ready(&mut self.stream);
@@ -198,10 +199,9 @@ impl<O, C: Connection> LiveStream<O, C> {
     /// # Errors
     ///
     /// The registration's failure, with `self` unchanged; or [`Error::StaleSubscription`] when
-    /// the new query is in place but the `KILL` of the old one failed. After a reconnect the
-    /// server no longer holds the old query, so that `KILL` fails too: SurrealDB 3.3.4 reports a
-    /// `KILL` of an unknown id with the same `Internal` kind as any other failure, so the two
-    /// can't be told apart, and both are `StaleSubscription`.
+    /// the new query is in place but the `KILL` of the old one failed, for example because the
+    /// connection dropped. After a reconnect the server no longer holds the old query, and
+    /// SurrealDB 3.3.4 accepts the `KILL` of an id it no longer holds, so resubscribing succeeds.
     pub async fn resubscribe(&mut self) -> Result<()> {
         let (query_id, stream) = register(&self.db, &self.query).await?;
         let old_id = std::mem::replace(&mut self.query_id, query_id);
