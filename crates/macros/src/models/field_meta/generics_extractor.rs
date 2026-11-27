@@ -12,32 +12,11 @@ create_tokenstream_wrapper!(=>WhereClause);
 #[derive(Clone, Debug, Default)]
 pub struct CustomGenerics {
     original_generics: Generics,
-    // generics_without_static_in_impl: Generics,
 }
 
 impl CustomGenerics {
     pub fn new(original_generics: Generics) -> Self {
-        // let generics_without_static_in_impl = original_generics.clone();
-        // let filter_static = |param: &GenericParam| match param {
-        //     GenericParam::Lifetime(lifetime_def) => lifetime_def.lifetime.ident != "static",
-        //     _ => true,
-        // };
-        //
-        // let generics_without_static_in_impl_params = generics_without_static_in_impl
-        //     .params
-        //     .into_iter()
-        //     .filter(|param| filter_static(param))
-        //     .collect();
-        //
-        // let gen = Generics {
-        //     params: generics_without_static_in_impl_params,
-        //     ..original_generics.clone()
-        // };
-        //
-        CustomGenerics {
-            original_generics,
-            // generics_without_static_in_impl: gen,
-        }
+        CustomGenerics { original_generics }
     }
 
     pub fn inner(&self) -> &Generics {
@@ -75,13 +54,9 @@ impl CustomGenerics {
         )
     }
 
-    pub fn to_basic_generics(&self) -> &Generics {
-        self.inner()
-    }
-
     pub fn to_angle_bracketed(&self) -> AngleBracketedGenericArguments {
         let args = self
-            .to_basic_generics()
+            .inner()
             .params
             .iter()
             .map(|param| match param {
@@ -149,19 +124,16 @@ impl StructGenerics {
                 syn::GenericParam::Type(type_param) => {
                     let ident = &type_param.ident;
                     let ty: Type = syn::parse_quote!(#ident);
-                    // GenericArgument::Type(ty)
                     quote!(#ty)
                 }
                 syn::GenericParam::Lifetime(lifetime_def) => {
                     let lifetime = &lifetime_def.lifetime;
-                    // GenericArgument::Lifetime(Lifetime::new(&lifetime.to_string(), lifetime.span()))
                     quote!(& #lifetime dyn ::std::any::Any)
                 }
                 syn::GenericParam::Const(const_param) => {
                     let ident = &const_param.ident;
                     let ty = &const_param.ty;
                     let expr: Expr = syn::parse_quote!(#ident as #ty);
-                    // GenericArgument::Const(expr)
                     quote!(#expr)
                 }
             })
@@ -169,7 +141,6 @@ impl StructGenerics {
 
         let marker = quote! (::std::marker::PhantomData<( #( #args ),* )>);
         let marker: Type = parse_quote!(#marker);
-        // let marker: Type = syn::parse2(marker).unwrap();
         PhantomDataType(marker)
     }
 
@@ -272,28 +243,6 @@ impl<'a> Visit<'a> for GenericTypeExtractor<'a> {
                     }
                 }
             }
-            // Recursively visit nested generic arguments
-            if let PathArguments::AngleBracketed(_args) = &segment.arguments {
-                // for arg in &args.args {
-                //     match arg {
-                //         // Recursively visit the nested type
-                //         syn::GenericArgument::Type(ty) => self.visit_type(ty),
-                //         syn::GenericArgument::Lifetime(lt) => {
-                //             // Here we handle lifetime arguments
-                //             if !self.field_generics.params.iter().any(|param| matches!(param, GenericParam::Lifetime(lifetime_def) if lifetime_def.lifetime == *lt)) {
-                //                 // Only add the lifetime if it's not already in the list
-                //                 self.field_generics.params.push(GenericParam::Lifetime(syn::LifetimeParam {
-                //                     attrs: Vec::new(),
-                //                     lifetime: lt.clone(),
-                //                     colon_token: None,
-                //                     bounds: syn::punctuated::Punctuated::new(),
-                //                 }));
-                //             }
-                //         }
-                //         _ => {}
-                //     }
-                // }
-            }
         }
 
         // default visitation of this type path
@@ -327,8 +276,6 @@ impl<'a> Visit<'a> for GenericTypeExtractor<'a> {
 
     // Visit reference types like &T and &mut T
     fn visit_type_reference(&mut self, i: &'a TypeReference) {
-        // self.visit_type(&i.elem);
-        // syn::visit::visit_type_reference(self, i);
         if let Some(lifetime) = &i.lifetime {
             self.add_lifetime_if_not_exists(lifetime);
         }
@@ -347,11 +294,5 @@ impl<'a> Visit<'a> for GenericTypeExtractor<'a> {
     fn visit_type_group(&mut self, i: &'a TypeGroup) {
         self.visit_type(&i.elem);
         syn::visit::visit_type_group(self, i);
-    }
-
-    // Visit macro types. Handling macro types can be complex as their structure depends on the macro's expansion
-    fn visit_type_macro(&mut self, i: &'a TypeMacro) {
-        // Macro types require special handling based on the macro expansion
-        syn::visit::visit_type_macro(self, i);
     }
 }
