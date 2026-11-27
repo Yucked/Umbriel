@@ -249,3 +249,65 @@ impl Render for PermissionValue {
         }
     }
 }
+
+/// Writes a statement's `PERMISSIONS` builder methods, in one of two shapes:
+/// - `per_for`: the statement has `permissions: Permissions`, which takes `NONE`, `FULL` or
+///   accumulated `FOR` clauses (tables, fields);
+/// - `single`: the statement has `permissions: Option<PermissionValue>`, which takes one `NONE`,
+///   `FULL` or `WHERE` with no `FOR` (params, functions, APIs, buckets, modules).
+macro_rules! impl_permissions {
+    (per_for: $($statement:ty),+ $(,)?) => {$(
+        impl $statement {
+            /// `PERMISSIONS NONE`.
+            pub fn permissions_none(mut self) -> Self {
+                self.permissions.none();
+                self
+            }
+
+            /// `PERMISSIONS FULL`.
+            pub fn permissions_full(mut self) -> Self {
+                self.permissions.full();
+                self
+            }
+
+            /// `PERMISSIONS FOR …` for `CREATE`, `SELECT`, `UPDATE` or `DELETE`; further calls
+            /// accumulate.
+            pub fn permissions(
+                mut self,
+                fors: impl Into<$crate::statements::Permissions>,
+            ) -> Self {
+                self.permissions.push(fors);
+                self
+            }
+        }
+    )+};
+    (single: $($statement:ty),+ $(,)?) => {$(
+        impl $statement {
+            /// `PERMISSIONS NONE`.
+            pub fn permissions_none(mut self) -> Self {
+                self.permissions =
+                    Some($crate::statements::for_permission::PermissionValue::None);
+                self
+            }
+
+            /// `PERMISSIONS FULL`.
+            pub fn permissions_full(mut self) -> Self {
+                self.permissions =
+                    Some($crate::statements::for_permission::PermissionValue::Full);
+                self
+            }
+
+            /// `PERMISSIONS WHERE @condition`, with no `FOR`.
+            pub fn permissions_where(mut self, condition: impl $crate::Conditional) -> Self {
+                self.permissions = Some(
+                    $crate::statements::for_permission::PermissionValue::Where(
+                        $crate::Filter::new(condition),
+                    ),
+                );
+                self
+            }
+        }
+    )+};
+}
+
+pub(crate) use impl_permissions;
