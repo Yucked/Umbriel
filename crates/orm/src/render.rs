@@ -90,16 +90,29 @@ impl Renderer {
     /// definitions.
     pub fn push_value(&mut self, value: &Value) -> &mut Self {
         match self.mode {
-            Mode::Bind => {
-                let name = format!("{GENERATED_PARAM_PREFIX}{}", self.bound);
-                self.bound += 1;
-                self.sql.push('$');
-                self.sql.push_str(&name);
-                self.vars.insert(name, value.clone());
-            }
+            Mode::Bind => self.bind(value.clone()),
             Mode::Inline => value.fmt_sql(&mut self.sql, SqlFormat::SingleLine),
         }
         self
+    }
+
+    /// [`push_value`](Self::push_value) for a value the caller owns: bound, it's moved into the
+    /// bindings instead of copied.
+    pub(crate) fn push_owned_value(&mut self, value: Value) -> &mut Self {
+        match self.mode {
+            Mode::Bind => self.bind(value),
+            Mode::Inline => value.fmt_sql(&mut self.sql, SqlFormat::SingleLine),
+        }
+        self
+    }
+
+    /// Writes the next generated parameter and binds `value` to it.
+    fn bind(&mut self, value: Value) {
+        let name = format!("{GENERATED_PARAM_PREFIX}{}", self.bound);
+        self.bound += 1;
+        self.sql.push('$');
+        self.sql.push_str(&name);
+        self.vars.insert(name, value);
     }
 
     /// Appends another node.
@@ -123,11 +136,24 @@ impl Renderer {
         I: IntoIterator,
         I::Item: Render,
     {
+        self.push_joined_with(items, separator, |out, item| item.render(out))
+    }
+
+    /// Appends `items` separated by `separator`, each written by `write`.
+    pub(crate) fn push_joined_with<I>(
+        &mut self,
+        items: I,
+        separator: &str,
+        mut write: impl FnMut(&mut Self, I::Item),
+    ) -> &mut Self
+    where
+        I: IntoIterator,
+    {
         for (index, item) in items.into_iter().enumerate() {
             if index > 0 {
                 self.push_str(separator);
             }
-            item.render(self);
+            write(self, item);
         }
         self
     }
@@ -264,10 +290,12 @@ impl fmt::Debug for Fragment {
     }
 }
 
-/// Fragments are equal when they are the same node or render the same debug SQL.
+/// Fragments are equal when they are the same node, or render the same debug SQL with the same
+/// validation errors: two nodes that write the same text but fail differently, or one of which
+/// fails, are different queries. Comparing distinct nodes renders both.
 impl PartialEq for Fragment {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0) || self.to_debug_sql() == other.to_debug_sql()
+        Arc::ptr_eq(&self.0, &other.0) || render_inline(self) == render_inline(other)
     }
 }
 
