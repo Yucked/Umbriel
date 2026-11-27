@@ -96,15 +96,6 @@ pub enum MigrationError {
     )]
     InvalidMigrationName(String),
 
-    /// A migration file could not be read.
-    #[error("Migration file not found in path: {path} with error: {error}")]
-    MigrationFilePathDoesNotExist {
-        /// The file's path.
-        path: String,
-        /// Why it could not be read.
-        error: String,
-    },
-
     /// Whether migrations are one-way or two-way was not set.
     #[error("Migration flag not set")]
     MigrationFlagNotSet,

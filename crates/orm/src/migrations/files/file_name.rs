@@ -60,13 +60,9 @@ impl From<Vec<MigrationFilename>> for MigrationFilenames {
     }
 }
 
-/// Reads a migration file, naming its path when it can't be read.
+/// Reads a migration file; a failure is [`MigrationError::Io`] with the path and its cause.
 fn read(migration_dir: &Path, name: &MigrationFilename) -> MigrationResult<FileContent> {
-    let path = migration_dir.join(name.to_string());
-    FileContent::from_file(&path).map_err(|e| MigrationError::MigrationFilePathDoesNotExist {
-        path: path.to_string_lossy().to_string(),
-        error: e.to_string(),
-    })
+    FileContent::from_file(migration_dir.join(name.to_string()))
 }
 
 impl MigrationFilenames {
@@ -75,13 +71,10 @@ impl MigrationFilenames {
         self.0
     }
 
-    /// The two-way file names, up and down.
-    pub fn bidirectional(&self) -> Vec<MigrationFilename> {
-        self.0
-            .iter()
-            .filter(|m| matches!(m.kind, Kind::Up | Kind::Down))
-            .cloned()
-            .collect()
+    /// How many file names are one-way, and how many are halves of two-way migrations.
+    pub fn count_by_direction(&self) -> (usize, usize) {
+        let one_way = self.0.iter().filter(|m| m.kind == Kind::OneWay).count();
+        (one_way, self.0.len() - one_way)
     }
 
     /// The two-way migrations read from `migration_dir`, newest first. Each migration is read
@@ -115,15 +108,6 @@ impl MigrationFilenames {
         Ok(pairs)
     }
 
-    /// The one-way file names.
-    pub fn unidirectional(&self) -> Vec<MigrationFilename> {
-        self.0
-            .iter()
-            .filter(|m| m.kind == Kind::OneWay)
-            .cloned()
-            .collect()
-    }
-
     /// The one-way migrations read from `migration_dir`, oldest first.
     pub fn unidirectional_pair_meta(
         &self,
@@ -140,7 +124,7 @@ impl MigrationFilenames {
             files.push(MigrationFileOneWay::new(FileMetadata {
                 content: read(migration_dir, migration)?,
                 name: migration.clone(),
-            }));
+            })?);
         }
         Ok(files)
     }
