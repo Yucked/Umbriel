@@ -12,7 +12,7 @@ impl Codegen<'_> {
     /// `#[model(object)]`, whose stored names are known statically; maps and other shapes are
     /// rejected because they are not `Object`s.
     pub fn create_flattened_field(&mut self, flatten: &syn::Path) -> ExtractorResult<()> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let model_attributes = self.table_derive_attributes();
         let field_receiver = self.field_receiver();
         let MyFieldReceiver {
@@ -79,31 +79,29 @@ impl Codegen<'_> {
             .ty()
             .replace_self_with_current_struct_concrete_type(model_attributes)?;
 
-        self.static_assertions.push(
-            quote!(#crate_name::validators::assert_impl_one!(#ty: #crate_name::Object);).into(),
-        );
+        self.static_assertions
+            .push(quote!(#crate_name::validators::assert_impl_one!(#ty: #crate_name::Object);));
 
         // The object's schema starts at this model's path: its fields are this model's.
         self.schema_struct_fields_types_kv
-            .push(quote!(pub #ident: <#ty as #crate_name::SchemaGetter>::Schema,).into());
+            .push(quote!(pub #ident: <#ty as #crate_name::SchemaGetter>::Schema,));
         self.schema_struct_fields_names_kv.push(
-            quote!(#ident: <#ty as #crate_name::SchemaGetter>::schema_prefixed(#___________path.clone()),)
-                .into(),
+            quote!(#ident: <#ty as #crate_name::SchemaGetter>::schema_prefixed(#___________path.clone()),),
         );
         self.schema_field_idents.push(quote!(#ident));
 
         self.flattened_objects.push(quote!(#ty));
         self.flattened_field_keys.push(quote!(stringify!(#ident)));
         self.renamed_serialized_fields_kv
-            .push(quote!(pub #ident: &'static str).into());
+            .push(quote!(pub #ident: &'static str));
 
         let vis = &model_attributes.receiver().vis;
         self.patch_fields
-            .push(quote!(#vis #ident: #crate_name::FlatPatch<#ty>).into());
+            .push(quote!(#vis #ident: #crate_name::FlatPatch<#ty>));
         self.patch_defaults
-            .push(quote!(#ident: #crate_name::FlatPatch::Keep).into());
+            .push(quote!(#ident: #crate_name::FlatPatch::Keep));
         self.patch_setters
-            .push(quote!(setters.extend(self.#ident.into_setters());).into());
+            .push(quote!(setters.extend(self.#ident.into_setters());));
         self.merge_fields.push(quote!(
             #vis #ident: #crate_name::FlatMerge<#ty, <#ty as #crate_name::Object>::Merge>
         ));

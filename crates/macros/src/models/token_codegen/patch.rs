@@ -9,7 +9,7 @@ impl Codegen<'_> {
     /// One `Patch<T>` field of `<Model>Patch` per stored field, and the stored names `object!`
     /// checks keys against.
     pub fn create_patch_metadata(&mut self) -> ExtractorResult<()> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let model_attributes = self.table_derive_attributes();
         let field_receiver = self.field_receiver();
         let casing = model_attributes.casing()?;
@@ -26,7 +26,7 @@ impl Codegen<'_> {
 
         let field_ident_normalized = field_receiver.field_ident_normalized(&casing)?;
         self.renamed_serialized_fields_kv
-            .push(quote!(pub #field_ident_normalized: &'static str).into());
+            .push(quote!(pub #field_ident_normalized: &'static str));
 
         let db_field_name = field_receiver.db_field_name(&casing)?;
         // A record's id is its identity, not a value to update.
@@ -41,15 +41,12 @@ impl Codegen<'_> {
             .replace_self_with_current_struct_concrete_type(model_attributes)?;
 
         self.patch_fields
-            .push(quote!(#vis #field_ident: #crate_name::Patch<#field_type>).into());
+            .push(quote!(#vis #field_ident: #crate_name::Patch<#field_type>));
         self.patch_defaults
-            .push(quote!(#field_ident: #crate_name::Patch::Keep).into());
-        self.patch_setters.push(
-            quote!(
-                setters.extend(self.#field_ident.into_setter(#crate_name::Field::new(#db_field_name)));
-            )
-            .into(),
-        );
+            .push(quote!(#field_ident: #crate_name::Patch::Keep));
+        self.patch_setters.push(quote!(
+            setters.extend(self.#field_ident.into_setter(#crate_name::Field::new(#db_field_name)));
+        ));
 
         // An embedded object merges field by field through its own `<Object>Merge`; another value
         // through the `MergeFields` type its `merge = "…"` names.

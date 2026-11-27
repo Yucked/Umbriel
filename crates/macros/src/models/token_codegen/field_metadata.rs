@@ -6,7 +6,7 @@ use super::Codegen;
 
 impl Codegen<'_> {
     pub fn create_field_metadata_token(&mut self) -> ExtractorResult<()> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let field_receiver = self.field_receiver();
         let table_derive_attrs = self.table_derive_attributes();
         let field_definition = self.field_defintion_db()?;
@@ -21,14 +21,11 @@ impl Codegen<'_> {
         };
 
         if !field_definition.is_empty() {
-            self.field_metadata.push(
-                quote!(#crate_name::FieldMetadata {
-                    name: #crate_name::Field::new(#field_name_serialized),
-                    old_name: #old_field_name,
-                    definition: ::std::vec![ #( #field_definition ),*]
-                })
-                .into(),
-            );
+            self.field_metadata.push(quote!(#crate_name::FieldMetadata {
+                name: #crate_name::Field::new(#field_name_serialized),
+                old_name: #old_field_name,
+                definition: ::std::vec![ #( #field_definition ),*]
+            }));
         }
 
         Ok(())
