@@ -17,24 +17,19 @@ pub enum Status {
 
 impl Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Status::Applied => write!(f, "applied"),
-            Status::Pending => write!(f, "pending"),
-            Status::All => write!(f, "all"),
-        }
+        f.write_str(match self {
+            Status::Applied => "applied",
+            Status::Pending => "pending",
+            Status::All => "all",
+        })
     }
 }
 
 /// List migrations according to status
 #[derive(Args, Debug, TypedBuilder, Clone)]
 pub struct List {
-    /// Status of migrations to list
-    #[arg(
-        value_enum,
-        long,
-        help = "Status of migrations to list. Can be 'applied', 'pending' or 'all'",
-        default_value_t = Status::Applied
-    )]
+    /// Status of migrations to list: applied, pending or all
+    #[arg(value_enum, long, default_value_t = Status::Applied)]
     pub(crate) status: Status,
 }
 

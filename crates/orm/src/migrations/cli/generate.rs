@@ -9,11 +9,11 @@ use typed_builder::TypedBuilder;
 #[derive(Args, Debug, TypedBuilder, Clone)]
 pub struct Generate {
     /// Name of the migration
-    #[arg(long, help = "Name of the migration")]
+    #[arg(long)]
     pub(crate) name: Basename,
 
-    /// Whether or not to run the migrations after generation.
-    #[arg(long, help = "Whether to run the migrations after generation")]
+    /// Whether to run the migrations after generation
+    #[arg(long)]
     #[builder(default)]
     pub(crate) run: bool,
 }

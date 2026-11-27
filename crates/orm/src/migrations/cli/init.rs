@@ -7,20 +7,16 @@ use typed_builder::TypedBuilder;
 /// Init migrations
 #[derive(Args, Debug, TypedBuilder, Clone)]
 pub struct Init {
-    /// Name of the migration
-    #[arg(long, help = "Name of the first migration file(s)")]
+    /// Name of the first migration file(s)
+    #[arg(long)]
     pub(crate) name: Basename,
 
-    /// Whether or not to run the migrations after initialization.
+    /// Whether to run the migrations after initialization
     #[arg(long)]
     pub(crate) run: bool,
 
-    /// Two way migration
-    #[arg(
-        short,
-        long,
-        help = "Unidirectional(Up only) Bidirectional(up & down) migration(S)"
-    )]
+    /// Write two-way migrations (an up and a down file each) instead of one-way ones
+    #[arg(short, long)]
     pub(crate) reversible: bool,
 }
 
