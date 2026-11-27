@@ -9,7 +9,6 @@ where
     Self: std::fmt::Debug,
 {
     /// Whether to write a migration although the schemas do not differ, e.g. to fill in by hand.
-    // TODO: Rename to prompt_empty_migration_gen
     fn prompt_empty_migrations_trigger(&self) -> Result<bool, InquireError> {
         inquire::Confirm::new("Are you sure you want to generate an empty migration? (y/n)")
             .with_default(false)
