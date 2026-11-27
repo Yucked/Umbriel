@@ -23,13 +23,13 @@ async fn results() {
     let london = geo::Point::new(-0.118092, 51.509865);
     let paris = geo::Point::new(2.352222, 48.856614);
     for function in [
-        geo_fn::area!(square()),
-        geo_fn::bearing!(london, paris),
-        geo_fn::distance!(london, paris),
+        geo_fn::area(square()),
+        geo_fn::bearing(london, paris),
+        geo_fn::distance(london, paris),
     ] {
         is_a(&db, &function, "number").await;
     }
-    is_a(&db, &geo_fn::centroid!(square()), "point").await;
+    is_a(&db, &geo_fn::centroid(square()), "point").await;
     is_a(&db, &geo_fn::hash::encode!(london), "string").await;
     holds(&db, &geo_fn::hash::encode!(london, 5), "'gcpvj'").await;
     holds(
@@ -38,13 +38,13 @@ async fn results() {
         "'gcpvj'",
     )
     .await;
-    is_a(&db, &geo_fn::hash::decode!("gcpvj"), "point").await;
-    holds(&db, &geo_fn::is_valid!(square()), "true").await;
+    is_a(&db, &geo_fn::hash::decode("gcpvj"), "point").await;
+    holds(&db, &geo_fn::is_valid(square()), "true").await;
 }
 
 #[test]
 fn generated_bindings() {
-    let nested = geo_fn::area!(geo_fn::centroid!(Param::new("shape")));
+    let nested = geo_fn::area(geo_fn::centroid(Param::new("shape")));
     let (sql, vars) = nested.to_query().expect("renders").into_parts();
     assert_eq!(sql, "geo::area(geo::centroid($shape))");
     assert_eq!(vars.len(), 0);
@@ -75,11 +75,11 @@ async fn methods_run() {
     same_all!(
         &db,
         [
-            (g().area(), geo_fn::area!(square())),
-            (p().bearing(paris), geo_fn::bearing!(london, paris)),
-            (g().centroid(), geo_fn::centroid!(square())),
-            (p().distance(paris), geo_fn::distance!(london, paris)),
-            (g().is_valid(), geo_fn::is_valid!(square())),
+            (g().area(), geo_fn::area(square())),
+            (p().bearing(paris), geo_fn::bearing(london, paris)),
+            (g().centroid(), geo_fn::centroid(square())),
+            (p().distance(paris), geo_fn::distance(london, paris)),
+            (g().is_valid(), geo_fn::is_valid(square())),
             (p().hash_encode(Some(5)), geo_fn::hash::encode!(london, 5)),
         ]
     );

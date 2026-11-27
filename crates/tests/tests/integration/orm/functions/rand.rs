@@ -48,7 +48,7 @@ async fn results() {
             (rand_fn::time!(), "datetime"),
             (rand_fn::ulid!(), "string"),
             (rand_fn::uuid!(), "uuid"),
-            (rand_fn::uuid::v4!(), "uuid"),
+            (rand_fn::uuid::v4(), "uuid"),
             (rand_fn::uuid::v7!(), "uuid"),
             (rand_fn::uuid::v7!(datetime()), "uuid"),
             (rand_fn::id!(), "string"),
