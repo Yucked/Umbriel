@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, hash_map::Entry},
-    fmt::Display,
-    ops::{Deref, DerefMut},
-};
+use std::collections::{BTreeMap, btree_map::Entry};
 
 use crate::helpers::get_crate_name;
 use heck::ToUpperCamelCase;
@@ -15,7 +11,7 @@ use super::Codegen;
 
 impl Codegen<'_> {
     pub fn create_relation_connection_tokenstream(&mut self) -> ExtractorResult<()> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let table_derive_attributes = self.table_derive_attributes();
         let field_receiver = self.field_receiver();
         let db_field_name = field_receiver.db_field_name(&table_derive_attributes.casing()?)?;
@@ -39,20 +35,18 @@ impl Codegen<'_> {
             };
             let edge_table = edge_table.into_inner().to_string();
             let foreign_node_table = foreign_node_table.into_inner().to_string();
-            self.fields_relations_aliased.push(
-                quote!(#crate_name::Aliasable::__as__(
+            self.fields_relations_aliased
+                .push(quote!(#crate_name::Aliasable::__as__(
                     &#crate_name::Field::graph_step(#arrow, #crate_name::Table::new(#edge_table))
                         .with_graph_step(#arrow, #crate_name::Table::new(#foreign_node_table)),
                     #crate_name::AliasName::new(#db_field_name),
-                ))
-                .into(),
-            );
+                )));
         }
         Ok(())
     }
 
     fn relate(&mut self, relate: &Relate) -> ExtractorResult<()> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let table_derive_attributes = &self.table_derive_attributes();
         let VariablesModelMacro {
             __________connect, ..
@@ -115,11 +109,11 @@ impl Codegen<'_> {
             edge_relation_model_selected_ident: edge_type.type_name()?.into(),
         };
 
-        match self
-            .node_edge_metadata
-            .deref_mut()
-            .entry(edge_name_with_direction_as_method_ident())
-        {
+        match self.node_edge_metadata.0.entry(
+            edge_name_with_direction_as_method_ident()
+                .into_inner()
+                .to_string(),
+        ) {
             Entry::Occupied(o) => {
                 let existing = o.into_mut();
                 // Get all the Edge types(with direction) aliased types, so
@@ -152,8 +146,8 @@ impl Codegen<'_> {
         edge.into()
     }
 
-    fn create_static_assertions(&self, relate: &Relate) -> ExtractorResult<StaticAssertionToken> {
-        let crate_name = get_crate_name(false);
+    fn create_static_assertions(&self, relate: &Relate) -> ExtractorResult<TokenStream> {
+        let crate_name = get_crate_name();
         let model_attributes = &self.table_derive_attributes();
         let current_struct_ident = &model_attributes.ident();
         let current_struct_generics = model_attributes.generics();
@@ -210,41 +204,7 @@ impl Codegen<'_> {
                  #crate_name::validators::assert_type_eq_all!(#field_type,  #crate_name::Relate<#foreign_node_type>);
             ),
         ];
-        Ok(StaticAssertionToken(quote!(
-                #( #static_assertions) *
-        )))
-    }
-}
-
-impl EdgeTableName {
-    pub fn to_str_typed(&self) -> EdgeTableNameStr {
-        EdgeTableNameStr(self.to_string())
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct EdgeTableNameStr(String);
-
-impl EdgeTableNameStr {
-    pub fn to_pascal_case_ident(&self) -> EdgeNameAsStructOriginalIdent {
-        EdgeNameAsStructOriginalIdent(format_ident!("{}", self.as_pascal_case().to_string()))
-    }
-
-    fn as_pascal_case(&self) -> EdgeTableNameStr {
-        EdgeTableNameStr(self.to_string().to_upper_camel_case())
-    }
-}
-
-impl Display for EdgeTableNameStr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl ToTokens for EdgeTableNameStr {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let value = &self.0;
-        tokens.extend(quote!(#value));
+        Ok(quote!(#( #static_assertions) *))
     }
 }
 
@@ -252,9 +212,7 @@ create_ident_wrapper!(EdgeNameAsMethodIdent);
 create_ident_wrapper!(EdgeRelationModelSelectedIdent);
 
 create_tokenstream_wrapper!(=>EdgeToForeignNodeMethod);
-create_tokenstream_wrapper!(=>DestinationNodeSchemaOne);
 create_ident_wrapper!(ForeignNodeAssociatedTypeInOrOut);
-create_ident_wrapper!(EdgeNameAsStructOriginalIdent);
 
 #[derive(Clone, Debug)]
 pub struct NodeEdgeMetadata<'a> {
@@ -264,9 +222,6 @@ pub struct NodeEdgeMetadata<'a> {
     /// is the same struct, so it gives the table family the edge step accepts.
     edge_type: EdgeType,
     pub edge_types: Vec<EdgeType>,
-    // /// The current struct name ident.
-    // /// e.g given: struct Student {  }, value = Student
-    // current_struct_ident: StructIdent,
     table_derive_attributes: &'a ModelAttributes<'a>,
     /// The database table name of the edge. Used for generating other tokens
     /// e.g "writes"
@@ -326,35 +281,19 @@ pub struct NodeEdgeMetadata<'a> {
     edge_name_as_method_ident: EdgeNameAsMethodIdent,
 }
 
-// #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-// struct EdgeNameWithDirectionIndicator(String);
 create_ident_wrapper!(EdgeWithDunderDirectionIndicator);
 
+/// The model's relations, one entry per edge table and direction, keyed by the method name that
+/// carries the direction (`writes__`, `__writes`). Ordered by that name, so the expansion doesn't
+/// depend on hash order.
 #[derive(Default, Clone)]
-pub struct NodeEdgeMetadataLookupTable<'a>(
-    HashMap<EdgeWithDunderDirectionIndicator, NodeEdgeMetadata<'a>>,
-);
-impl<'a> Deref for NodeEdgeMetadataLookupTable<'a> {
-    type Target = HashMap<EdgeWithDunderDirectionIndicator, NodeEdgeMetadata<'a>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for NodeEdgeMetadataLookupTable<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl NodeEdgeMetadataLookupTable<'_> {}
+pub struct NodeEdgeMetadataLookupTable<'a>(BTreeMap<String, NodeEdgeMetadata<'a>>);
 
 create_tokenstream_wrapper!(=>ArrowTokenStream);
 
 impl From<&EdgeDirection> for ArrowTokenStream {
     fn from(value: &EdgeDirection) -> Self {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
 
         let arrow = match value {
             EdgeDirection::Out => quote!(#crate_name::Arrow::Right),
@@ -366,7 +305,7 @@ impl From<&EdgeDirection> for ArrowTokenStream {
 
 impl ToTokens for NodeEdgeMetadata<'_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let VariablesModelMacro {
             __________connect, ..
         } = VariablesModelMacro::new();
@@ -387,11 +326,11 @@ impl ToTokens for NodeEdgeMetadata<'_> {
         let (struct_impl_generics, struct_ty_generics, struct_where_clause) =
             value.table_derive_attributes.generics().split_for_impl();
         let arrow = ArrowTokenStream::from(direction);
-        let edge_table_str = edge_table.to_str_typed();
-        let edge_name_as_struct_original_ident = edge_table_str.to_pascal_case_ident();
+        let edge_name_as_struct_original_ident =
+            format_ident!("{}", edge_table.to_string().to_upper_camel_case());
         let aggregated_edge_type =
             EdgeType::aggregate_lifetime_and_generics_from_variations_of_a_type(
-                edge_name_as_struct_original_ident.deref(),
+                &edge_name_as_struct_original_ident,
                 edge_types,
             );
 
@@ -492,14 +431,8 @@ impl ToTokens for NodeEdgeMetadata<'_> {
 
 impl ToTokens for NodeEdgeMetadataLookupTable<'_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let node_edge_token_streams = self
-            .deref()
-            .values()
-            .map(ToTokens::to_token_stream)
-            .collect::<Vec<_>>();
-
-        let token = quote!(#( #node_edge_token_streams) *);
-
-        tokens.extend(token);
+        for metadata in self.0.values() {
+            metadata.to_tokens(tokens);
+        }
     }
 }
