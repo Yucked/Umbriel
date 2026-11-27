@@ -54,23 +54,71 @@ impl Render for JwtAlgorithm {
     }
 }
 
-/// The level an access method is defined on.
+/// The level an access method, a user, a removal or an `INFO` applies to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AccessLevel {
+pub enum Level {
     /// `ROOT`
     Root,
-    /// `NAMESPACE`
+    /// `NAMESPACE`: the current namespace.
     Namespace,
-    /// `DATABASE`
+    /// `DATABASE`: the current database.
     Database,
 }
 
-impl Render for AccessLevel {
-    fn render(&self, out: &mut Renderer) {
-        out.push_str(match self {
-            AccessLevel::Root => "ROOT",
-            AccessLevel::Namespace => "NAMESPACE",
-            AccessLevel::Database => "DATABASE",
-        });
+impl Level {
+    /// The level's SurrealQL keyword.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Level::Root => "ROOT",
+            Level::Namespace => "NAMESPACE",
+            Level::Database => "DATABASE",
+        }
     }
+}
+
+impl Render for Level {
+    fn render(&self, out: &mut Renderer) {
+        out.push_str(self.as_str());
+    }
+}
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// A [`Level`] as a type, for builders whose clauses depend on the level: record access and
+/// bearer access for records exist on a database only, so only
+/// [`DefineAccessStatement<OnDatabase>`](crate::statements::DefineAccessStatement) offers them.
+/// Sealed: [`OnRoot`], [`OnNamespace`] and [`OnDatabase`] are its only implementors.
+pub trait OnLevel: sealed::Sealed + Send + Sync + 'static {
+    /// The level the type stands for.
+    const LEVEL: Level;
+}
+
+/// The root level, as a type.
+#[derive(Debug, Clone, Copy)]
+pub struct OnRoot;
+
+/// The current namespace, as a type.
+#[derive(Debug, Clone, Copy)]
+pub struct OnNamespace;
+
+/// The current database, as a type.
+#[derive(Debug, Clone, Copy)]
+pub struct OnDatabase;
+
+impl sealed::Sealed for OnRoot {}
+impl sealed::Sealed for OnNamespace {}
+impl sealed::Sealed for OnDatabase {}
+
+impl OnLevel for OnRoot {
+    const LEVEL: Level = Level::Root;
+}
+
+impl OnLevel for OnNamespace {
+    const LEVEL: Level = Level::Namespace;
+}
+
+impl OnLevel for OnDatabase {
+    const LEVEL: Level = Level::Database;
 }
