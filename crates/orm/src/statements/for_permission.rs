@@ -154,6 +154,25 @@ impl PermissionsClause {
     pub(crate) fn push(&mut self, permissions: impl Into<Permissions>) {
         self.fors.push(permissions.into());
     }
+
+    /// Writes the clause for a field, with a render error for `FOR delete`: SurrealDB 3.3.4
+    /// refuses a delete permission on a field (`parse_specific_permission`), since a field is
+    /// never deleted on its own. Raw permissions are written as given.
+    pub(crate) fn render_for_field(&self, out: &mut Renderer) {
+        let names_delete = self.fors.iter().any(|permissions| match permissions {
+            Permissions::For(one) => one.crud_types.contains(&CrudType::Delete),
+            Permissions::Fors(many) => many
+                .iter()
+                .any(|one| one.crud_types.contains(&CrudType::Delete)),
+            Permissions::RawStatement(_) | Permissions::RawStatementList(_) => false,
+        });
+        if names_delete {
+            out.push_error(
+                "a field has no `delete` permission; `FOR delete` applies to tables".to_owned(),
+            );
+        }
+        self.render(out);
+    }
 }
 
 /// Renders ` PERMISSIONS NONE`, ` PERMISSIONS FULL`, or the `FOR` permissions one per line;
