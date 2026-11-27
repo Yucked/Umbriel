@@ -5,6 +5,8 @@ use umbriel_tests::*;
 
 #[test]
 fn a_parameter_renders_and_parses() {
-    assert_eq!(kill(&Param::new("id")).to_debug_sql(), "KILL $id;");
+    let id = Param::new("id");
+    assert_eq!(kill(&id).to_debug_sql(), "KILL $id;");
+    assert_eq!(kill(id).to_debug_sql(), "KILL $id;");
     assert_parses("KILL $id;");
 }
