@@ -45,6 +45,11 @@ impl ValueLike {
         Self(Expr::Syntax(text))
     }
 
+    /// Whether this is the `*` projection, [`All`].
+    pub(crate) fn is_all(&self) -> bool {
+        matches!(self.0, Expr::Syntax("*"))
+    }
+
     /// A table name, written as an identifier rather than bound as a table value.
     pub(crate) fn table(table: Table) -> Self {
         Self(Expr::Table(table))
@@ -58,7 +63,9 @@ impl ValueLike {
     /// Renders the expression as an arithmetic operand: an operation is parenthesized so it binds
     /// before the surrounding operator.
     pub(crate) fn render_operand(&self, out: &mut Renderer) {
-        if let Expr::Operation(operation) = &self.0 {
+        if let Expr::Operation(operation) = &self.0
+            && operation.needs_grouping()
+        {
             out.push_str("(").push(operation).push_str(")");
         } else {
             self.render(out);
