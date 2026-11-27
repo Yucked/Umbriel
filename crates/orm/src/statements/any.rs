@@ -60,48 +60,56 @@ pub const fn overlapping_members(members: &[TableSpec]) -> Option<(usize, usize)
 /// One target of a mixed-model `CREATE`: a record id or a table of any variant's model. A target
 /// outside every variant's family fails when the statement is rendered.
 #[derive(Debug, Clone)]
-pub struct AnyTarget(AnyTargetKind);
+pub struct AnyTarget {
+    /// The target's table, which must be in a member's family.
+    table: Table,
+    /// The target as it renders: the table or the record id.
+    target: ValueLike,
+}
 
-#[derive(Debug, Clone)]
-enum AnyTargetKind {
-    Table(Table),
-    Record(types::RecordId),
+impl AnyTarget {
+    fn record(id: types::RecordId) -> Self {
+        Self {
+            table: id.table.clone(),
+            target: ValueLike::value(id),
+        }
+    }
 }
 
 impl<T: Writable> From<RecordId<T>> for AnyTarget {
     fn from(id: RecordId<T>) -> Self {
-        Self(AnyTargetKind::Record(id.into()))
+        Self::record(id.into())
     }
 }
 
 impl<T: Writable> From<&RecordId<T>> for AnyTarget {
     fn from(id: &RecordId<T>) -> Self {
-        Self(AnyTargetKind::Record(id.into()))
+        Self::record(id.into())
     }
 }
 
 impl<T: Writable> From<TableOf<T>> for AnyTarget {
     fn from(table: TableOf<T>) -> Self {
-        Self(AnyTargetKind::Table(table.into()))
+        let table: Table = table.into();
+        Self {
+            target: ValueLike::table(table.clone()),
+            table,
+        }
     }
 }
 
 impl AnyTarget {
     fn render<M: Models>(&self, out: &mut Renderer) {
-        let (table, target) = match &self.0 {
-            AnyTargetKind::Table(table) => (table, ValueLike::table(table.clone())),
-            AnyTargetKind::Record(id) => (&id.table, ValueLike::value(id.clone())),
-        };
         if !M::MEMBERS
             .iter()
-            .any(|member| member.accepts(table.as_str()))
+            .any(|member| member.accepts(self.table.as_str()))
         {
             out.push_error(format!(
                 "target `{}` is not in a table of the union's models",
-                target.to_debug_sql()
+                self.target.to_debug_sql()
             ));
         }
-        out.push(&target);
+        out.push(&self.target);
     }
 }
 
@@ -249,8 +257,13 @@ impl<M: Models, R: ReturnMode, C: Cardinality> Returning for CreateAnyStatement<
 pub fn insert_any<M: WritableModels>(
     records: impl IntoIterator<Item = M>,
 ) -> InsertAnyStatement<M> {
+    let records = records
+        .into_iter()
+        .map(SurrealValue::into_value)
+        .collect::<Vec<_>>();
     InsertAnyStatement {
-        records: records.into_iter().map(SurrealValue::into_value).collect(),
+        empty: records.is_empty(),
+        records: Value::Array(records.into()),
         ignore: false,
         timeout: None,
         mode: ReturnAfter::default_mode(),
@@ -260,10 +273,13 @@ pub fn insert_any<M: WritableModels>(
 
 /// A targetless mixed-model `INSERT`. It offers the return modes a single-model `INSERT` does
 /// that decode without knowing the model in advance: `NONE`, `NULL`, `AFTER` (the default) and
-/// `DIFF`. `INSERT` has no `ONLY`.
+/// `DIFF`. `INSERT` has no `ONLY`, so the statement has no cardinality parameter, and its return
+/// methods are written here rather than by `return_methods!`, which builds `Statement<M, R, C>`.
 #[derive(Debug, Clone)]
 pub struct InsertAnyStatement<M, R = ReturnAfter<M>> {
-    records: Vec<Value>,
+    /// The records as one array, built once so rendering doesn't copy them.
+    records: Value,
+    empty: bool,
     ignore: bool,
     timeout: Option<DurationLike>,
     mode: R,
@@ -306,6 +322,7 @@ impl<M: Models, R: ReturnMode> InsertAnyStatement<M, R> {
     fn with_mode<N: ReturnMode>(self, mode: N) -> InsertAnyStatement<M, N> {
         InsertAnyStatement {
             records: self.records,
+            empty: self.empty,
             ignore: self.ignore,
             timeout: self.timeout,
             mode,
@@ -320,10 +337,10 @@ impl<M: Models, R: ReturnMode> Statement for InsertAnyStatement<M, R> {
         if self.ignore {
             out.push_str("IGNORE ");
         }
-        if self.records.is_empty() {
+        if self.empty {
             out.push_error("an INSERT statement needs at least one record");
         }
-        out.push_value(&Value::Array(self.records.clone().into()));
+        out.push_value(&self.records);
         self.mode.render(out);
         if let Some(timeout) = &self.timeout {
             out.push_str(" TIMEOUT ").push(timeout);
