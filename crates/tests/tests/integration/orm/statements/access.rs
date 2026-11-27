@@ -29,7 +29,7 @@ fn every_operation_renders() {
         ),
         (
             access("api")
-                .show_where(Field::new("subject.user").equal("alice"))
+                .show_where(Field::new("subject").with_field("user").equal("alice"))
                 .to_debug_sql(),
             "ACCESS api SHOW WHERE subject.user = 'alice';",
         ),
@@ -132,7 +132,10 @@ async fn a_bearer_grant_lives_until_revoked_and_purged() {
         .execute(&db)
         .await
         .expect("revoked");
-    assert!(revoked.revocation.is_some());
+    assert!(
+        matches!(revoked.as_slice(), [one] if one.id == grant.id && one.revocation.is_some()),
+        "{revoked:?}"
+    );
     let refused = signin(grant.grant.key.clone()).await.expect_err("revoked");
     assert!(
         matches!(Error::from(refused), Error::NotAllowed { .. }),
