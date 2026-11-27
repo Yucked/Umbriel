@@ -1,13 +1,7 @@
-use umbriel::{
-    Field,
-    functions::{math, string},
-};
+use umbriel::functions::string;
 
-// A fixed-arity function takes exactly its arguments, and a variadic one at least one.
+// A variadic function takes at least one argument. Fixed-arity functions are plain functions,
+// whose arity the compiler checks.
 fn main() {
-    let name = Field::new("name");
-    let _ = string::len();
-    let _ = string::len(name.clone(), name);
-    let _ = math::fixed(1);
     let _ = string::join!();
 }
