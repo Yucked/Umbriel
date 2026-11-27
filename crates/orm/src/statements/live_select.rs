@@ -136,8 +136,8 @@ pub enum LiveEvent<O> {
 /// - a transport failure is the stream's last item: the stream ends after it.
 ///
 /// The stream ends when the live query does: after [`kill`](Self::kill), or with the connection.
-/// In SurrealDB 3.3.4, invalidating the session doesn't end it: the query stays registered and
-/// the stream stays open until it is killed or dropped.
+/// Invalidating the session also ends the live query on the server, but SurrealDB 3.3.4 sends
+/// no `Killed` notification for it, so the stream stays open and receives nothing: drop it.
 ///
 /// Dropping the stream ends the live query as best effort: the SDK sends a `KILL` from a task of
 /// its own and logs a failure, with nothing returned to the caller. [`kill`](Self::kill) runs
