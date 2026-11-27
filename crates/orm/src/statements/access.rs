@@ -156,6 +156,10 @@ impl AccessInit {
 
     /// `PURGE EXPIRED`: deletes expired grants. Combine with
     /// [`purge_revoked`](AccessStatement::purge_revoked).
+    ///
+    /// SurrealDB 3.3.4 counts the time since expiry or revocation in whole seconds and purges a
+    /// grant only when it exceeds the grace period ([`for_`](AccessStatement::for_), zero by
+    /// default), so a grant expired or revoked in the current second stays.
     pub fn purge_expired(self) -> AccessStatement<Vec<AccessGrant>> {
         self.operation(AccessOperation::Purge(Purge {
             expired: true,
@@ -165,7 +169,8 @@ impl AccessInit {
     }
 
     /// `PURGE REVOKED`: deletes revoked grants. Combine with
-    /// [`purge_expired`](AccessStatement::purge_expired).
+    /// [`purge_expired`](AccessStatement::purge_expired). As with
+    /// [`purge_expired`](Self::purge_expired), a grant revoked in the current second stays.
     pub fn purge_revoked(self) -> AccessStatement<Vec<AccessGrant>> {
         self.operation(AccessOperation::Purge(Purge {
             expired: false,
@@ -250,9 +255,9 @@ impl<O: SurrealValue + 'static> AccessStatement<O> {
     }
 }
 
-/// SurrealDB 3.3.4 answers `REVOKE GRANT` and `REVOKE WHERE` with a list of lists of grants
-/// (`[[{…}]]`, as the statement's documentation shows), so the inner lists are joined into one.
-/// A grant outside an inner list is kept, so a flat answer decodes too.
+/// SurrealDB 3.3.4 answers every `REVOKE` with a list holding the list of revoked grants
+/// (`[[{…}]]`; `compute_revoke` wraps `revoke_grant`'s array), so the inner lists are joined
+/// into one. A grant outside an inner list is kept, so a flat answer decodes too.
 fn flatten_revocations(value: Value) -> Value {
     let Value::Array(outer) = value else {
         return value;
