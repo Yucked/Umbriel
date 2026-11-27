@@ -32,33 +32,10 @@ pub(crate) enum QueryParser {
 }
 
 impl QueryParser {
-    pub fn is_transaction_stmt(&self) -> bool {
-        self.is_begin_transaction() || self.is_commit_transaction() || self.is_cancel_transaction()
-    }
-
-    pub fn is_begin_transaction(&self) -> bool {
-        matches!(self, QueryParser::BeginTransaction)
-    }
-
-    pub fn is_commit_transaction(&self) -> bool {
-        matches!(self, QueryParser::CommitTransaction)
-    }
-
-    pub fn is_cancel_transaction(&self) -> bool {
-        matches!(self, QueryParser::CancelTransaction)
-    }
-
+    /// Whether this is a top-level `return`. A `return` inside an `if` or `for` body returns from
+    /// that body only, so it doesn't make the chain a block.
     pub fn is_return_statement(&self) -> bool {
-        match self {
-            QueryParser::ReturnStatement(_) => true,
-            // TODO: Consider removing IfElse and ForLoop from here.
-            // We shouldn't use the following because the return statement from within
-            // them do not blow up to the outer scope. They only return for the specific if else or
-            // for loop block/context.
-            // QueryParser::IfEsle(s) => s.has_return_statement(),
-            // QueryParser::ForLoop(s) => s.has_return_statement(),
-            _ => false,
-        }
+        matches!(self, QueryParser::ReturnStatement(_))
     }
 }
 
