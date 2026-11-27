@@ -209,6 +209,24 @@ pub enum StreamEvent<T> {
 /// execution to stop, which it notices only when it next emits a row: a phase that emits nothing
 /// runs to its end and commits its transaction. Over WebSocket and HTTP the query has already
 /// finished. Undo work explicitly, with `CANCEL` or [`Transaction::cancel`].
+///
+/// ```rust,no_run
+/// use futures::StreamExt;
+/// use umbriel::{All, StreamEvent, Table, statements::select};
+///
+/// # async fn read(db: &umbriel::Surreal<umbriel::engine::any::Any>) -> umbriel::Result<()> {
+/// let mut rows = select(All).from(Table::from("note")).stream(db)?;
+/// while let Some(item) = rows.next().await {
+///     match item? {
+///         // A row that doesn't decode is that row's error; the stream goes on.
+///         StreamEvent::Row { value, .. } => println!("{:?}", value?),
+///         // The statement's own outcome: its rows stand only if it succeeded.
+///         StreamEvent::End { result, .. } => result?,
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[must_use = "streams do nothing unless you poll them"]
 pub struct RowStream<T> {
     items: surrealdb::method::ItemStream,
