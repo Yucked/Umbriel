@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use surrealdb::types::{Object, Table, Value};
 
 use crate::{
-    DatetimeLike, Error, Executor, Name, Render, Renderer, Result, TableIndex, User,
+    DatetimeLike, Error, Executor, Level, Name, Render, Renderer, Result, TableIndex, User,
     execution::execute,
 };
 
@@ -13,7 +13,6 @@ use super::{
         DatabaseInfo, IndexStatus, InfoOutput, NamespaceInfo, RootInfo, Statements, Structures,
         TableInfo,
     },
-    remove::UserPermissionScope,
 };
 
 /// Creates statement for INFO for ROOT, NAMESPACE, DATABASE, TABLE, USER or INDEX.
@@ -47,7 +46,7 @@ enum InfoTarget {
     Table(Name<Table>),
     User {
         name: Name<User>,
-        level: Option<UserPermissionScope>,
+        level: Option<Level>,
     },
     Index {
         index: Name<TableIndex>,
@@ -191,20 +190,20 @@ listing_levels!(RootInfo, NamespaceInfo, DatabaseInfo, TableInfo);
 impl InfoStatement<String> {
     /// `ON ROOT`: the root user with this name.
     pub fn on_root(self) -> Self {
-        self.on(UserPermissionScope::Root)
+        self.on(Level::Root)
     }
 
     /// `ON NAMESPACE`: the user with this name on the current namespace.
     pub fn on_namespace(self) -> Self {
-        self.on(UserPermissionScope::Namespace)
+        self.on(Level::Namespace)
     }
 
     /// `ON DATABASE`: the user with this name on the current database.
     pub fn on_database(self) -> Self {
-        self.on(UserPermissionScope::Database)
+        self.on(Level::Database)
     }
 
-    fn on(mut self, scope: UserPermissionScope) -> Self {
+    fn on(mut self, scope: Level) -> Self {
         if let InfoTarget::User { level, .. } = &mut self.target {
             *level = Some(scope);
         }
@@ -235,7 +234,7 @@ impl<O> Statement for InfoStatement<O> {
             InfoTarget::User { name, level } => {
                 out.push_str("INFO FOR USER ").push(name);
                 if let Some(level) = level {
-                    out.push_str(" ON ").push_display(level);
+                    out.push_str(" ON ").push(level);
                 }
             }
             InfoTarget::Index { index, table } => {
