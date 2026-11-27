@@ -142,3 +142,111 @@ impl<F: Into<Field>, const N: usize> From<[F; N]> for Unsettables {
         Self(fields.into_iter().map(Into::into).collect())
     }
 }
+
+/// Writes the data-clause builder methods shared by `CREATE`, `UPDATE`, `UPSERT` and `RELATE`:
+/// `content`, `set`, `merge`, `patch`, `replace`, `unset`, `timeout`, and the private `with_mode`
+/// that changes the return mode.
+///
+/// The statement is `$statement<T, R, C>` with a `body` holding `data: Option<DataClause>` and
+/// `timeout: Option<DurationLike>`, `mode: R` and `cardinality: PhantomData<C>`; `$bound` is what
+/// `T` must implement. `$noun` names what the statement writes in the generated docs.
+macro_rules! data_clause_methods {
+    ($bound:path, $statement:ident, $noun:literal) => {
+        impl<T: $bound, R: $crate::statements::ReturnMode, C: $crate::statements::Cardinality>
+            $statement<T, R, C>
+        {
+            #[doc = concat!(
+                "The ", $noun, "'s data as a whole model (`CONTENT`). `CONTENT` bypasses ",
+                "`READONLY` fields; [`replace`](Self::replace) respects them. The model's ids ",
+                "must agree with the statement's targets, or the statement fails when it is ",
+                "rendered."
+            )]
+            pub fn content(mut self, content: T) -> Self {
+                self.body.data =
+                    Some($crate::statements::data::DataClause::content(content));
+                self
+            }
+
+            #[doc = concat!(
+                "Assignments to the ", $noun, "'s fields (`SET`): `=`, and `+=`/`-=` to ",
+                "increment, decrement, append or remove. Repeated calls add to the assignments."
+            )]
+            pub fn set(mut self, settables: impl Into<Vec<$crate::Setter>>) -> Self {
+                self.body.data = Some($crate::statements::data::DataClause::set(
+                    self.body.data.take(),
+                    settables.into(),
+                ));
+                self
+            }
+
+            #[doc = concat!(
+                "Merges the non-`Keep` fields of a generated `<Model>Merge` into the ", $noun,
+                " (`MERGE`). Nested objects combine at every level; arrays are replaced whole. ",
+                "A merge with every field `Keep` still writes `MERGE {}`."
+            )]
+            pub fn merge(mut self, merge: impl $crate::ModelMerge<Model = T>) -> Self {
+                self.body.data = Some($crate::statements::data::DataClause::Merge(
+                    $crate::ValueLike::new(merge.into_object()),
+                ));
+                self
+            }
+
+            #[doc = concat!(
+                "JSON Patch operations on the ", $noun, " (`PATCH`). Repeated calls add to the ",
+                "operations; one that fails, such as a failed `test` or a `replace` of a path ",
+                "that does not exist, fails the statement."
+            )]
+            pub fn patch(mut self, patch_op: impl Into<Vec<$crate::PatchOp>>) -> Self {
+                self.body.data = Some($crate::statements::data::DataClause::patch(
+                    self.body.data.take(),
+                    patch_op.into(),
+                ));
+                self
+            }
+
+            #[doc = concat!(
+                "Caution! Replaces the ", $noun, "'s fields with the given value, removing every ",
+                "field it does not contain (`REPLACE`). Unlike `CONTENT` it respects `READONLY` ",
+                "fields."
+            )]
+            pub fn replace(mut self, replacement: impl $crate::types::SurrealValue) -> Self {
+                self.body.data = Some($crate::statements::data::DataClause::Replace(
+                    $crate::ValueLike::value(replacement),
+                ));
+                self
+            }
+
+            #[doc = concat!(
+                "Removes fields from the ", $noun, " (`UNSET`). Repeated calls add to the ",
+                "fields. Fields with a `DEFAULT` or `VALUE` clause are computed after the data ",
+                "clause."
+            )]
+            pub fn unset(
+                mut self,
+                fields: impl Into<$crate::statements::data::Unsettables>,
+            ) -> Self {
+                self.body.data = Some($crate::statements::data::DataClause::unset(
+                    self.body.data.take(),
+                    fields.into().0,
+                ));
+                self
+            }
+
+            /// `TIMEOUT @duration`, bound as a query parameter.
+            pub fn timeout(mut self, duration: impl Into<$crate::DurationLike>) -> Self {
+                self.body.timeout = Some(duration.into());
+                self
+            }
+
+            fn with_mode<M: $crate::statements::ReturnMode>(self, mode: M) -> $statement<T, M, C> {
+                $statement {
+                    body: self.body,
+                    mode,
+                    cardinality: ::std::marker::PhantomData,
+                }
+            }
+        }
+    };
+}
+
+pub(crate) use data_clause_methods;
