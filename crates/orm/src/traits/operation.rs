@@ -263,6 +263,20 @@ impl Operation {
     fn prefix(operator: &'static str, operand: ValueLike) -> Self {
         Self::new(OperationNode::Prefix { operator, operand })
     }
+
+    /// Whether the operation needs parentheses as the operand of another operator. `BETWEEN`
+    /// forms and `??`/`?:` already write their own. A prefix operator keeps them: two in a row
+    /// would otherwise read as another operator (`!!`) or a comment (`--`).
+    pub(crate) fn needs_grouping(&self) -> bool {
+        match &*self.0 {
+            OperationNode::Binary { .. }
+            | OperationNode::Arithmetic { .. }
+            | OperationNode::Matches { .. }
+            | OperationNode::NearestNeighbors { .. }
+            | OperationNode::Prefix { .. } => true,
+            OperationNode::Between { .. } | OperationNode::Nullish { .. } => false,
+        }
+    }
 }
 
 impl Render for Operation {
@@ -413,7 +427,7 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
         self.operate(Operator::Equal, value)
     }
 
-    /// `!=`. Return a new `DbQuery` that checks whether the field is not equal to the specified value
+    /// `!=`. Return a new `operation` that checks whether the field is not equal to the specified value
     ///
     /// # Arguments
     ///
@@ -438,37 +452,6 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     /// assert_eq!(query.to_debug_sql(), "age != $valid_age_param");
     /// ```
     fn not_equal<T>(&self, value: T) -> Operation
-    where
-        T: Into<ValueLike>,
-    {
-        self.operate(Operator::NotEqual, value)
-    }
-
-    /// `!=`. Alias for `not_equal`. Return a new `DbQuery` that checks whether the field is not equal to the specified value
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to check for inequality. Could be a value, `Field` or `Param`
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use umbriel::*;
-    /// # let age = Field::new("age");
-    /// let query = age.neq(25);
-    /// assert_eq!(query.to_debug_sql(), "age != 25");
-    ///
-    /// # let age = Field::new("age");
-    /// # let valid_age_field = Field::new("valid_age_field");
-    /// let query = age.neq(valid_age_field);
-    /// assert_eq!(query.to_debug_sql(), "age != valid_age_field");
-    ///
-    /// # let age = Field::new("age");
-    /// # let valid_age_param = Param::new("valid_age_param");
-    /// let query = age.neq(valid_age_param);
-    /// assert_eq!(query.to_debug_sql(), "age != $valid_age_param");
-    /// ```
-    fn neq<T>(&self, value: T) -> Operation
     where
         T: Into<ValueLike>,
     {
@@ -502,12 +485,11 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     fn exactly_equal<T>(&self, value: T) -> Operation
     where
         T: Into<ValueLike>,
-        Self: Sized,
     {
         self.operate(Operator::Exact, value)
     }
 
-    /// Check whether any value in a arraa\y is equal to another value.
+    /// `?=` Check whether any value in an array is equal to another value.
     ///
     /// # Arguments
     ///
@@ -579,27 +561,6 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
         self.operate(Operator::LessThan, value)
     }
 
-    /// `<`. Alias for `less_than`. Check whether the value of the field is less than the given value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to compare against the field. Could be a value, `Field` or `Param`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use umbriel::*;
-    /// # let age = Field::new("age");
-    /// age.lt(30);
-    /// ```
-    fn lt<T>(&self, value: T) -> Operation
-    where
-        T: Into<Ordinal>,
-    {
-        let value: Ordinal = value.into();
-        self.operate(Operator::LessThan, value)
-    }
-
     /// `<=` Check whether the value of the field is less than or equal to the given value.
     ///
     /// # Arguments
@@ -614,27 +575,6 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     /// age.less_than_or_equal(30);
     /// ```
     fn less_than_or_equal<T>(&self, value: T) -> Operation
-    where
-        T: Into<Ordinal>,
-    {
-        let value: Ordinal = value.into();
-        self.operate(Operator::LessThanOrEqual, value)
-    }
-
-    /// `<=`. Alias for `less_than_or_equal`. Check whether the value of the field is less than or equal to the given value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to compare against the field. Could be a value, `Field` or `Param`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use umbriel::*;
-    /// # let age = Field::new("age");
-    /// age.lte(30);
-    /// ```
-    fn lte<T>(&self, value: T) -> Operation
     where
         T: Into<Ordinal>,
     {
@@ -663,27 +603,6 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
         self.operate(Operator::MoreThan, value)
     }
 
-    /// `>`. Alias for `greater_than`. Check whether the value of the field is greater than the given value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to compare against the field. Could be a number, geometry, datetime or duration, a `Field` or a `Param`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use umbriel::*;
-    /// # let age = Field::new("age");
-    /// age.gt(30);
-    /// ```
-    fn gt<T>(&self, value: T) -> Operation
-    where
-        T: Into<Ordinal>,
-    {
-        let value: Ordinal = value.into();
-        self.operate(Operator::MoreThan, value)
-    }
-
     /// `>=` Check whether the value of the field is greater than or equal to the given value.
     ///
     /// # Arguments
@@ -705,27 +624,6 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
         self.operate(Operator::MoreThanOrEqual, value)
     }
 
-    /// `>=` Alias for `greater_than_or_equal`. Check whether the value of the field is greater than or equal to the given value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to compare against the field. Could be a number, geometry, datetime or duration, a `Field` or a `Param`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use umbriel::*;
-    /// # let age = Field::new("age");
-    /// age.gte(30);
-    /// ```
-    fn gte<T>(&self, value: T) -> Operation
-    where
-        T: Into<Ordinal>,
-    {
-        let value: Ordinal = value.into();
-        self.operate(Operator::MoreThanOrEqual, value)
-    }
-
     /// `+` Adds a value to the current query.
     ///
     /// # Arguments
@@ -737,32 +635,15 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     /// ```rust
     /// # use umbriel::*;
     /// # let age = Field::new("age");
-    /// age.add(5);
+    /// assert_eq!(age.add(5).to_debug_sql(), "age + 5");
+    /// // A nested operation keeps its grouping.
+    /// assert_eq!(age.add(5).multiply(2).to_debug_sql(), "(age + 5) * 2");
     /// ```
     fn add<T>(&self, value: T) -> Operation
     where
         T: Into<ValueLike>,
     {
-        self.operate(Operator::Add, value)
-    }
-
-    /// `+` Alias for `add`. Adds a value to the current query.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to be added to the current query. Could be `types::Value`, `Field` or `Param
-    ///
-    /// # Example
-    /// ```rust
-    /// # use umbriel::*;
-    /// # let age = Field::new("age");
-    /// age.plus(5);
-    /// ```
-    fn plus<T>(&self, value: T) -> Operation
-    where
-        T: Into<ValueLike>,
-    {
-        self.operate(Operator::Add, value)
+        arithmetic(self, Operator::Add, value)
     }
 
     /// `-` Subtracts a value to the current query.
@@ -782,27 +663,7 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     where
         T: Into<ValueLike>,
     {
-        self.operate(Operator::Sub, value)
-    }
-
-    /// `-`. Alias for `subtract`. Subtracts a value to the current query.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to be subtract to the current query. Could be a value, `Field` or `Param`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use umbriel::*;
-    /// # let age = Field::new("age");
-    /// age.minus(5);
-    /// ```
-    fn minus<T>(&self, value: T) -> Operation
-    where
-        T: Into<ValueLike>,
-    {
-        self.operate(Operator::Sub, value)
+        arithmetic(self, Operator::Sub, value)
     }
 
     /// `*` Multiply a value to the current query.
@@ -822,26 +683,7 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     where
         T: Into<ValueLike>,
     {
-        self.operate(Operator::Mul, value)
-    }
-
-    /// `*` Alias for `multiply`. Multiply a value to the current query.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to be multiply to the current query. Could be a value, `Field` or `Param`.
-    ///
-    /// # Example
-    /// ```rust
-    /// # use umbriel::*;
-    /// # let age = Field::new("age");
-    /// age.mul(5);
-    /// ```
-    fn mul<T>(&self, value: T) -> Operation
-    where
-        T: Into<ValueLike>,
-    {
-        self.operate(Operator::Mul, value)
+        arithmetic(self, Operator::Mul, value)
     }
 
     /// `/` Divide a value to the current query.
@@ -861,26 +703,7 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     where
         T: Into<ValueLike>,
     {
-        self.operate(Operator::Div, value)
-    }
-
-    /// `/` Alias for `divide`. Divide a value to the current query.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to be divide to the current query. Could be a value, `Field` or `Param`.
-    ///
-    /// # Example
-    /// ```rust
-    /// # use umbriel::*;
-    /// let age = Field::new("age");
-    /// age.div(5);
-    /// ```
-    fn div<T>(&self, value: T) -> Operation
-    where
-        T: Into<ValueLike>,
-    {
-        self.operate(Operator::Div, value)
+        arithmetic(self, Operator::Div, value)
     }
 
     /// `**` Raise the current query to the power of the given value.
@@ -900,27 +723,7 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     where
         T: Into<NumberLike>,
     {
-        self.operate(Operator::Pow, value.into())
-    }
-
-    /// `**` Alias for `power`. Raise the current query to the power of the given value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to be raised to the power of the current query. Could be a value, `Field` or `Param`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use umbriel::*;
-    /// let age = Field::new("age");
-    /// age.pow(5);
-    /// ```
-    fn pow<T>(&self, value: T) -> Operation
-    where
-        T: Into<NumberLike>,
-    {
-        self.operate(Operator::Pow, value.into())
+        arithmetic(self, Operator::Pow, value.into())
     }
 
     /// `&&` Checks whether two values are truthy.
@@ -1164,26 +967,6 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     /// age.inside(10);
     /// ```
     fn inside<T>(&self, value: T) -> Operation
-    where
-        T: Into<ValueLike>,
-    {
-        self.operate(Operator::Inside, value)
-    }
-
-    /// `IN` or `∈` or `INSIDE` Check whether a value is contained within another value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to compared with the current query. Could be any supported surrealdb value, `Field` or `Param.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use umbriel::*;
-    /// # let age = Field::new("age");
-    /// age.in_(10);
-    /// ```
-    fn in_<T>(&self, value: T) -> Operation
     where
         T: Into<ValueLike>,
     {
@@ -1530,13 +1313,23 @@ pub trait Operatable: Sized + Render + Clone + Into<ValueLike> {
     /// assert_eq!(count.modulo(3).to_debug_sql(), "count % 3");
     /// ```
     fn modulo<T: Into<ValueLike>>(&self, value: T) -> Operation {
-        Operation::arithmetic(self.clone().into(), Operator::Modulo, value.into())
+        arithmetic(self, Operator::Modulo, value)
     }
 
-    /// `self <operator> value`.
+    /// `self <operator> value`, with the operands as they are.
     fn operate(&self, operator: Operator, value: impl Into<ValueLike>) -> Operation {
         Operation::binary(self.clone().into(), operator, value.into())
     }
+}
+
+/// `lhs <operator> value` for an arithmetic operator: an operand that is itself an operation is
+/// parenthesized, so it binds before `operator`.
+fn arithmetic<S: Operatable>(
+    lhs: &S,
+    operator: Operator,
+    value: impl Into<ValueLike>,
+) -> Operation {
+    Operation::arithmetic(lhs.clone().into(), operator, value.into())
 }
 
 /// `!value`: `true` when `value` is falsy. Also SurrealDB's `not()` function.
