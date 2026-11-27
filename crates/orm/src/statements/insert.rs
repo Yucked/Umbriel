@@ -52,7 +52,7 @@ use super::{
 /// );
 ///
 /// // Copies the records another query selects.
-/// let adults = select(All).from(Table::from("person")).where_(Field::new("age").gt(18));
+/// let adults = select(All).from(Table::from("person")).where_(Field::new("age").greater_than(18));
 /// assert_eq!(
 ///     insert::<User>(adults).to_debug_sql(),
 ///     "INSERT INTO user (SELECT * FROM person WHERE age > 18);"
@@ -360,27 +360,18 @@ impl<T: Model, R: ReturnMode, C: Cardinality> Statement for InsertStatement<T, R
                         check_record_table(row.get(id_column), &table, out);
                     }
                 }
-                out.push_str("(");
-                for (index, field) in fields.iter().enumerate() {
-                    if index > 0 {
-                        out.push_str(", ");
-                    }
-                    out.push_ident(field);
-                }
-                out.push_str(") VALUES ");
-                for (index, row) in rows.iter().enumerate() {
-                    if index > 0 {
-                        out.push_str(", ");
-                    }
-                    out.push_str("(");
-                    for (index, value) in row.iter().enumerate() {
-                        if index > 0 {
-                            out.push_str(", ");
-                        }
-                        out.push_value(value);
-                    }
-                    out.push_str(")");
-                }
+                out.push_str("(")
+                    .push_joined_with(fields, ", ", |out, field| {
+                        out.push_ident(field);
+                    })
+                    .push_str(") VALUES ")
+                    .push_joined_with(rows, ", ", |out, row| {
+                        out.push_str("(")
+                            .push_joined_with(row, ", ", |out, value| {
+                                out.push_value(value);
+                            })
+                            .push_str(")");
+                    });
             }
         }
 
