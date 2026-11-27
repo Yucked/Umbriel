@@ -31,5 +31,7 @@ error[E0277]: the trait bound `std::string::String: From<u8>` is not satisfied
 note: required by a bound in `equal_to`
   --> $WORKSPACE/crates/orm/src/traits/setter.rs
    |
+   | pub trait SetterAssignable<T: SurrealValue>
+...
    |     fn equal_to(&self, value: impl Into<SetterArg<T>>) -> Setter {
    |                                    ^^^^^^^^^^^^^^^^^^ required by this bound in `SetterAssignable::equal_to`

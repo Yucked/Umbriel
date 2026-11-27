@@ -20,7 +20,6 @@ note: required by a bound in `abs_fn`
   --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
    |
    |               pub fn [<$sql _fn>](
-   |                      ------------ required by a bound in this function
    |                   $a1: impl Into<$crate::$t1>,
    |                             ^^^^^^^^^^^^^^^^^ required by this bound in `abs_fn`
    |
@@ -67,7 +66,6 @@ note: required by a bound in `umbriel::functions::array::len_fn`
   --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
    |
    |               pub fn [<$sql _fn>](
-   |                      ------------ required by a bound in this function
    |                   $a1: impl Into<$crate::$t1>,
    |                             ^^^^^^^^^^^^^^^^^ required by this bound in `len_fn`
    |
@@ -116,7 +114,6 @@ note: required by a bound in `umbriel::functions::string::len_fn`
   --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
    |
    |               pub fn [<$sql _fn>](
-   |                      ------------ required by a bound in this function
    |                   $a1: impl Into<$crate::$t1>,
    |                             ^^^^^^^^^^^^^^^^^ required by this bound in `len_fn`
    |
@@ -153,7 +150,6 @@ note: required by a bound in `abs_fn`
   --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
    |
    |               pub fn [<$sql _fn>](
-   |                      ------------ required by a bound in this function
    |                   $a1: impl Into<$crate::$t1>,
    |                             ^^^^^^^^^^^^^^^^^ required by this bound in `abs_fn`
    |

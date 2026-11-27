@@ -19,9 +19,14 @@ error[E0080]: evaluation panicked: parameter names starting with `_p` are reserv
 note: inside `umbriel::Param::assert_valid`
  --> $RUST/core/src/panic.rs
   |
-  = note: the failure occurred here
+  |         $crate::panicking::panic_display(&$arg);
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the failure occurred here
   |
  ::: $WORKSPACE/crates/orm/src/query/param.rs
   |
+  | impl Param {
+...
+  |     pub const fn assert_valid(name: &str) {
+  |         if let Err(error) = Self::check(name) {
   |             panic!("{}", error.message());
   |             ----------------------------- in this macro invocation

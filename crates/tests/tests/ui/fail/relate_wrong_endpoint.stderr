@@ -1,10 +1,10 @@
 error[E0277]: `umbriel::RecordId<User>` is not an endpoint for `Post`
-  --> tests/ui/fail/relate_wrong_endpoint.rs:28:78
+  --> tests/ui/fail/relate_wrong_endpoint.rs:28:83
    |
 28 |     let _ = relate::<UserLikesPost>(User::with(User::id("alice")).likes__(E).post(User::id("bob")));
-   |                                                                              ^^^^ --------------- `umbriel::RecordId<User>` doesn't satisfy the trait bound
+   |                                                                              ---- ^^^^^^^^^^^^^^^ expected a `RecordId<Post>`, a list of them, or an untyped expression
    |                                                                              |
-   |                                                                              expected a `RecordId<Post>`, a list of them, or an untyped expression
+   |                                                                              required by a bound introduced by this call
    |
    = help: the trait `IntoNodeClause<Post>` is not implemented for `umbriel::RecordId<User>`
    = note: a record id of another model cannot reach `Post`

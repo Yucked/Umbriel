@@ -16,8 +16,9 @@ help: the trait `ModelField<User, _>` is not implemented for `__4Team4nameField`
 note: required by a bound in `umbriel::SurrealRead::select_value`
   --> $WORKSPACE/crates/orm/src/traits/model.rs
    |
+   | pub trait SurrealRead: Model + Send {
+...
    |     fn select_value<F, V>(field: F) -> SelectStatement<V>
-   |        ------------ required by a bound in this associated function
    |     where
    |         F: ModelField<Self, V>,
    |            ^^^^^^^^^^^^^^^^^^^ required by this bound in `SurrealRead::select_value`

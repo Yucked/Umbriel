@@ -18,8 +18,9 @@ help: the following other types implement trait `umbriel::__private::ModelField<
 note: required by a bound in `select_fields`
   --> $WORKSPACE/crates/orm/src/traits/model.rs
    |
+   | pub trait SurrealRead: Model + Send {
+...
    |     fn select_fields<F, V>(fields: F) -> SelectStatement<V>
-   |        ------------- required by a bound in this associated function
    |     where
    |         F: FieldTuple<Self, V>,
    |            ^^^^^^^^^^^^^^^^^^^ required by this bound in `SurrealRead::select_fields`

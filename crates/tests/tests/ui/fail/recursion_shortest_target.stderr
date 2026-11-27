@@ -21,6 +21,8 @@ help: `ShortestTarget` implements trait `From<T>`
 note: required by a bound in `Recurse::shortest`
  --> $WORKSPACE/crates/orm/src/query/field.rs
   |
+  | impl Recurse {
+...
   |     pub fn shortest(mut self, target: impl Into<ShortestTarget>) -> Self {
   |                                            ^^^^^^^^^^^^^^^^^^^^ required by this bound in `Recurse::shortest`
 
@@ -47,5 +49,7 @@ help: `ShortestTarget` implements trait `From<T>`
 note: required by a bound in `Recurse::shortest`
  --> $WORKSPACE/crates/orm/src/query/field.rs
   |
+  | impl Recurse {
+...
   |     pub fn shortest(mut self, target: impl Into<ShortestTarget>) -> Self {
   |                                            ^^^^^^^^^^^^^^^^^^^^ required by this bound in `Recurse::shortest`

@@ -11,5 +11,7 @@ error[E0308]: mismatched types
 note: method defined here
   --> $WORKSPACE/crates/orm/src/query/links.rs
    |
+   | impl<From, To> LinkPath<From, To> {
+...
    |     pub fn then<W>(mut self, next: LinkPath<To, W>) -> LinkPath<From, W> {
    |            ^^^^

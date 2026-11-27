@@ -11,5 +11,7 @@ error[E0308]: mismatched types
 note: method defined here
   --> $WORKSPACE/crates/orm/src/statements/select.rs
    |
+   | impl<T: Links, C: Cardinality> SelectStatement<T, C> {
+...
    |     pub fn fetch_link<V>(mut self, path: LinkPath<T, V>) -> Self {
    |            ^^^^^^^^^^

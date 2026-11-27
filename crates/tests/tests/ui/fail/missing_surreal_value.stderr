@@ -134,6 +134,8 @@ help: the trait `SurrealValue` is not implemented for `User`
 note: required by a bound in `umbriel::ModelPatch::Model`
  --> $WORKSPACE/crates/orm/src/query/patch.rs
   |
+  | pub trait ModelPatch: Default {
+  |     /// The model this patch updates.
   |     type Model: Model;
   |                 ^^^^^ required by this bound in `ModelPatch::Model`
 
@@ -162,6 +164,8 @@ help: the trait `SurrealValue` is not implemented for `User`
 note: required by a bound in `umbriel::ModelMerge::Model`
  --> $WORKSPACE/crates/orm/src/query/merge.rs
   |
+  | pub trait ModelMerge: MergeFields + Default {
+  |     /// The model this merge updates.
   |     type Model: Model;
   |                 ^^^^^ required by this bound in `ModelMerge::Model`
 
@@ -193,7 +197,6 @@ note: required by a bound in `table`
   |                          ^^^^^^^^^^^^ required by this bound in `Model::table`
 ...
   |     fn table() -> Table {
-  |        ----- required by a bound in this associated function
   = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `User: SurrealValue` is not satisfied
@@ -224,5 +227,4 @@ note: required by a bound in `get_field_meta`
   |                          ^^^^^^^^^^^^ required by this bound in `Model::get_field_meta`
 ...
   |     fn get_field_meta() -> Vec<FieldMetadata>;
-  |        -------------- required by a bound in this associated function
   = note: this error originates in the derive macro `umbriel::__private::ModelCodegen` (in Nightly builds, run with -Z macro-backtrace for more info)

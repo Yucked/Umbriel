@@ -76,7 +76,7 @@ note: the trait `Writable` must be implemented
    = note: the following trait defines an item `patch`, perhaps you need to implement it:
            candidate #1: `SurrealCrud`
 
-error[E0599]: `SaleCopy` cannot be written to
+error[E0599]: no method named `merge` found for struct `SaleCopy` in the current scope
   --> tests/ui/fail/view_writes.rs:34:23
    |
 17 | pub struct SaleCopy {
@@ -334,8 +334,9 @@ help: the trait `Writable` is not implemented for `SaleCopy`
 note: required by a bound in `TableOf::<T>::insert_many`
   --> $WORKSPACE/crates/orm/src/query/table_of.rs
    |
+   | impl<T: Model> TableOf<T> {
+...
    |     pub async fn insert_many(&self, db: &impl Executor, records: Vec<T>) -> Result<Vec<T>>
-   |                  ----------- required by a bound in this associated function
    |     where
    |         T: Writable,
    |            ^^^^^^^^ required by this bound in `TableOf::<T>::insert_many`
@@ -355,8 +356,9 @@ help: the trait `Writable` is not implemented for `SaleCopy`
 note: required by a bound in `TableOf::<T>::delete_where`
   --> $WORKSPACE/crates/orm/src/query/table_of.rs
    |
+   | impl<T: Model> TableOf<T> {
+...
    |     pub fn delete_where(&self, filter: impl Conditional + Clone) -> DeleteStatement<T>
-   |            ------------ required by a bound in this associated function
    |     where
    |         T: Writable,
    |            ^^^^^^^^ required by this bound in `TableOf::<T>::delete_where`
@@ -381,7 +383,6 @@ note: required by a bound in `create_any_only`
   --> $WORKSPACE/crates/orm/src/statements/any.rs
    |
    | pub fn create_any_only<M: Models>(
-   |        --------------- required by a bound in this function
    |     target: impl Into<AnyTarget>,
    |                  ^^^^^^^^^^^^^^^ required by this bound in `create_any_only`
 
@@ -405,7 +406,6 @@ note: required by a bound in `create_any_only`
   --> $WORKSPACE/crates/orm/src/statements/any.rs
    |
    | pub fn create_any_only<M: Models>(
-   |        --------------- required by a bound in this function
    |     target: impl Into<AnyTarget>,
    |                  ^^^^^^^^^^^^^^^ required by this bound in `create_any_only`
 
@@ -429,7 +429,6 @@ note: required by a bound in `create_any_only`
   --> $WORKSPACE/crates/orm/src/statements/any.rs
    |
    | pub fn create_any_only<M: Models>(
-   |        --------------- required by a bound in this function
    |     target: impl Into<AnyTarget>,
    |                  ^^^^^^^^^^^^^^^ required by this bound in `create_any_only`
 

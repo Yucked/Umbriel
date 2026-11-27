@@ -9,11 +9,10 @@ error[E0599]: no method named `record` found for struct `DefineAccessStatement<O
 error[E0599]: no method named `bearer_for_record` found for struct `DefineAccessStatement<OnNamespace>` in the current scope
  --> tests/ui/fail/record_access_off_a_database.rs:9:10
   |
-7 |       let _ = define_access("account")
-  |  _____________-
-8 | |         .on_namespace()
-9 | |         .bearer_for_record(bearer_access());
-  | |_________-^^^^^^^^^^^^^^^^^
+7 |     let _ = define_access("account")
+8 |         .on_namespace()
+9 |         .bearer_for_record(bearer_access());
+  |          ^^^^^^^^^^^^^^^^^
   |
 help: there is a method `bearer_for_user` with a similar name
   |

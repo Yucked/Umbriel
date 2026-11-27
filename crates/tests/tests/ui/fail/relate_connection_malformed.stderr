@@ -46,6 +46,8 @@ error[E0507]: cannot move out of dereference of `umbriel::RecordId<User>`
 note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
   |
+  | pub trait SurrealValue {
+...
   |     fn into_value(self) -> Value;
   |                   ^^^^
 help: you can `clone` the value and consume it, but this might not be your desired behavior
