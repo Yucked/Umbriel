@@ -102,6 +102,7 @@ mod notifications {
     #[tokio::test]
     async fn notifications_decode_into_the_projection() {
         let (db, _guard) = db().await;
+        ran(&db, "DEFINE TABLE space_ship;").await;
         let mut ships = live(
             select(All)
                 .from(Table::from("space_ship"))
@@ -139,6 +140,7 @@ mod notifications {
     #[tokio::test]
     async fn diff_notifications_are_exact_operations() {
         let (db, _guard) = db().await;
+        ran(&db, "DEFINE TABLE doc;").await;
         let mut diffs = live(select(All).from(Table::from("doc")))
             .diff()
             .subscribe(&db)
@@ -239,6 +241,7 @@ mod lifecycle {
     #[tokio::test]
     async fn kill_ends_the_live_query() {
         let (db, _guard) = db().await;
+        ran(&db, "DEFINE TABLE note;").await;
         let stream = live(select(All).from(Table::from("note")))
             .subscribe(&db)
             .await
@@ -257,6 +260,7 @@ mod lifecycle {
     #[tokio::test]
     async fn dropping_a_stream_leaves_the_others() {
         let (db, _guard) = db().await;
+        ran(&db, "DEFINE TABLE note;").await;
         let dropped = live(select(All).from(Table::from("note")))
             .subscribe(&db)
             .await
@@ -277,7 +281,8 @@ mod lifecycle {
     /// L13: invalidating the session ends its live queries (SurrealDB 3.1.0).
     #[tokio::test]
     async fn invalidating_the_session_ends_the_stream() {
-        let (_db, guard) = db().await;
+        let (db, guard) = db().await;
+        ran(&db, "DEFINE TABLE note;").await;
         let session = connect(Endpoint::Main).await;
         bounded("selecting the test database", async {
             session
@@ -313,6 +318,7 @@ mod resubscription {
     #[tokio::test]
     async fn resubscribing_replaces_the_query() {
         let (db, _guard) = db().await;
+        ran(&db, "DEFINE TABLE note;").await;
         let mut stream = live(select(All).from(Table::from("note")))
             .subscribe(&db)
             .await
@@ -333,6 +339,7 @@ mod resubscription {
     #[tokio::test]
     async fn resubscribing_twice_keeps_one_query() {
         let (db, _guard) = db().await;
+        ran(&db, "DEFINE TABLE note;").await;
         let mut stream = live(select(All).from(Table::from("note")))
             .subscribe(&db)
             .await
@@ -374,6 +381,7 @@ mod resubscription {
     #[tokio::test]
     async fn a_failed_kill_of_the_old_query_is_stale_subscription() {
         let (db, _guard) = db().await;
+        ran(&db, "DEFINE TABLE note;").await;
         let mut stream = live(select(All).from(Table::from("note")))
             .subscribe(&db)
             .await
