@@ -28,8 +28,9 @@ tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "ti
 # Test database names (`umbriel_test_<uuid>`).
 uuid = { workspace = true, features = ["v4"] }
 surrealdb = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
+# Consumes live subscriptions and result streams (`StreamExt`).
+futures = { workspace = true }
 geo = { workspace = true }
 chrono = { workspace = true }
 tempfile = { workspace = true }
