@@ -1,37 +1,43 @@
 use crate::migrations::*;
 use chrono::Utc;
 
-/// A two-way migration's up and down files.
+/// A two-way migration's up and down files, which name the same migration.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MigrationFileTwoWayPair {
-    /// The up file.
-    pub up: FileMetadata,
-    /// The down file.
-    pub down: FileMetadata,
+    up: FileMetadata,
+    down: FileMetadata,
 }
 
 impl MigrationFileTwoWayPair {
     /// Pairs an up file with its down file.
-    pub fn new(up: FileMetadata, down: FileMetadata) -> Self {
-        Self { up, down }
+    ///
+    /// # Errors
+    ///
+    /// [`MigrationError::InvalidMigrationName`] unless `up` is an up file and `down` the down
+    /// file of the same timestamp and name.
+    pub fn new(up: FileMetadata, down: FileMetadata) -> MigrationResult<Self> {
+        if !up.name.is_up() || down.name != up.name.to_down() {
+            return Err(MigrationError::InvalidMigrationName(format!(
+                "`{}` and `{}` are not the up and down files of one migration",
+                up.name, down.name
+            )));
+        }
+        Ok(Self { up, down })
+    }
+
+    /// The up file.
+    pub fn up(&self) -> &FileMetadata {
+        &self.up
+    }
+
+    /// The down file.
+    pub fn down(&self) -> &FileMetadata {
+        &self.down
     }
 }
 
-impl TryFrom<MigrationFileTwoWayPair> for Migration {
-    type Error = MigrationError;
-
-    fn try_from(migration: MigrationFileTwoWayPair) -> Result<Self, Self::Error> {
-        Ok(Self {
-            id: Migration::create_id(&migration.up.name),
-            name: migration.up.name.to_up().to_string(),
-            timestamp: migration.up.name.timestamp(),
-            checksum_up: migration.up.content.as_checksum()?,
-            checksum_down: Some(migration.down.content.as_checksum()?),
-        })
-    }
-}
-
-/// A one-way migration's file.
+/// A one-way migration's file. A type of its own, so a one-way file and either half of a
+/// two-way pair aren't mixed up.
 #[derive(Clone, Debug)]
 pub struct MigrationFileOneWay(FileMetadata);
 
@@ -39,11 +45,6 @@ impl MigrationFileOneWay {
     /// Wraps a one-way file.
     pub fn new(file: FileMetadata) -> Self {
         Self(file)
-    }
-
-    /// The file.
-    pub fn file_meta(&self) -> &FileMetadata {
-        &self.0
     }
 
     /// The file's name.
@@ -73,26 +74,6 @@ impl FileMetadata {
     }
 }
 
-impl TryFrom<MigrationFileOneWay> for Migration {
-    type Error = MigrationError;
-
-    fn try_from(migration: MigrationFileOneWay) -> Result<Self, Self::Error> {
-        let migration = migration.0;
-        Ok(Self {
-            id: Migration::create_id(&migration.name),
-            name: migration.name.to_string(),
-            timestamp: migration.name.timestamp(),
-            checksum_up: Checksum::generate_from_content(&migration.content)?,
-            checksum_down: None,
-        })
-    }
-}
-
-impl From<MigrationFileTwoWayPair> for MigrationFileOneWay {
-    fn from(m: MigrationFileTwoWayPair) -> Self {
-        Self::new(FileMetadata::new(m.up.name, m.up.content))
-    }
-}
 
 /// A migration of either kind.
 #[derive(Debug, Clone)]
