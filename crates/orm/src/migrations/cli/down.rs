@@ -1,10 +1,9 @@
 use clap::Args;
-use typed_builder::TypedBuilder;
 
 use crate::migrations::*;
 
 /// Rollback migrations
-#[derive(Args, Debug, TypedBuilder, Clone)]
+#[derive(Args, Debug, Clone)]
 pub struct Down {
     #[command(flatten)]
     strategy: RollbackStrategyStruct,
@@ -15,6 +14,24 @@ pub struct Down {
 }
 
 impl Down {
+    /// A rollback as `strategy` says, deleting the rolled-back files afterwards when `prune`.
+    pub fn new(strategy: RollbackStrategy, prune: bool) -> Self {
+        let mut arguments = RollbackStrategyStruct {
+            previous: false,
+            number: None,
+            till: None,
+        };
+        match strategy {
+            RollbackStrategy::Previous => arguments.previous = true,
+            RollbackStrategy::Number(number) => arguments.number = Some(number),
+            RollbackStrategy::Till(till) => arguments.till = Some(till),
+        }
+        Self {
+            strategy: arguments,
+            prune,
+        }
+    }
+
     /// How far to roll back.
     pub fn rollback_strategy(&self) -> RollbackStrategy {
         RollbackStrategy::from(&self.strategy)
@@ -22,22 +39,19 @@ impl Down {
 }
 
 /// The rollback arguments; at most one is given, and none means the previous migration.
-#[derive(Args, Debug, Clone, TypedBuilder)]
+#[derive(Args, Debug, Clone)]
 #[group(required = false, multiple = false)]
 pub struct RollbackStrategyStruct {
     /// Roll back the last applied migration
     #[arg(long)]
-    #[builder(default)]
     pub(crate) previous: bool,
 
     /// Roll back this many applied migrations
     #[arg(short, long)]
-    #[builder(default, setter(strip_option))]
     pub(crate) number: Option<u32>,
 
     /// Roll back till a specific migration, named by its timestamp and name
     #[arg(short, long)]
-    #[builder(default, setter(strip_option))]
     pub(crate) till: Option<MigrationFilename>,
 }
 
