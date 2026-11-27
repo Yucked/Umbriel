@@ -55,9 +55,9 @@ mod params {
         );
         assert_eq!(Param::check("_p0"), Err(ParamNameError::Reserved));
         assert_eq!(Param::check("_p"), Err(ParamNameError::Reserved));
-        assert!(Param::try_from("_p1").is_err());
+        assert_eq!("_p1".parse::<Param>(), Err(ParamNameError::Reserved));
         assert_eq!(
-            Param::try_from("name").map(|param| param.name().to_owned()),
+            "name".parse::<Param>().map(|param| param.name().to_owned()),
             Ok("name".to_owned())
         );
         assert!(ParamNameError::Reserved.to_string().contains("reserved"));
