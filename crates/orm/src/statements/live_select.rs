@@ -145,7 +145,8 @@ pub enum LiveEvent<O> {
 /// no `Killed` notification for it, so the stream stays open and receives nothing: drop it.
 ///
 /// Dropping the stream ends the live query as best effort: unless a [`kill`](Self::kill)
-/// succeeded, it sends a `KILL` on the session that subscribed, from a task of its own, and
+/// succeeded, it sends a `KILL` through a clone of the handle that subscribed (the same
+/// namespace, database and sign-in), from a task of its own, and
 /// nothing reports a failure. It does so after the stream ended too: an end or a transport
 /// failure stops the notifications without confirming that the server removed the query, and
 /// SurrealDB 3.3.4 accepts a `KILL` of an id it no longer holds. [`kill`](Self::kill) runs the
@@ -220,7 +221,8 @@ impl<O, C: Connection> LiveStream<O, C> {
     /// - If the future is dropped while the registration is in flight, the server may register a
     ///   query whose id never reaches the client, as with any dropped `LIVE` request. If it is
     ///   dropped later, `self` already holds the new query, and the old one, owned by the future,
-    ///   is ended on drop as a dropped stream's is: a best-effort `KILL` on the same session.
+    ///   is ended on drop as a dropped stream's is: a best-effort `KILL` through a clone of the
+    ///   handle.
     /// - If the old query's `KILL` fails, its best-effort `KILL` is still sent when the future
     ///   returns.
     ///
@@ -236,9 +238,13 @@ impl<O, C: Connection> LiveStream<O, C> {
     /// SurrealDB 3.3.4 accepts the `KILL` of an id it no longer holds, so resubscribing succeeds.
     pub async fn resubscribe(&mut self) -> Result<()> {
         let (query_id, stream) = register(&self.subscription.db, &self.query).await?;
-        let new = Subscription::new(self.subscription.db.clone(), query_id);
+        // The new query lives in the session of the handle it was registered on, which the
+        // stream keeps: dropping a handle ends its session and the session's live queries
+        // (`Drop for Surreal`). The old query's `KILL` runs on a clone, a session of its own.
+        let old_id = std::mem::replace(&mut self.subscription.query_id, query_id);
+        self.subscription.armed = true;
         // From here the old query is owned by this future: dropping it sends the `KILL`.
-        let mut old = std::mem::replace(&mut self.subscription, new);
+        let mut old = Subscription::new(self.subscription.db.clone(), old_id);
         let mut old_stream = std::mem::replace(&mut self.stream, stream);
         self.ended = false;
         match old.end().await {
@@ -254,9 +260,14 @@ impl<O, C: Connection> LiveStream<O, C> {
     }
 }
 
-/// A registered live query that is ended with a `KILL` on the session that registered it, when
-/// dropped, until a `KILL` succeeds. The SDK's stream can't be relied on for it (see
+/// A registered live query that is ended with a `KILL` through a clone of the subscribing handle
+/// when dropped, until a `KILL` succeeds. The SDK's stream can't be relied on for it (see
 /// [`LiveStream`]).
+///
+/// Each clone of a `Surreal` handle is a session of its own, and dropping a handle ends its
+/// session together with the session's live queries. So `db` must outlive any query registered
+/// on it: `resubscribe` registers on the stream's handle and keeps it, and gives the old query a
+/// clone to `KILL` from.
 struct Subscription<C: Connection> {
     db: Surreal<C>,
     query_id: Uuid,
