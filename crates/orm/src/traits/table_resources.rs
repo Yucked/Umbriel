@@ -1,34 +1,21 @@
 use crate::{Field, Model, Raw, Table};
 
-/// Provides the ability to gather all the resources
-/// of a table in a single place. Fields definitions,
-/// and table definitions are using automatically
-/// generated methods from the `Model` trait.
-/// Events and indexes definitions are manually
-/// implemented using the statements or query macro
-/// provided by the crate.
+/// The definitions of a table that migrations gather besides the model's own table and fields
+/// ([`Model::define_table`] and [`Model::define_fields`]): its events and indexes, written with
+/// the statement builders. Both default to none, so a model without them implements it with
+/// `impl TableResources for Model {}`.
 pub trait TableResources
 where
     Self: Model,
 {
-    /// Returns a list of fields definitions.
+    /// The table's `DEFINE EVENT` statements.
     fn events_definitions() -> Vec<Raw> {
         vec![]
     }
 
-    /// Returns a list of fields' indexes definitions.
+    /// The table's `DEFINE INDEX` statements.
     fn indexes_definitions() -> Vec<Raw> {
         vec![]
-    }
-
-    /// Returns a list of fields definitions.
-    fn fields_definitions() -> Vec<Raw> {
-        Self::define_fields()
-    }
-
-    /// Returns a table definition.
-    fn table_definition() -> Raw {
-        Self::define_table()
     }
 }
 
@@ -43,19 +30,20 @@ pub struct FieldChangeMeta {
     pub new_name: Field,
 }
 
-/// A trait for table changes.
+/// Implements `DbResources::tables` and `tables_fields_meta` for the listed models: each model's
+/// table, then its fields, indexes and events, in that dependency order.
 #[macro_export]
 macro_rules! create_table_resources {
     ($($struct_table: ident),*) => {
         fn tables(&self) -> ::std::vec::Vec<$crate::Raw> {
-            ::std::vec![
-                $(
-                    ::std::vec![<$struct_table as $crate::TableResources>::table_definition()],
-                    <$struct_table as $crate::TableResources>::fields_definitions(),
-                    <$struct_table as $crate::TableResources>::indexes_definitions(),
-                    <$struct_table as $crate::TableResources>::events_definitions(),
-                )*
-            ].into_iter().flatten().collect::<::std::vec::Vec<$crate::Raw>>()
+            let mut tables = ::std::vec::Vec::new();
+            $(
+                tables.push(<$struct_table as $crate::Model>::define_table());
+                tables.extend(<$struct_table as $crate::Model>::define_fields());
+                tables.extend(<$struct_table as $crate::TableResources>::indexes_definitions());
+                tables.extend(<$struct_table as $crate::TableResources>::events_definitions());
+            )*
+            tables
         }
 
 
