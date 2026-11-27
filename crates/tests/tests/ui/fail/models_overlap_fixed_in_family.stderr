@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: two variants of `FixedInFamily` have overlapping table families
+  --> tests/ui/fail/models_overlap_fixed_in_family.rs:15:10
+   |
+15 | #[derive(Models)]
+   |          ^^^^^^ evaluation of `_` failed here

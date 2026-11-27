@@ -1,10 +1,9 @@
 error[E0277]: the trait bound `SetLike: From<Vec<{integer}>>` is not satisfied
- --> tests/ui/fail/set_and_bytes_kinds.rs:9:23
+ --> tests/ui/fail/set_and_bytes_kinds.rs:9:22
   |
-9 |     let _ = set::len!(vec![1, 2]);
-  |             ----------^^^^^^^^^^-
-  |             |         |
-  |             |         the trait `From<Vec<{integer}>>` is not implemented for `SetLike`
+9 |     let _ = set::len(vec![1, 2]);
+  |             -------- ^^^^^^^^^^ the trait `From<Vec<{integer}>>` is not implemented for `SetLike`
+  |             |
   |             required by a bound introduced by this call
   |
   = help: `SetLike` implements trait `From<T>`:
@@ -32,12 +31,11 @@ error[E0277]: the trait bound `SetLike: From<Vec<{integer}>>` is not satisfied
             From<umbriel::statements::Subquery>
             From<umbriel::surrealdb_types::Set>
   = note: required for `Vec<{integer}>` to implement `Into<SetLike>`
-note: required by a bound in `umbriel::functions::set::len_fn`
+note: required by a bound in `umbriel::functions::set::len`
  --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
   |
-  |               pub fn [<$sql _fn>](
-  |                   $a1: impl Into<$crate::$t1>,
-  |                             ^^^^^^^^^^^^^^^^^ required by this bound in `len_fn`
+  |               $a1: impl Into<$crate::$t1>,
+  |                         ^^^^^^^^^^^^^^^^^ required by this bound in `len`
   |
  ::: $WORKSPACE/crates/orm/src/functions/set.rs
   |
@@ -46,18 +44,19 @@ note: required by a bound in `umbriel::functions::set::len_fn`
   | |     add(set: SetLike, value: ValueLike) -> kinds::Set [SetLike.add];
   | |     /// Whether every element is truthy, or matches `check` (a value or a closure).
 ... |
+  | |     len(set: SetLike) -> kinds::Int [SetLike.len];
+... |
   | |     union(a: SetLike, b: SetLike) -> kinds::Set [SetLike.union];
   | | }
   | |_- in this macro invocation
-  = note: this error originates in the macro `vec` which comes from the expansion of the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
+  = note: this error originates in the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `BytesLike: From<&str>` is not satisfied
-  --> tests/ui/fail/set_and_bytes_kinds.rs:11:25
+  --> tests/ui/fail/set_and_bytes_kinds.rs:11:24
    |
-11 |     let _ = bytes::len!("text");
-   |             ------------^^^^^^-
-   |             |           |
-   |             |           the trait `From<&str>` is not implemented for `BytesLike`
+11 |     let _ = bytes::len("text");
+   |             ---------- ^^^^^^ the trait `From<&str>` is not implemented for `BytesLike`
+   |             |
    |             required by a bound introduced by this call
    |
    = help: `BytesLike` implements trait `From<T>`:
@@ -85,12 +84,11 @@ error[E0277]: the trait bound `BytesLike: From<&str>` is not satisfied
              From<umbriel::statements::Subquery>
              From<umbriel::surrealdb_types::Bytes>
    = note: required for `&str` to implement `Into<BytesLike>`
-note: required by a bound in `umbriel::functions::bytes::len_fn`
+note: required by a bound in `umbriel::functions::bytes::len`
   --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
    |
-   |               pub fn [<$sql _fn>](
-   |                   $a1: impl Into<$crate::$t1>,
-   |                             ^^^^^^^^^^^^^^^^^ required by this bound in `len_fn`
+   |               $a1: impl Into<$crate::$t1>,
+   |                         ^^^^^^^^^^^^^^^^^ required by this bound in `len`
    |
   ::: $WORKSPACE/crates/orm/src/functions/bytes.rs
    |
@@ -104,7 +102,7 @@ note: required by a bound in `umbriel::functions::bytes::len_fn`
 error[E0277]: the trait bound `umbriel::kinds::Set: Enters<ArrayLike>` is not satisfied
   --> tests/ui/fail/set_and_bytes_kinds.rs:13:13
    |
-13 |     let _ = ArrayLike::from(type_::set!(vec![1, 2]));
+13 |     let _ = ArrayLike::from(type_::set(vec![1, 2]));
    |             ^^^^^^^^^ the trait `Enters<ArrayLike>` is not implemented for `umbriel::kinds::Set`
    |
 help: the trait `Enters<ArrayLike>` is not implemented for `umbriel::kinds::Set`
@@ -119,7 +117,7 @@ help: the trait `Enters<ArrayLike>` is not implemented for `umbriel::kinds::Set`
 error[E0277]: the trait bound `umbriel::kinds::Bytes: Enters<StrandLike>` is not satisfied
   --> tests/ui/fail/set_and_bytes_kinds.rs:15:13
    |
-15 |     let _ = StrandLike::from(type_::bytes!("text"));
+15 |     let _ = StrandLike::from(type_::bytes("text"));
    |             ^^^^^^^^^^ the trait `Enters<StrandLike>` is not implemented for `umbriel::kinds::Bytes`
    |
 help: the trait `Enters<StrandLike>` is not implemented for `umbriel::kinds::Bytes`
@@ -144,7 +142,7 @@ help: the trait `Enters<StrandLike>` is not implemented for `umbriel::kinds::Byt
 error[E0277]: the trait bound `umbriel::kinds::Int: Enters<SetLike>` is not satisfied
   --> tests/ui/fail/set_and_bytes_kinds.rs:17:13
    |
-17 |     let _ = SetLike::from(set::len!(type_::set!(vec![1])));
+17 |     let _ = SetLike::from(set::len(type_::set(vec![1])));
    |             ^^^^^^^ the trait `Enters<SetLike>` is not implemented for `umbriel::kinds::Int`
    |
 help: the trait `Enters<SetLike>` is not implemented for `umbriel::kinds::Int`
@@ -169,7 +167,7 @@ help: the trait `Enters<SetLike>` is not implemented for `umbriel::kinds::Int`
 error[E0277]: the trait bound `umbriel::kinds::String: Enters<SetLike>` is not satisfied
   --> tests/ui/fail/set_and_bytes_kinds.rs:18:13
    |
-18 |     let _ = SetLike::from(set::join!(type_::set!(vec![1]), ","));
+18 |     let _ = SetLike::from(set::join(type_::set(vec![1]), ","));
    |             ^^^^^^^ the trait `Enters<SetLike>` is not implemented for `umbriel::kinds::String`
    |
 help: the trait `Enters<SetLike>` is not implemented for `umbriel::kinds::String`
@@ -194,7 +192,7 @@ help: the trait `Enters<SetLike>` is not implemented for `umbriel::kinds::String
 error[E0277]: the trait bound `umbriel::kinds::Set: Enters<NumberLike>` is not satisfied
   --> tests/ui/fail/set_and_bytes_kinds.rs:19:13
    |
-19 |     let _ = NumberLike::from(set::union!(type_::set!(vec![1]), type_::set!(vec![2])));
+19 |     let _ = NumberLike::from(set::union(type_::set(vec![1]), type_::set(vec![2])));
    |             ^^^^^^^^^^ the trait `Enters<NumberLike>` is not implemented for `umbriel::kinds::Set`
    |
 help: the trait `Enters<NumberLike>` is not implemented for `umbriel::kinds::Set`

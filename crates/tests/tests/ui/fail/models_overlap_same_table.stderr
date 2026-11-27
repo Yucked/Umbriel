@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: two variants of `SameTable` have overlapping table families
+  --> tests/ui/fail/models_overlap_same_table.rs:15:10
+   |
+15 | #[derive(Models)]
+   |          ^^^^^^ evaluation of `_` failed here

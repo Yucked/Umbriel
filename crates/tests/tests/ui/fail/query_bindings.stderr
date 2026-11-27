@@ -19,8 +19,7 @@ error[E0080]: evaluation panicked: parameter names starting with `_p` are reserv
 note: inside `umbriel::Param::assert_valid`
  --> $RUST/core/src/panic.rs
   |
-  |         $crate::panicking::panic_display(&$arg);
-  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the failure occurred here
+  = note: the failure occurred here
   |
  ::: $WORKSPACE/crates/orm/src/query/param.rs
   |

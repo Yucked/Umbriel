@@ -1,10 +1,9 @@
 error[E0277]: the trait bound `Optional<umbriel::kinds::Array<umbriel::kinds::Number>>: Enters<ArrayLike>` is not satisfied
- --> tests/ui/fail/new_vector_result_kinds.rs:9:25
+ --> tests/ui/fail/new_vector_result_kinds.rs:9:24
   |
-9 |     let _ = array::len!(vector::sum!(embeddings));
-  |             ------------^^^^^^^^^^^^^^^^^^^^^^^^-
-  |             |           |
-  |             |           the trait `Enters<ArrayLike>` is not implemented for `Optional<umbriel::kinds::Array<umbriel::kinds::Number>>`
+9 |     let _ = array::len(vector::sum(embeddings));
+  |             ---------- ^^^^^^^^^^^^^^^^^^^^^^^ the trait `Enters<ArrayLike>` is not implemented for `Optional<umbriel::kinds::Array<umbriel::kinds::Number>>`
+  |             |
   |             required by a bound introduced by this call
   |
 help: the following other types implement trait `Enters<T>`
@@ -26,12 +25,11 @@ help: the following other types implement trait `Enters<T>`
   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `umbriel::kinds::Array<T>`
   = note: required for `ArrayLike` to implement `From<umbriel::Function<Optional<umbriel::kinds::Array<umbriel::kinds::Number>>>>`
   = note: required for `umbriel::Function<Optional<umbriel::kinds::Array<umbriel::kinds::Number>>>` to implement `Into<ArrayLike>`
-note: required by a bound in `umbriel::functions::array::len_fn`
+note: required by a bound in `umbriel::functions::array::len`
  --> $WORKSPACE/crates/orm/src/functions/catalogue.rs
   |
-  |               pub fn [<$sql _fn>](
-  |                   $a1: impl Into<$crate::$t1>,
-  |                             ^^^^^^^^^^^^^^^^^ required by this bound in `len_fn`
+  |               $a1: impl Into<$crate::$t1>,
+  |                         ^^^^^^^^^^^^^^^^^ required by this bound in `len`
   |
  ::: $WORKSPACE/crates/orm/src/functions/array.rs
   |
@@ -40,7 +38,9 @@ note: required by a bound in `umbriel::functions::array::len_fn`
   | |     add(array: ArrayLike, value: ValueLike) -> kinds::Array [ArrayLike.add];
   | |     /// Whether every element is truthy, or matches `check` (a value or a closure).
 ... |
+  | |     len(array: ArrayLike) -> kinds::Int [ArrayLike.len];
+... |
   | |         [ArrayLike.windows];
   | | }
   | |_- in this macro invocation
-  = note: this error originates in the macro `vector::sum` which comes from the expansion of the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
+  = note: this error originates in the macro `enters` which comes from the expansion of the macro `functions` (in Nightly builds, run with -Z macro-backtrace for more info)
