@@ -141,8 +141,9 @@ impl AccessInit {
         self.operation(AccessOperation::Revoke(Selection::All))
     }
 
-    /// `REVOKE GRANT @id`: revokes one grant.
-    pub fn revoke_grant(self, id: impl Into<String>) -> AccessStatement<AccessGrant> {
+    /// `REVOKE GRANT @id`: revokes one grant. SurrealDB 3.3.4 answers with a list, like the other
+    /// revocations: the revoked grant, unlike `SHOW GRANT`, which answers with the grant itself.
+    pub fn revoke_grant(self, id: impl Into<String>) -> AccessStatement<Vec<AccessGrant>> {
         self.operation(AccessOperation::Revoke(Selection::Grant(id.into())))
     }
 
