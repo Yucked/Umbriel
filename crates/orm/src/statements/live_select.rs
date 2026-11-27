@@ -91,7 +91,12 @@ impl<O: 'static> LiveSelectStatement<O> {
         }
     }
 
-    /// Registers the live query on `db` and returns the stream of its notifications.
+    /// Registers the live query through a clone of `db` and returns the stream of its
+    /// notifications.
+    ///
+    /// The clone is a session of its own, starting from `db`'s namespace, database, sign-in and
+    /// variables, and the stream keeps it (see [`LiveStream`]). Dropping, invalidating or
+    /// re-signing `db` afterwards doesn't affect the stream.
     ///
     /// # Errors
     ///
@@ -99,9 +104,10 @@ impl<O: 'static> LiveSelectStatement<O> {
     /// [`Error::NotAllowed`]), or the engine's, such as HTTP, which has no live queries.
     pub async fn subscribe<C: Connection>(&self, db: &Surreal<C>) -> Result<LiveStream<O, C>> {
         let query = self.to_query()?;
-        let (query_id, stream) = register(db, &query).await?;
+        let db = db.clone();
+        let (query_id, stream) = register(&db, &query).await?;
         Ok(LiveStream {
-            subscription: Subscription::new(db.clone(), query_id),
+            subscription: Subscription::new(db, query_id),
             query,
             stream,
             decode: self.decode,
@@ -141,8 +147,14 @@ pub enum LiveEvent<O> {
 /// - a transport failure is the stream's last item: the stream ends after it.
 ///
 /// The stream ends when the live query does: after [`kill`](Self::kill), or with the connection.
-/// Invalidating the session also ends the live query on the server, but SurrealDB 3.3.4 sends
-/// no `Killed` notification for it, so the stream stays open and receives nothing: drop it.
+///
+/// The live query lives in the stream's own session: a clone of the handle given to
+/// [`subscribe`](LiveSelectStatement::subscribe), which the stream keeps, and which
+/// [`resubscribe`](Self::resubscribe) registers on again. In SurrealDB 3.3.4's SDK each clone of
+/// a handle is a session of its own, and dropping a handle ends its session with the session's
+/// live queries. So the query outlives the caller's handle, runs with the rights that handle had
+/// when subscribing, and ends at the latest when the stream is dropped. Invalidating or
+/// re-signing the caller's handle doesn't reach it.
 ///
 /// Dropping the stream ends the live query as best effort: unless a [`kill`](Self::kill)
 /// succeeded, it sends a `KILL` through a clone of the handle that subscribed (the same
@@ -266,8 +278,8 @@ impl<O, C: Connection> LiveStream<O, C> {
 ///
 /// Each clone of a `Surreal` handle is a session of its own, and dropping a handle ends its
 /// session together with the session's live queries. So `db` must outlive any query registered
-/// on it: `resubscribe` registers on the stream's handle and keeps it, and gives the old query a
-/// clone to `KILL` from.
+/// on it: `subscribe` and `resubscribe` register on the handle the stream keeps, and
+/// `resubscribe` gives the old query a clone to `KILL` from.
 struct Subscription<C: Connection> {
     db: Surreal<C>,
     query_id: Uuid,
