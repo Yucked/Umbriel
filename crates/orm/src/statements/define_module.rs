@@ -2,10 +2,12 @@ use std::str::FromStr;
 
 use surrealdb::types::File;
 
-use crate::{Conditional, Error, Filter, Render, Renderer, Result, render::is_identifier};
+use crate::{Error, Render, Renderer, Result, render::is_identifier};
 
 use super::{
-    DefineOptions, Statement, for_permission::PermissionValue, impl_define_options, impl_definition,
+    DefineOptions, Statement,
+    for_permission::{PermissionValue, impl_permissions},
+    impl_define_options, impl_definition,
 };
 
 /// The name of a module, as `ALTER MODULE` and `REMOVE MODULE` take it, and as `INFO` keys it.
@@ -198,25 +200,9 @@ impl DefineModuleStatement {
         self.name = Some(name.into());
         self
     }
-
-    /// `PERMISSIONS NONE`.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions = Some(PermissionValue::None);
-        self
-    }
-
-    /// `PERMISSIONS FULL`.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions = Some(PermissionValue::Full);
-        self
-    }
-
-    /// `PERMISSIONS WHERE @condition`.
-    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
-        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
-        self
-    }
 }
+
+impl_permissions!(single: DefineModuleStatement);
 
 impl Statement for DefineModuleStatement {
     fn render_body(&self, out: &mut Renderer) {

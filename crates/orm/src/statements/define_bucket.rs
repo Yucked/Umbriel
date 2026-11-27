@@ -1,9 +1,11 @@
 use surrealdb::types::Value;
 
-use crate::{Conditional, Filter, Ident, Name, Renderer};
+use crate::{Ident, Name, Renderer};
 
 use super::{
-    DefineOptions, Statement, for_permission::PermissionValue, impl_define_options, impl_definition,
+    DefineOptions, Statement,
+    for_permission::{PermissionValue, impl_permissions},
+    impl_define_options, impl_definition,
 };
 
 /// Defines a bucket, a store of files: `DEFINE BUCKET [OVERWRITE | IF NOT EXISTS] @name
@@ -74,25 +76,9 @@ impl DefineBucketStatement {
         self.readonly = true;
         self
     }
-
-    /// `PERMISSIONS NONE`.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions = Some(PermissionValue::None);
-        self
-    }
-
-    /// `PERMISSIONS FULL`.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions = Some(PermissionValue::Full);
-        self
-    }
-
-    /// `PERMISSIONS WHERE @condition`.
-    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
-        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
-        self
-    }
 }
+
+impl_permissions!(single: DefineBucketStatement);
 
 impl Statement for DefineBucketStatement {
     fn render_body(&self, out: &mut Renderer) {
