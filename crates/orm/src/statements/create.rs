@@ -1,26 +1,19 @@
-// Statement syntax
-// CREATE [ ONLY ] @targets
-// 	[ CONTENT @value
-// 	  | SET @field = @value ...
-// 	]
-// The parser also accepts `MERGE`, `PATCH`, `REPLACE` and `UNSET`, which the engine applies to the
-// new, empty document through the same path as every other write (`doc/alter.rs`
-// `process_record_data` in 3.3.4).
-// 	[ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... | RETURN VALUE @statement_param ]
-// 	[ TIMEOUT @duration ]
-// ;
+//! `CREATE`. Syntax: <https://surrealdb.com/docs/surrealql/statements/create>. The parser also
+//! accepts `MERGE`, `PATCH`, `REPLACE` and `UNSET`, which the engine applies to the new, empty
+//! document through the same path as every other write (`doc/alter.rs` `process_record_data` in
+//! 3.3.4).
+
 use std::{marker::PhantomData, ops::Range};
 
-use surrealdb::types::{self, SurrealValue, Table, ToSql, Value};
+use surrealdb::types::{self, Table, ToSql, Value};
 
 use crate::{
-    DurationLike, Model, ModelMerge, Node, PatchOp, RecordId, Renderer, Setter, TableOf, TableSpec,
-    ValueLike, render::Checked,
+    DurationLike, Model, Node, RecordId, Renderer, TableOf, TableSpec, ValueLike, render::Checked,
 };
 
 use super::{
     Cardinality, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
-    data::{DataClause, Unsettables},
+    data::{DataClause, data_clause_methods},
     impl_statement,
     returning::return_methods,
 };
@@ -293,68 +286,9 @@ pub struct CreateStatement<T, R = ReturnAfter<T>, C = Many> {
     cardinality: PhantomData<C>,
 }
 
-impl<T: Node, R: ReturnMode, C: Cardinality> CreateStatement<T, R, C> {
-    /// The record's data as a whole model (`CONTENT`). Its record id must be in a table target's
-    /// table, or equal a record target; otherwise the statement fails when it is rendered.
-    pub fn content(mut self, content: T) -> Self {
-        self.body.data = Some(DataClause::content(content));
-        self
-    }
-
-    /// The record's data as assignments (`SET`); repeated calls add to the assignments.
-    ///
-    /// # Arguments
-    ///
-    /// * `settables` - one assignment from `equal_to`, or a list of them, e.g. from the
-    ///   `object!` macro.
-    pub fn set(mut self, settables: impl Into<Vec<Setter>>) -> Self {
-        self.body.data = Some(DataClause::set(self.body.data.take(), settables.into()));
-        self
-    }
-
-    /// The record's data as a merge into the new, empty record (`MERGE`): the non-`Keep` fields
-    /// of a generated `<Model>Merge`.
-    pub fn merge(mut self, merge: impl ModelMerge<Model = T>) -> Self {
-        self.body.data = Some(DataClause::Merge(ValueLike::new(merge.into_object())));
-        self
-    }
-
-    /// The record's data as JSON Patch operations on the new, empty record (`PATCH`); repeated
-    /// calls add to the operations. An operation on a path that does not exist yet, such as a
-    /// `replace`, fails the statement.
-    pub fn patch(mut self, patch_op: impl Into<Vec<PatchOp>>) -> Self {
-        self.body.data = Some(DataClause::patch(self.body.data.take(), patch_op.into()));
-        self
-    }
-
-    /// The record's data as a whole value (`REPLACE`). Unlike `CONTENT` it respects `READONLY`
-    /// fields.
-    pub fn replace(mut self, replacement: impl SurrealValue) -> Self {
-        self.body.data = Some(DataClause::Replace(ValueLike::value(replacement)));
-        self
-    }
-
-    /// Fields to remove from the new record (`UNSET`); repeated calls add to the fields. Fields
-    /// with a `DEFAULT` or `VALUE` clause are computed after the data clause.
-    pub fn unset(mut self, fields: impl Into<Unsettables>) -> Self {
-        self.body.data = Some(DataClause::unset(self.body.data.take(), fields.into().0));
-        self
-    }
-
-    /// Sets the timeout duration for the query, bound as a query parameter.
-    pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
-        self.body.timeout = Some(duration.into());
-        self
-    }
-
-    fn with_mode<M: ReturnMode>(self, mode: M) -> CreateStatement<T, M, C> {
-        CreateStatement {
-            body: self.body,
-            mode,
-            cardinality: PhantomData,
-        }
-    }
-}
+// On a new record, `MERGE` and `PATCH` apply to an empty one: a `PATCH` of a path that does not
+// exist yet, such as a `replace`, fails the statement.
+data_clause_methods!(Node, CreateStatement, "record");
 
 // `RETURN BEFORE` is not offered: SurrealDB documents it as `NONE` for `CREATE`.
 return_methods!([T: Node] CreateStatement<T> { none, null, after, diff, value, fields, links });
@@ -366,12 +300,7 @@ impl<T: Node, R: ReturnMode, C: Cardinality> Statement for CreateStatement<T, R,
         if C::ONLY {
             out.push_str("ONLY ");
         }
-        for (index, target) in body.targets.iter().enumerate() {
-            if index > 0 {
-                out.push_str(", ");
-            }
-            target.render(out);
-        }
+        out.push_joined_with(&body.targets, ", ", |out, target| target.render(out));
         if body.targets.is_empty() {
             out.push_error("a CREATE statement needs at least one target");
         }
