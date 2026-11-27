@@ -298,10 +298,10 @@ mod lifecycle {
         assert!(quiet(&mut watcher).await, "one write, one notification");
     }
 
-    /// L13: invalidating the session ends its live queries on the server, but SurrealDB 3.3.4
-    /// sends no `Killed` notification, so the stream neither ends nor delivers.
+    /// L13: the stream subscribes through a session of its own, so invalidating the handle it was
+    /// given leaves the query registered and delivering. Writes go through another connection.
     #[tokio::test]
-    async fn invalidating_the_session_ends_the_query() {
+    async fn invalidating_the_subscribing_handle_keeps_the_query() {
         let (db, guard) = db().await;
         ran(&db, "DEFINE TABLE note;").await;
         let session = connect(Endpoint::Main).await;
@@ -317,11 +317,33 @@ mod lifecycle {
             .await
             .expect("subscribed");
         session.invalidate().await.expect("invalidated");
-        assert!(
-            quiet(&mut stream).await,
-            "the stream neither ends nor delivers"
-        );
-        assert_eq!(lives(&db, "note").await, 0, "the query is gone");
+        assert_eq!(lives(&db, "note").await, 1, "the query is registered");
+        ran(&db, "CREATE note:one;").await;
+        assert!(matches!(
+            next(&mut stream).await,
+            Some(Ok(LiveEvent::Create(_)))
+        ));
+    }
+
+    /// L13b: dropping the handle the stream was given ends that handle's session, not the
+    /// stream's. The write goes through another handle of the same connection, so the SDK sends
+    /// the dropped session's detach before it.
+    #[tokio::test]
+    async fn dropping_the_subscribing_handle_keeps_the_query() {
+        let (db, _guard) = db().await;
+        ran(&db, "DEFINE TABLE note;").await;
+        let subscriber = db.clone();
+        let mut stream = live(select(All).from(Table::from("note")))
+            .subscribe(&subscriber)
+            .await
+            .expect("subscribed");
+        drop(subscriber);
+        ran(&db, "CREATE note:one;").await;
+        assert!(matches!(
+            next(&mut stream).await,
+            Some(Ok(LiveEvent::Create(_)))
+        ));
+        assert_eq!(lives(&db, "note").await, 1, "the query is registered");
     }
 
     /// L14: the HTTP engine has no live queries.
