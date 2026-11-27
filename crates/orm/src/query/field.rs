@@ -172,7 +172,7 @@ enum GraphTarget {
 ///         .outgoing(
 ///             Lookup::tables(["likes"])
 ///                 .select([Field::new("out"), Field::new("since")])
-///                 .where_(Field::new("since").gt(2020))
+///                 .where_(Field::new("since").greater_than(2020))
 ///                 .order_by(order(Field::new("since")).desc())
 ///                 .limit(5),
 ///         )
@@ -314,15 +314,12 @@ impl Lookup {
             out.push_str("?");
             return;
         }
-        for (index, (table, field)) in self.subjects.iter().enumerate() {
-            if index > 0 {
-                out.push_str(", ");
-            }
+        out.push_joined_with(&self.subjects, ", ", |out, (table, field)| {
             out.push(table);
             if let Some(field) = field {
                 out.push_str(" FIELD ").push(field);
             }
-        }
+        });
     }
 }
 
@@ -764,9 +761,13 @@ impl Field {
 
     /// `.*`: every field of the value at this path.
     pub fn all(&self) -> Field {
-        let mut field = self.clone();
-        field.parts.push(IdiomPart::AllFields);
-        field
+        self.clone().into_all()
+    }
+
+    /// [`all`](Self::all), consuming the path instead of copying it.
+    pub(crate) fn into_all(mut self) -> Field {
+        self.parts.push(IdiomPart::AllFields);
+        self
     }
 
     /// `.?`: the rest of the path applies only when the value so far is not `NONE`, so
