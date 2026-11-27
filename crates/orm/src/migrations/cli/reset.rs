@@ -1,13 +1,12 @@
 use clap::Args;
 use std::fs;
-use typed_builder::TypedBuilder;
 
 use crate::DbResources;
 use crate::migrations::*;
 
 /// Resets migrations. Deletes all migration files, migration table and reinitializes
 /// migrations.
-#[derive(Args, Debug, TypedBuilder, Clone)]
+#[derive(Args, Debug, Clone)]
 pub struct Reset {
     /// Name of the first migration file(s) to reinitialize to
     #[arg(long)]
@@ -26,6 +25,16 @@ pub struct Reset {
 }
 
 impl Reset {
+    /// Resets to a first migration named `name`, two-way when `reversible`, applying it
+    /// afterwards when `run`.
+    pub fn new(name: Basename, reversible: bool, run: bool) -> Self {
+        Self {
+            name,
+            run,
+            reversible,
+        }
+    }
+
     /// Whether the reinitialized migrations are two-way.
     pub fn reversible(&self) -> bool {
         self.reversible
@@ -76,7 +85,11 @@ impl Reset {
             .and_then(|dir| {
                 fs::remove_dir_all(&dir)
                     .and_then(|()| fs::create_dir(&dir))
-                    .map_err(|e| MigrationError::IoError(e.to_string()))
+                    .map_err(|source| MigrationError::Io {
+                        action: "recreating the migration directory",
+                        path: dir.clone(),
+                        source,
+                    })
             })
             .and_then(|()| migration.create_file(&file_manager));
         if let Err(e) = replaced {
