@@ -4,33 +4,14 @@ use crate::{Conditional, Field, Filter, Name, Renderer, ValueLike};
 
 use super::{
     DefineOptions, Statement,
-    for_permission::{Permissions, PermissionsClause},
+    for_permission::{PermissionsClause, impl_permissions},
     impl_define_options, impl_definition,
 };
 
-// DEFINE FIELD statement
-// The DEFINE FIELD statement allows you to instantiate a named field on a table, enabling you to set the field's data type, set a default value, apply assertions to protect data consistency, and set permissions specifying what operations can be performed on the field.
-//
-// Statement syntax
-// DEFINE FIELD [ OVERWRITE | IF NOT EXISTS ] @name ON [ TABLE ] @table
-// 	[ TYPE @type [ FLEXIBLE ] ]
-// 	[ READONLY ]
-// 	[ DEFAULT [ ALWAYS ] @expression ]
-// 	[ VALUE @expression ]
-// 	[ ASSERT @expression ]
-// 	[ COMMENT @string ]
-// 	[ PERMISSIONS [ NONE | FULL
-// 		| FOR select @expression
-// 		| FOR create @expression
-// 		| FOR update @expression
-// 	] ]
-//
-// DEFINE FIELD @name ON [ TABLE ] @table
-// 	COMPUTED @expression
-// 	[ TYPE @type ]
-// 	[ PERMISSIONS ... ]
+impl_permissions!(per_for: DefineFieldStatement);
 
-/// A statement for defining a Field.
+/// A statement for defining a Field. Syntax:
+/// <https://surrealdb.com/docs/surrealql/statements/define/field>.
 #[derive(Clone, Debug)]
 pub struct DefineFieldStatement {
     field: Field,
@@ -373,25 +354,6 @@ impl DefineFieldStatement {
             Some(earlier) => earlier.and(assertion),
             None => Filter::new(assertion),
         });
-        self
-    }
-
-    /// set no permission.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions.none();
-        self
-    }
-
-    /// set full permission.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions.full();
-        self
-    }
-
-    /// set specific permissions for specific event type inluding CREATE, UPDATE, SELECT and DELETE.
-    /// Additional permission chaining accumulates
-    pub fn permissions(mut self, fors: impl Into<Permissions>) -> Self {
-        self.permissions.push(fors);
         self
     }
 
