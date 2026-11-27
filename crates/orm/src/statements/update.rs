@@ -1,17 +1,5 @@
-// Statement syntax
-// UPDATE [ ONLY ] @targets
-// 	[ WITH NOINDEX | WITH INDEX @indexes ]
-// 	[ CONTENT @value
-// 	  | MERGE @value
-// 	  | PATCH @value
-// 	  | REPLACE @value
-// 	  | [ SET @field = @value, ... | UNSET @field, ... ]
-// 	]
-// 	[ WHERE @condition ]
-// 	[ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... | RETURN VALUE @statement_param ]
-// 	[ TIMEOUT @duration ]
-// 	[ EXPLAIN [ FULL ]]
-// ;
+//! `UPDATE`. Syntax: <https://surrealdb.com/docs/surrealql/statements/update>.
+
 use std::marker::PhantomData;
 
 use surrealdb::types::{self, Table, ToSql};

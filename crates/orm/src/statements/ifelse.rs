@@ -1,11 +1,4 @@
-// Statement syntax
-// IF @condition THEN
-// 	@expression
-// [ ELSE IF @condition THEN
-// 	@expression ... ]
-// [ ELSE
-// 	@expression ]
-// END
+//! `IF … ELSE`. Syntax: <https://surrealdb.com/docs/surrealql/statements/ifelse>.
 
 use crate::{Conditional, Expression, Filter, QueryChain, Render, Renderer};
 

@@ -1,21 +1,6 @@
-// Syntax, in the order the SurrealDB 3.3.4 parser reads it
-// (https://surrealdb.com/docs/surrealql/statements/select):
-// SELECT [ VALUE ] @projections [ OMIT @fields ]
-//     FROM [ ONLY ] @targets
-//     [ WITH NOINDEX | WITH INDEX @indexes ]
-//     [ WHERE @condition ]
-//     [ SPLIT [ ON ] @field, ... ]
-//     [ GROUP [ BY ] @field, ... | GROUP ALL ]
-//     [ ORDER [ BY ] RAND() | @field [ COLLATE ] [ NUMERIC ] [ ASC | DESC ], ... ]
-//     [ LIMIT [ BY ] @limit ]
-//     [ START [ AT ] @start ]
-//     [ FETCH @fields ]
-//     [ VERSION @datetime ]
-//     [ TIMEOUT @duration ]
-//     [ FOR UPDATE ]
-//     [ TEMPFILES ]
-//     [ EXPLAIN [ FULL ] ]
-// ;
+//! `SELECT`. Syntax: <https://surrealdb.com/docs/surrealql/statements/select>; clauses render in
+//! the order the SurrealDB 3.3.4 parser reads them.
+
 use std::{fmt, marker::PhantomData};
 
 use surrealdb::types::{self, SurrealValue, Table, Value};

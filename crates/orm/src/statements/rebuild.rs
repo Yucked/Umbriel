@@ -1,5 +1,4 @@
-// Statement syntax
-// REBUILD INDEX [ IF EXISTS ] @name ON [ TABLE ] @table [ CONCURRENTLY ]
+//! `REBUILD INDEX`. Syntax: <https://surrealdb.com/docs/surrealql/statements/rebuild>.
 
 use surrealdb::types::Table;
 

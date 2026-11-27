@@ -1,12 +1,5 @@
-// Statement syntax
-// INSERT [ RELATION ] [ IGNORE ] INTO @what
-// 	[ @value
-// 	  | (@fields) VALUES (@values)
-// 		[ ON DUPLICATE KEY UPDATE @field = @value ... ]
-// 	]
-// 	[ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... | RETURN VALUE @statement_param ]
-// 	[ TIMEOUT @duration ]
-// ;
+//! `INSERT`. Syntax: <https://surrealdb.com/docs/surrealql/statements/insert>.
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     marker::PhantomData,

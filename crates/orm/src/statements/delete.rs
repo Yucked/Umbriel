@@ -1,11 +1,5 @@
-// Statement syntax
-// DELETE [ FROM | ONLY ] @targets
-//     [ WITH NOINDEX | WITH INDEX @indexes ]
-//     [ WHERE @condition ]
-//     [ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... ]
-//     [ TIMEOUT @duration ]
-//     [ EXPLAIN [ FULL ]]
-// ;
+//! `DELETE`. Syntax: <https://surrealdb.com/docs/surrealql/statements/delete>.
+
 use std::{marker::PhantomData, ops::Deref};
 
 use crate::{
