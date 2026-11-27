@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeSet,
     fmt::Display,
-    fs::{self, File},
+    fs::File,
     io::Write,
     ops::Deref,
     path::Path,
@@ -101,16 +101,16 @@ impl MigrationFilenames {
         let mut pairs = Vec::with_capacity(migrations.len());
         for up in migrations.into_iter().rev() {
             let down = up.to_down();
-            pairs.push(MigrationFileTwoWayPair {
-                up: FileMetadata {
+            pairs.push(MigrationFileTwoWayPair::new(
+                FileMetadata {
                     content: read(migration_dir, &up)?,
                     name: up,
                 },
-                down: FileMetadata {
+                FileMetadata {
                     content: read(migration_dir, &down)?,
                     name: down,
                 },
-            });
+            )?);
         }
         Ok(pairs)
     }
@@ -246,21 +246,17 @@ impl MigrationFilename {
     }
 
     /// Writes `query` to this file in the migration directory, creating the directory if needed.
-    pub fn create_file(
-        &self,
-        query: &FileContent,
-        file_namager: &MigrationConfig,
-    ) -> MigrationResult<()> {
-        let migration_dir = file_namager.resolve_migration_directory(true)?;
-        let file_path = migration_dir.join(self.to_string());
+    ///
+    /// # Errors
+    ///
+    /// [`MigrationError::Io`] when the file already exists (it is never overwritten) or cannot be
+    /// written.
+    pub fn create_file(&self, query: &FileContent, config: &MigrationConfig) -> MigrationResult<()> {
+        let file_path = config
+            .resolve_migration_directory(true)?
+            .join(self.to_string());
 
-        fs::create_dir_all(&migration_dir).map_err(|source| MigrationError::Io {
-            action: "creating the migration directory",
-            path: migration_dir.clone(),
-            source,
-        })?;
-
-        let mut file = File::create(&file_path).map_err(|source| MigrationError::Io {
+        let mut file = File::create_new(&file_path).map_err(|source| MigrationError::Io {
             action: "creating the migration file",
             path: file_path.clone(),
             source,
