@@ -97,7 +97,50 @@ async fn precedence_is_kept() {
     .await;
     evaluates(negate(literal(2).add(3)), "-(2 + 3)", "-5").await;
     evaluates(not(literal(1).equal(2)), "!(1 = 2)", "true").await;
-    evaluates(negate(literal(2).add(3)).multiply(2), "-(2 + 3) * 2", "-10").await;
+    evaluates(
+        negate(literal(2).add(3)).multiply(2),
+        "(-(2 + 3)) * 2",
+        "-10",
+    )
+    .await;
+}
+
+/// Named arithmetic groups a nested operation the way SurrealDB would read it, as the `std::ops`
+/// operators do.
+#[tokio::test]
+async fn named_arithmetic_preserves_grouping() {
+    evaluates(literal(2).add(3).multiply(2), "(2 + 3) * 2", "10").await;
+    evaluates(literal(10).subtract(4).divide(2), "(10 - 4) / 2", "3").await;
+    evaluates(literal(1).add(2).power(2), "(1 + 2) ** 2", "9").await;
+    evaluates(literal(2).multiply(literal(3).add(1)), "2 * (3 + 1)", "8").await;
+    evaluates(
+        literal(20).divide(literal(2).multiply(5)),
+        "20 / (2 * 5)",
+        "2",
+    )
+    .await;
+    evaluates(literal(7).add(3).modulo(4), "(7 + 3) % 4", "2").await;
+    // A comparison over arithmetic keeps its operands as they are.
+    evaluates(literal(2).add(3).equal(5), "2 + 3 = 5", "true").await;
+
+    // The named methods and the Rust operators write the same text.
+    let age = Field::new("age");
+    assert_eq!(
+        age.add(1).multiply(2).to_debug_sql(),
+        ((age.clone() + 1) * 2).to_debug_sql()
+    );
+    assert_eq!(
+        age.subtract(1).divide(2).to_debug_sql(),
+        ((&age - 1) / 2).to_debug_sql()
+    );
+
+    // Bindings keep the order the operands were written in.
+    let query = Field::new("price")
+        .add(Field::new("tax"))
+        .multiply(ValueLike::value(3))
+        .to_query()
+        .expect("valid");
+    assert_eq!(query.sql(), "(price + tax) * $_p0");
 }
 
 mod operators {
@@ -109,18 +152,13 @@ mod operators {
         let cases = [
             (age.equal(25), "age = 25"),
             (age.not_equal(25), "age != 25"),
-            (age.neq(25), "age != 25"),
             (age.exactly_equal(25), "age == 25"),
             (age.any_equal(25), "age ?= 25"),
             (age.all_equal(25), "age *= 25"),
             (age.less_than(25), "age < 25"),
-            (age.lt(25), "age < 25"),
             (age.less_than_or_equal(25), "age <= 25"),
-            (age.lte(25), "age <= 25"),
             (age.greater_than(25), "age > 25"),
-            (age.gt(25), "age > 25"),
             (age.greater_than_or_equal(25), "age >= 25"),
-            (age.gte(25), "age >= 25"),
             (age.truthy_and(25), "age && 25"),
             (age.truthy_or(25), "age || 25"),
             (age.and(25), "age AND 25"),
@@ -142,15 +180,10 @@ mod operators {
         let age = Field::new("age");
         let cases = [
             (age.add(5), "age + 5"),
-            (age.plus(5), "age + 5"),
             (age.subtract(5), "age - 5"),
-            (age.minus(5), "age - 5"),
             (age.multiply(5), "age * 5"),
-            (age.mul(5), "age * 5"),
             (age.divide(5), "age / 5"),
-            (age.div(5), "age / 5"),
             (age.power(2), "age ** 2"),
-            (age.pow(2), "age ** 2"),
         ];
         for (operation, expected) in cases {
             assert_eq!(operation.to_debug_sql(), expected);
@@ -173,7 +206,6 @@ mod operators {
             ),
             (tags.contains_none(vec!["go"]), "tags CONTAINSNONE ['go']"),
             (tags.inside(vec!["rust"]), "tags INSIDE ['rust']"),
-            (tags.in_(vec!["rust"]), "tags INSIDE ['rust']"),
             (tags.not_inside(vec!["rust"]), "tags NOTINSIDE ['rust']"),
             (tags.all_inside([1, 2]), "tags ALLINSIDE [1, 2]"),
             (tags.any_inside([1, 2]), "tags ANYINSIDE [1, 2]"),
