@@ -14,7 +14,7 @@ use super::{Codegen, RelationType};
 /// The schema type of a model, named through `SchemaGetter` where the model is declared, so no
 /// alias or module is needed to reach it.
 fn schema_of(model: &impl quote::ToTokens) -> TokenStream {
-    let crate_name = get_crate_name(false);
+    let crate_name = get_crate_name();
     quote!(<#model as #crate_name::SchemaGetter>::Schema)
 }
 
@@ -80,14 +80,14 @@ impl Codegen<'_> {
             self.record_link_fields_methods.push(meta.link_field_method);
 
             self.static_assertions
-                .push(meta.foreign_node_type_validator.static_assertion());
+                .push(meta.foreign_node_type_validator.0);
         }
 
         Ok(())
     }
 
     pub fn list_simple(&self) -> ExtractorResult<LinkMethodMeta> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let table_derive_attrs = self.table_derive_attributes();
         let field_receiver = self.field_receiver();
         let struct_casing = table_derive_attrs.casing()?;
@@ -110,7 +110,7 @@ impl Codegen<'_> {
     }
 
     fn link_one(&self, link_one: LinkOneAttrType) -> ExtractorResult<LinkMethodMeta> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let table_derive_attrs = self.table_derive_attributes();
         let struct_casing = table_derive_attrs.casing()?;
         let field_receiver = self.field_receiver();
@@ -140,7 +140,7 @@ impl Codegen<'_> {
     }
 
     fn link_many(&self, link_many_node_type: &LinkManyAttrType) -> ExtractorResult<LinkMethodMeta> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let table_derive_attrs = self.table_derive_attributes();
         let field_attr = self.field_receiver();
         let struct_casing = table_derive_attrs.casing()?;
@@ -174,7 +174,7 @@ impl Codegen<'_> {
         &self,
         embedded_object: &NestObjectAttrType,
     ) -> ExtractorResult<LinkMethodMeta> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let table_derive_attrs = self.table_derive_attributes();
         let struct_casing = table_derive_attrs.casing()?;
         let field_receiver = self.field_receiver();
@@ -204,7 +204,7 @@ impl Codegen<'_> {
     }
 
     pub fn nest_array(&self, nested_array: &NestArrayAttrType) -> ExtractorResult<LinkMethodMeta> {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let table_derive_attrs = self.table_derive_attributes();
         let struct_casing = table_derive_attrs.casing()?;
         let field_receiver = self.field_receiver();
@@ -244,19 +244,8 @@ create_tokenstream_wrapper!(
 ForeignNodeTypeValidator
 );
 
-impl ForeignNodeTypeValidator {
-    pub fn static_assertion(self) -> StaticAssertionToken {
-        self.0.into()
-    }
-}
-
 create_tokenstream_wrapper!(
-/// TODO: Complete later if you decide to document the token generated on the type or on
-/// the struct gatherer FieldsMeta fields
-/// Contains the default alias method for the foreign node type
-/// Example:
-/// ```text
-///
+/// The method that continues a path through a link field to the foreign node's schema.
 =>
 LinkFieldTraversalMethodToken
 );
