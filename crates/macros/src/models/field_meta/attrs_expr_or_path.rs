@@ -5,8 +5,6 @@ use quote::{ToTokens, quote};
 use surrealdb_types::Kind;
 use syn::{Expr, Lit, Meta, MetaNameValue};
 
-use crate::models::*;
-
 #[derive(Clone, Debug)]
 pub enum ExprOrPath {
     Expr(Expr),
@@ -28,9 +26,6 @@ impl FromMeta for ExprOrPath {
                 Expr::Path(expr_path) => Ok(ExprOrPath::Path(expr_path.path.clone())),
                 Expr::Lit(lit) => Self::from_value(&lit.lit),
                 _ => Ok(ExprOrPath::Expr(value.clone())),
-                // _ => Err(darling::Error::custom(
-                //     "Expected a valid Rust path or an expression",
-                // )),
             },
             Meta::List(_) => Err(darling::Error::unsupported_shape(
                 "Expected a path or a name-value pair",
@@ -46,67 +41,11 @@ impl FromMeta for ExprOrPath {
             | Lit::Float(_)
             | Lit::Bool(_)
             | Lit::Str(_) => Ok(ExprOrPath::Expr(syn::parse2(quote!(#value))?)),
-            // Lit::Str(str_lit) => {
-            //     let value_str = str_lit.value();
-            //     // just take the string directly as value the attribute is stringified i.e quoted
-            //     // e.g #[orm(value = "18")]
-            //     Ok(ExprOrPath::Expr(syn::parse_str::<Expr>(&value_str)?))
-            //
-            //     // match syn::parse_str::<Path>(&value_str) {
-            //     //     Ok(path) => Ok(ExprOrPath::Path(path)),
-            //     //     Err(_) => Ok(syn::parse_str::<Expr>(&value_str).map(ExprOrPath::Expr)?),
-            //     // }
-            // }
             _ => Err(darling::Error::unexpected_lit_type(value)),
         }
     }
 }
 
-//
-// impl FromMeta for ExprOrPath {
-//     fn from_expr(expr: &syn::Expr) -> darling::Result<Self> {
-//         // TODO: Check if it makes sense to allow path alone of it that works OOTB
-//         Ok(Self::Expr(expr.clone()))
-//     }
-//
-//     // fn from_meta(item: &Meta) -> Result<Self, darling::Error> {
-//     //     match item {
-//     //         Meta::Path(ref path) => Ok(ExprOrPath::Path(path.clone())),
-//     //         Meta::NameValue(MetaNameValue { value, .. }) => match value {
-//     //             Expr::Path(expr_path) => {
-//     //                 if expr_path.path.segments.is_empty() {
-//     //                     Err(darling::Error::custom("Path cannot be empty"))
-//     //                 } else {
-//     //                     Ok(ExprOrPath::Path(expr_path.path.clone()))
-//     //                 }
-//     //             }
-//     //             Expr::Lit(expr_lit) => {
-//     //                 let lit = &expr_lit.lit;
-//     //                 match lit {
-//     //                     syn::Lit::Str(lit_str) => {
-//     //                         let path_str = lit_str.value();
-//     //                         let path = syn::parse_str::<syn::Path>(&path_str)
-//     //                             .map_err(|_| darling::Error::custom("Invalid path"))?;
-//     //                         Ok(ExprOrPath::Path(path))
-//     //                     }
-//     //                     _ => Err(darling::Error::custom("Expected a string literal")),
-//     //                 }
-//     //             }
-//     //             _ => {
-//     //                 // panic!("Value: {:?}", value);
-//     //                 Err(darling::Error::custom(
-//     //                                 "Expected a valid Rust path or an expression",
-//     //                             ))
-//     //             },
-//     //         },
-//     //         _ => Err(darling::Error::unsupported_shape(
-//     //             "Expected a path or a name-value pair",
-//     //         )),
-//     //     }
-//     // }
-//     //
-// }
-//
 impl ToTokens for ExprOrPath {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
@@ -161,8 +100,8 @@ impl_from_expr_or_path!(AttributeDefine);
 
 impl AttributeValue {
     /// Asserts that the `value` expression can hold a value of the field's database type.
-    pub fn get_default_value_static_assertion(&self, db_field_type: &Kind) -> StaticAssertionToken {
-        let crate_name = get_crate_name(false);
+    pub fn get_default_value_static_assertion(&self, db_field_type: &Kind) -> TokenStream {
+        let crate_name = get_crate_name();
         let assertion = match db_field_type {
             Kind::Bytes => quote!(assert_value_is_bytes),
             Kind::Null => quote!(assert_value_is_null),
@@ -191,9 +130,9 @@ impl AttributeValue {
             | Kind::Function(..)
             | Kind::Range
             | Kind::Literal(_)
-            | Kind::File(_) => return StaticAssertionToken::default(),
+            | Kind::File(_) => return TokenStream::new(),
         };
 
-        quote!(let _ = #crate_name::validators::#assertion(#self);).into()
+        quote!(let _ = #crate_name::validators::#assertion(#self);)
     }
 }
