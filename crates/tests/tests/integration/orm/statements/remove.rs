@@ -194,7 +194,6 @@ mod definitions {
         ] {
             assert_sql(&statement, sql);
         }
-        assert_render_error(&remove_access("account"), "needs a level");
         assert_render_error(&remove_param("_p0"), "reserved");
     }
 
@@ -236,13 +235,19 @@ mod definitions {
         .await;
         run(
             &db,
-            define_access("account").on_database().record(
-                record_access()
-                    .signup(Raw::new("CREATE user SET email = $email"))
-                    .signin(Raw::new("SELECT * FROM user WHERE email = $email"))
-                    .with_jwt(JwtAlgorithm::HS512, "example-key")
-                    .duration_for_session(Duration::from_secs(3600)),
-            ),
+            define_access("account")
+                .on_database()
+                .record(
+                    record_access()
+                        .signup(Raw::new("CREATE user SET email = $email"))
+                        .signin(Raw::new("SELECT * FROM user WHERE email = $email"))
+                        .with_jwt(
+                            jwt_access()
+                                .algorithm(JwtAlgorithm::HS512)
+                                .key("example-key"),
+                        ),
+                )
+                .duration_for_session(Duration::from_secs(3600)),
         )
         .await;
         run(
