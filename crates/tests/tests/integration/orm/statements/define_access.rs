@@ -220,8 +220,9 @@ mod behaviour {
     }
 
     /// Sign-up issues a token and sign-in with the right credentials succeeds. A wrong password,
-    /// an unknown access method and a `THROW` in `AUTHENTICATE` refuse the sign-in as
-    /// `NotAllowed` (A4, A8).
+    /// an unknown access method and a `THROW` in `AUTHENTICATE` refuse the sign-in (A4, A8).
+    /// SurrealDB 3.3.4 reports a `SIGNIN` that finds no record as "No record was returned",
+    /// without the `NotAllowed` kind, so only the refusal is checked.
     #[tokio::test]
     async fn signup_and_signin() {
         let (db, guard) = db().await;
@@ -248,9 +249,11 @@ mod behaviour {
             person(&guard, "account", "Alice", "wrong-password"),
             person(&guard, "missing", "Alice", "example-password"),
         ] {
-            let refused = guest_in(&guard).await.signin(credentials).await;
-            let error = Error::from(refused.expect_err("refused"));
-            assert!(matches!(error, Error::NotAllowed { .. }), "{error}");
+            guest_in(&guard)
+                .await
+                .signin(credentials)
+                .await
+                .expect_err("refused");
         }
 
         run(
@@ -323,7 +326,8 @@ mod behaviour {
             .expect("the refresh token is exchanged");
     }
 
-    /// After `invalidate`, a permission-checked read is refused (A6).
+    /// After `invalidate`, a permission-checked read is refused as `NotAllowed`: the session is
+    /// anonymous again (A6).
     #[tokio::test]
     async fn invalidate_ends_the_session() {
         let (db, guard) = db().await;
@@ -352,11 +356,11 @@ mod behaviour {
         let notes: Vec<Value> = read(&alice, "SELECT * FROM note;").await;
         assert_eq!(notes.len(), 1, "a signed-in user reads the note");
         alice.invalidate().await.expect("invalidated");
-        let notes: Vec<Value> = read(&alice, "SELECT * FROM note;").await;
-        assert!(
-            notes.is_empty(),
-            "an invalidated session reads nothing: {notes:?}"
-        );
+        let error = Raw::new("SELECT * FROM note;")
+            .run(&alice)
+            .await
+            .expect_err("an invalidated session is refused");
+        assert!(matches!(error, Error::NotAllowed { .. }), "{error:?}");
     }
 
     /// `CONTEXT` puts its value in `$session.data`, and SurrealDB refuses one that could write (A8).
