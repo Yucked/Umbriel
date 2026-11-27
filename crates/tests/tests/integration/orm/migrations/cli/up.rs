@@ -29,10 +29,16 @@ async fn assert_applied(project: &Project, count: usize) {
 }
 
 #[tokio::test]
-#[should_panic(expected = "Failed to detect migration type.")]
 async fn up_before_init_is_refused() {
     let project = Project::new(MigrationFlag::OneWay, Mode::Strict).await;
-    project.run(Up::default(), Resources, allow_empty()).await;
+    let error = project
+        .try_run(Up::default(), Resources, allow_empty())
+        .await
+        .expect_err("refused");
+    assert!(
+        matches!(error, MigrationError::MigrationDirectoryDoesNotExist(_)),
+        "{error:?}"
+    );
 }
 
 /// `up` without a target applies every pending migration, in strict and lax mode alike, and an
@@ -133,26 +139,31 @@ mod till_refuses {
         project
     }
 
+    /// Asserts `up --till target` is refused because `target` is not pending.
+    async fn refused(project: &Project, target: MigrationFilename) {
+        let error = project
+            .try_run(till(target), Resources, allow_empty())
+            .await
+            .expect_err("refused");
+        assert!(
+            matches!(error, MigrationError::MigrationNotFoundFromPendingMigrations(_)),
+            "{error:?}"
+        );
+    }
+
     #[tokio::test]
-    #[should_panic(expected = "Failed to run migrations. Migration already run or not found")]
     async fn an_applied_migration() {
         let project = applied_through(12).await;
-        project
-            .run(till(project.filename_at(12)), Resources, allow_empty())
-            .await;
+        refused(&project, project.filename_at(12)).await;
     }
 
     #[tokio::test]
-    #[should_panic(expected = "Failed to run migrations. Migration already run or not found")]
     async fn an_older_migration() {
         let project = applied_through(12).await;
-        project
-            .run(till(project.filename_at(5)), Resources, allow_empty())
-            .await;
+        refused(&project, project.filename_at(5)).await;
     }
 
     #[tokio::test]
-    #[should_panic(expected = "Failed to run migrations. Migration already run or not found")]
     async fn a_migration_that_does_not_exist() {
         let project = Project::new(MigrationFlag::OneWay, Mode::Strict).await;
         generate_twelve(&project).await;
@@ -160,6 +171,6 @@ mod till_refuses {
             "20231220050955_this_migration_does_not_exist.surql".to_owned(),
         )
         .expect("a migration file name");
-        project.run(till(missing), Resources, allow_empty()).await;
+        refused(&project, missing).await;
     }
 }

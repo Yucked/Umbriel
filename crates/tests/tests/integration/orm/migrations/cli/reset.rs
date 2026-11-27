@@ -1,8 +1,6 @@
 //! `reset` (`orm/src/migrations/cli/reset.rs`): replacing the migration directory with one first
 //! migration of the codebase, applied when asked; and a failed reset leaving the directory alone.
 
-use std::sync::Arc;
-
 use pretty_assertions::assert_eq;
 use umbriel::migrations::*;
 use umbriel_tests::migrations::{helpers::*, *};
@@ -104,7 +102,7 @@ async fn a_reset_replaces_partly_applied_migrations() {
 /// redacted secret, leaves the existing files in place.
 #[tokio::test]
 async fn a_failed_reset_keeps_the_existing_migrations() {
-    let project = Arc::new(Project::new(MigrationFlag::TwoWay, Mode::Strict).await);
+    let project = Project::new(MigrationFlag::TwoWay, Mode::Strict).await;
     project
         .run(
             Init::new("migration init".into(), true, false),
@@ -114,26 +112,17 @@ async fn a_failed_reset_keeps_the_existing_migrations() {
         .await;
     let files = migration_files(&project.dir);
 
-    let reset = tokio::spawn({
-        let project = Arc::clone(&project);
-        async move {
-            project
-                .run(
-                    Reset::new("reset".into(), true, false),
-                    UserResources,
-                    MockPrompter::default(),
-                )
-                .await;
-        }
-    })
-    .await;
-    let panic = reset.expect_err("the reset panics").into_panic();
-    let message = panic
-        .downcast_ref::<String>()
-        .expect("a formatted panic message");
+    let error = project
+        .try_run(
+            Reset::new("reset".into(), true, false),
+            UserResources,
+            MockPrompter::default(),
+        )
+        .await
+        .expect_err("the reset fails");
     assert!(
-        message.starts_with("Failed to generate migrations"),
-        "{message}"
+        matches!(error, MigrationError::RedactedDefinition { .. }),
+        "{error:?}"
     );
     assert_eq!(migration_files(&project.dir), files);
 }

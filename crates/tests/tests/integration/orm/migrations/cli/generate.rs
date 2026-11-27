@@ -17,12 +17,16 @@ fn generate(name: &'static str, run: bool) -> Generate {
 }
 
 #[tokio::test]
-#[should_panic(expected = "Failed to detect migration type")]
 async fn generate_before_init_is_refused() {
     let project = Project::new(MigrationFlag::OneWay, Mode::Strict).await;
-    project
-        .run(generate("migration gen 1", false), Resources, allow_empty())
-        .await;
+    let error = project
+        .try_run(generate("migration gen 1", false), Resources, allow_empty())
+        .await
+        .expect_err("refused");
+    assert!(
+        matches!(error, MigrationError::MigrationDirectoryDoesNotExist(_)),
+        "{error:?}"
+    );
 }
 
 /// `generate` writes a migration either way, and applies the pending ones only with `--run`.
@@ -228,39 +232,53 @@ async fn regenerating_after_an_applied_rename_finds_no_change() {
 }
 
 /// Generates from `resources` after an applied first migration of `Resources`.
-async fn generate_after_init(resources: impl DbResources) {
+/// The error of generating from `resources` after an applied `init`.
+async fn generate_after_init(resources: impl DbResources) -> MigrationError {
     let project = Project::new(MigrationFlag::OneWay, Mode::Strict).await;
     project
         .run(init(&project, true), Resources, MockPrompter::default())
         .await;
     project
-        .run(
+        .try_run(
             generate("migration 2 gen", true),
             resources,
             MockPrompter::default(),
         )
-        .await;
+        .await
+        .expect_err("the generation is refused")
 }
 
 #[tokio::test]
-#[should_panic(expected = "Failed to generate migrations")]
 async fn two_fields_renamed_from_the_same_old_field_are_refused() {
-    generate_after_init(invalid_cases::ResourcesVRenamingWithSameOldFieldNameDisallowed).await;
+    let error =
+        generate_after_init(invalid_cases::ResourcesVRenamingWithSameOldFieldNameDisallowed).await;
+    assert!(
+        matches!(error, MigrationError::RenamingToSameOldFieldDisallowed { .. }),
+        "{error:?}"
+    );
 }
 
 #[tokio::test]
-#[should_panic(expected = "Failed to generate migrations")]
 async fn renaming_from_a_field_still_in_use_is_refused() {
-    generate_after_init(invalid_cases::ResourcesVRenamingFromCurrentlyUsedFieldNameDisallowed)
-        .await;
+    let error =
+        generate_after_init(invalid_cases::ResourcesVRenamingFromCurrentlyUsedFieldNameDisallowed)
+            .await;
+    assert!(
+        matches!(error, MigrationError::CannotRenameFromOldFieldInUSeInTable { .. }),
+        "{error:?}"
+    );
 }
 
 /// `AnimalV2` renames `attributes`, which the empty migration directory never defined.
 #[tokio::test]
-#[should_panic(expected = "Failed to generate migrations")]
 async fn renaming_from_a_field_the_directory_never_defined_is_refused() {
     let project = Project::new(MigrationFlag::OneWay, Mode::Strict).await;
-    project
-        .run(init(&project, true), ResourcesV2, MockPrompter::default())
-        .await;
+    let error = project
+        .try_run(init(&project, true), ResourcesV2, MockPrompter::default())
+        .await
+        .expect_err("the generation is refused");
+    assert!(
+        matches!(error, MigrationError::InvalidOldFieldName { .. }),
+        "{error:?}"
+    );
 }

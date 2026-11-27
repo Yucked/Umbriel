@@ -194,7 +194,6 @@ async fn rolling_back_till_a_migration() {
 
 /// A migration rolled back already is no longer applied, so rolling back till it again fails.
 #[tokio::test]
-#[should_panic(expected = "Rollback Failed")]
 async fn rolling_back_till_a_rolled_back_migration_fails() {
     let project = applied(Mode::Strict).await;
     let newest = project.filename_at(12);
@@ -202,20 +201,30 @@ async fn rolling_back_till_a_rolled_back_migration_fails() {
         .run(till(newest.clone(), false), Resources, allow_empty())
         .await;
     assert_at(&project, 12, 11).await;
-    project
-        .run(till(newest, false), Resources, allow_empty())
-        .await;
+    let error = project
+        .try_run(till(newest, false), Resources, allow_empty())
+        .await
+        .expect_err("refused");
+    assert!(
+        matches!(error, MigrationError::MigrationDoesNotExist { .. }),
+        "{error:?}"
+    );
+    assert_at(&project, 12, 11).await;
 }
 
 #[tokio::test]
-#[should_panic]
 async fn rolling_back_till_a_migration_that_does_not_exist_fails() {
     let project = applied(Mode::Strict).await;
     let missing = MigrationFilename::try_from(
         "20231220050955_this_migration_does_not_exist.up.surql".to_owned(),
     )
     .expect("a migration file name");
-    project
-        .run(till(missing, false), Resources, allow_empty())
-        .await;
+    let error = project
+        .try_run(till(missing, false), Resources, allow_empty())
+        .await
+        .expect_err("refused");
+    assert!(
+        matches!(error, MigrationError::MigrationDoesNotExist { .. }),
+        "{error:?}"
+    );
 }

@@ -355,7 +355,8 @@ async fn a_removal_that_times_out_still_removes_the_rest() {
 mod the_cli_needs_a_comparison_namespace {
     use super::*;
 
-    async fn run(command: &[&str]) {
+    /// Runs `command` and asserts it is refused for the missing `--comparison-ns`.
+    async fn refused(command: &[&str]) {
         let temp = tempfile::tempdir().expect("a temporary directory");
         let dir = temp.path().join("migrations");
         let dir = dir.to_str().expect("a UTF-8 path");
@@ -365,24 +366,33 @@ mod the_cli_needs_a_comparison_namespace {
                 .chain(command.iter().copied()),
         )
         .expect("the arguments parse");
-        cli.run_test(Some(Resources), prompter()).await;
+        let error = cli
+            .run_fn(Resources, prompter())
+            .await
+            .expect_err("the command is refused");
+        assert!(
+            matches!(
+                error,
+                MigrationError::MissingArgument {
+                    argument: "--comparison-ns"
+                }
+            ),
+            "{error:?}"
+        );
     }
 
     #[tokio::test]
-    #[should_panic(expected = "--comparison-ns")]
     async fn for_init() {
-        run(&["init", "--name", "init"]).await;
+        refused(&["init", "--name", "init"]).await;
     }
 
     #[tokio::test]
-    #[should_panic(expected = "--comparison-ns")]
     async fn for_generate() {
-        run(&["generate", "--name", "next"]).await;
+        refused(&["generate", "--name", "next"]).await;
     }
 
     #[tokio::test]
-    #[should_panic(expected = "--comparison-ns")]
     async fn for_reset() {
-        run(&["reset", "--name", "init"]).await;
+        refused(&["reset", "--name", "init"]).await;
     }
 }

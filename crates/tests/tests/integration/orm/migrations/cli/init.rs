@@ -126,23 +126,23 @@ async fn init_with_run_applies_the_first_migration() {
 }
 
 #[tokio::test]
-#[should_panic(
-    expected = "Migrations already initialized. Run 'cargo run -- reset' to reset migration. \
-                You can also specify the '-r' or '--reversible' argument to set as reversible. \
-                Or delete the migrations directory and run 'cargo run -- init' again."
-)]
 async fn a_second_init_is_refused() {
     let project = Project::new(MigrationFlag::OneWay, Mode::Strict).await;
     project
         .run(init(false, false), Resources, allow_empty())
         .await;
-    project
-        .run(
+    let error = project
+        .try_run(
             Init::new("another name".into(), false, false),
             Resources,
             allow_empty(),
         )
-        .await;
+        .await
+        .expect_err("refused");
+    assert!(
+        matches!(error, MigrationError::AlreadyInitialized),
+        "{error:?}"
+    );
 }
 
 const BUCKET: &str = "DEFINE BUCKET avatars BACKEND 'memory';";

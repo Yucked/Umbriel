@@ -62,8 +62,10 @@ async fn up_connects_as_a_database_user_and_applies_the_migrations() {
         "--pass",
         "example-password",
     ]);
-    up.run_test(None::<Resources>, allow_empty()).await;
-    assert_eq!(applied(up.db()).await.len(), 1);
+    up.run_fn(Resources, allow_empty())
+        .await
+        .expect("up applies the migration");
+    assert_eq!(applied(up.db().expect("connected")).await.len(), 1);
     project
         .assert_state(&["test_migration_1"], &["test_migration_1"])
         .await;
