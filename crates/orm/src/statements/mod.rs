@@ -7,6 +7,7 @@ pub(crate) trait Statement {
     fn render_body(&self, out: &mut Renderer);
 }
 
+pub(crate) mod access;
 pub(crate) mod alter;
 pub(crate) mod any;
 pub(crate) mod break_;
@@ -37,6 +38,7 @@ pub(crate) mod index_hint;
 pub(crate) mod info;
 pub(crate) mod info_result;
 pub(crate) mod insert;
+pub(crate) mod kill;
 pub(crate) mod let_;
 pub(crate) mod live_select;
 pub(crate) mod rebuild;
@@ -97,6 +99,20 @@ pub(crate) use impl_statement;
 /// expressions verbatim and evaluates them later without the defining query's parameters, so
 /// every value is written inline.
 macro_rules! impl_definition {
+    ([$($generics:tt)*] $statement:ty) => {
+        impl<$($generics)*> $crate::Render for $statement {
+            fn render(&self, out: &mut $crate::Renderer) {
+                out.push_inlined(&$crate::statements::StatementBody(self));
+                out.push_str(";");
+            }
+        }
+
+        impl<$($generics)*> $crate::Queryable for $statement {
+            fn into_fragment(self) -> $crate::Fragment {
+                $crate::Fragment::new(self)
+            }
+        }
+    };
     ($statement:ty) => {
         impl $crate::Render for $statement {
             fn render(&self, out: &mut $crate::Renderer) {
@@ -160,8 +176,8 @@ impl DefineOptions {
 /// Adds `overwrite` and `if_not_exists` to a `DEFINE` statement holding a `DefineOptions` in its
 /// `options` field. Used alone for the kinds SurrealDB stores no comment for.
 macro_rules! impl_define_kind {
-    ($statement:ty) => {
-        impl $statement {
+    ([$($generics:tt)*] $statement:ty) => {
+        impl<$($generics)*> $statement {
             /// `OVERWRITE`: replaces the definition if the resource already exists. Replaces an
             /// earlier [`if_not_exists`](Self::if_not_exists).
             pub fn overwrite(mut self) -> Self {
@@ -177,22 +193,28 @@ macro_rules! impl_define_kind {
             }
         }
     };
+    ($statement:ty) => {
+        $crate::statements::impl_define_kind!([] $statement);
+    };
 }
 pub(crate) use impl_define_kind;
 
 /// Adds `overwrite`, `if_not_exists` and `comment` to a `DEFINE` statement holding a
 /// `DefineOptions` in its `options` field.
 macro_rules! impl_define_options {
-    ($statement:ty) => {
-        $crate::statements::impl_define_kind!($statement);
+    ([$($generics:tt)*] $statement:ty) => {
+        $crate::statements::impl_define_kind!([$($generics)*] $statement);
 
-        impl $statement {
+        impl<$($generics)*> $statement {
             /// `COMMENT`: a description stored with the definition and shown by `INFO`.
             pub fn comment(mut self, comment: impl Into<String>) -> Self {
                 self.options.comment = Some(comment.into());
                 self
             }
         }
+    };
+    ($statement:ty) => {
+        $crate::statements::impl_define_options!([] $statement);
     };
 }
 pub(crate) use impl_define_options;
@@ -206,12 +228,14 @@ impl<S: Statement + ?Sized> Render for StatementBody<'_, S> {
     }
 }
 
+pub use access::{AccessGrant, AccessInit, AccessStatement, BearerKey, GrantSubject, access};
 pub use alter::{
     AlterAnalyzerStatement, AlterApiStatement, AlterBucketStatement, AlterEventStatement,
     AlterFieldStatement, AlterFunctionStatement, AlterIndexStatement, AlterModuleStatement,
-    AlterParamStatement, AlterSequenceStatement, AlterTableStatement, alter_analyzer, alter_api,
-    alter_bucket, alter_event, alter_field, alter_function, alter_index, alter_module, alter_param,
-    alter_sequence, alter_table,
+    AlterParamStatement, AlterSequenceStatement, AlterTableStatement, AlterUserInit,
+    AlterUserStatement, alter_analyzer, alter_api, alter_bucket, alter_event, alter_field,
+    alter_function, alter_index, alter_module, alter_param, alter_sequence, alter_table,
+    alter_user,
 };
 pub use any::{
     AnyTarget, CreateAnyStatement, InsertAnyStatement, Models, WritableModels, create_any,
@@ -222,8 +246,8 @@ pub use continue_::{ContinueStatement, continue_};
 pub use create::{CreateStatement, CreateTarget, CreateTargets, create, create_only};
 pub use data::Unsettables;
 pub use define_access::{
-    AccessExpression, DefineAccessStatement, JwtAccess, RecordAccess, define_access, jwt_access,
-    record_access,
+    AccessExpression, BearerAccess, DefineAccessInit, DefineAccessStatement, Expiry, JwtAccess,
+    RecordAccess, bearer_access, define_access, jwt_access, record_access,
 };
 pub use define_analyzer::{
     AnalyzerFilter, DefineAnalyzerStatement, SegmentLanguage, SnowballLanguage, Tokenizer,
@@ -253,7 +277,9 @@ pub use define_namespace::{DefineNamespaceStatement, define_namespace};
 pub use define_param::{DefineParamStatement, define_param};
 pub use define_sequence::{DefineSequenceStatement, define_sequence};
 pub use define_table::{DefineTableStatement, TableRelation, define_table, table_relation};
-pub use define_user::{DefineUserStatement, UserRole, define_user};
+pub use define_user::{
+    DefineUserInit, DefineUserStatement, Passhash, Password, UserCredential, UserRole, define_user,
+};
 pub use delete::{DeleteStatement, delete, delete_edges, delete_only};
 pub use for_loop::{ForLoopStatement, for_};
 pub use for_permission::{ForPermission, Permissions, for_permission};
@@ -264,19 +290,20 @@ pub use info_result::{
     Statements, Structures, TableInfo,
 };
 pub use insert::{InsertStatement, Insertables, input_of, insert, insert_relation};
+pub use kill::{KillId, KillStatement, kill};
 pub use let_::{LetStatement, let_};
-pub use live_select::{LiveSelectStatement, live};
+pub use live_select::{LiveEvent, LiveSelectStatement, LiveStream, live};
 pub use rebuild::{RebuildIndexStatement, rebuild_index};
 pub use relate::{RelateOrUpdateStatement, RelateStatement, relate, relate_only};
 pub use remove::{
-    RemoveAccessStatement, RemoveAnalyzerStatement, RemoveApiStatement, RemoveBucketStatement,
-    RemoveConfigStatement, RemoveDatabaseStatement, RemoveEventStatement, RemoveFieldStatement,
-    RemoveFunctionStatement, RemoveIndexStatement, RemoveModuleStatement, RemoveNamespaceStatement,
-    RemoveParamStatement, RemoveSequenceStatement, RemoveTableStatement, RemoveUserStatement,
-    UserPermissionScope, remove_access, remove_analyzer, remove_api, remove_bucket,
-    remove_config_api, remove_config_default, remove_config_graphql, remove_database, remove_event,
-    remove_field, remove_function, remove_index, remove_module, remove_namespace, remove_param,
-    remove_sequence, remove_table, remove_user,
+    RemoveAccessInit, RemoveAccessStatement, RemoveAnalyzerStatement, RemoveApiStatement,
+    RemoveBucketStatement, RemoveConfigStatement, RemoveDatabaseStatement, RemoveEventStatement,
+    RemoveFieldStatement, RemoveFunctionStatement, RemoveIndexStatement, RemoveModuleStatement,
+    RemoveNamespaceStatement, RemoveParamStatement, RemoveSequenceStatement, RemoveTableStatement,
+    RemoveUserStatement, RemoveUserStatementInit, remove_access, remove_analyzer, remove_api,
+    remove_bucket, remove_config_api, remove_config_default, remove_config_graphql,
+    remove_database, remove_event, remove_field, remove_function, remove_index, remove_module,
+    remove_namespace, remove_param, remove_sequence, remove_table, remove_user,
 };
 pub use return_::{ReturnStatement, return_};
 pub use returning::{
