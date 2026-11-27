@@ -1,15 +1,16 @@
+use std::path::PathBuf;
+
 use crate::{Field, Render, Table};
 use thiserror::Error;
 
 use crate::migrations::{MigrationFilename, ResourceKey};
 
 /// Errors of generating, applying, listing and rolling back migrations.
-#[allow(clippy::result_large_err)]
 #[derive(Error, Debug)]
 pub enum MigrationError {
     /// A migration file's content no longer matches the checksum recorded when it was applied.
     #[error(
-        "Checksum mismaatch in {migration_name}. Expected checksum: {expected_checksum}. Actual checksum: {actual_checksum}"
+        "Checksum mismatch in {migration_name}. Expected checksum: {expected_checksum}. Actual checksum: {actual_checksum}"
     )]
     ChecksumMismatch {
         /// The migration's file name.
@@ -26,10 +27,6 @@ pub enum MigrationError {
         /// The migration's file name.
         migration_name: String,
     },
-
-    /// A migration already exists.
-    #[error("Migration already exists")]
-    MigrationAlreadyExists,
 
     /// The history holds no migrations to roll back.
     #[error("No migrations have yet been registered in the database")]
@@ -67,31 +64,11 @@ pub enum MigrationError {
         migration_db_name: String,
     },
 
-    /// A migration was not recorded in the history.
-    #[error("Migration not registered")]
-    MigrationNotRegistered,
-
-    /// A migration was not removed from the history.
-    #[error("Migration not unregistered")]
-    MigrationNotUnregistered,
-
-    /// A migration direction is not `up` or `down`.
-    #[error("Direction does not exist")]
-    DirectionDoesNotExist,
-
-    /// A migration has no name.
-    #[error("Migration name does not exist")]
-    MigrationNameDoesNotExist,
-
     /// A file name does not follow `<timestamp>_<name>.[up.|down.]surql`.
     #[error(
         "Invalid migration name. {0}. Make sure it's in the format - <timestamp>_<migration_name>.<up|down|>.surql if two way or <timestamp>_<migration_name.surql if one way"
     )]
     InvalidMigrationName(String),
-
-    /// The migration path was not found.
-    #[error("Migration path not found")]
-    MigrationPathNotFound,
 
     /// A migration file could not be read.
     #[error("Migration file not found in path: {path} with error: {error}")]
@@ -114,39 +91,15 @@ pub enum MigrationError {
     #[error("Invalid migration file name for mode: {0}")]
     InvalidMigrationFileNameForMode(String),
 
-    /// There are no migration directories.
-    #[error("No migration directories")]
-    MigrationDirectoriesNotExist,
-
-    /// The migration directory is invalid.
-    #[error("Invalid migration directory: {0}")]
-    InvalidMigrationDirectory(String),
-
     /// The migration directory does not exist.
     #[error("The migration directory ({0}) provided does not exist. You may need to explicitly provide a migration directory path argument. \
         If you are using the default migration directory, make sure you are running the command from the root of your project.
     Check --help for more information")]
     MigrationDirectoryDoesNotExist(String),
 
-    /// The migration directory is empty.
-    #[error("Invalid migration directory. It must not be empty")]
-    MigrationDirectoryEmpty,
-
-    /// A migration has no up queries.
-    #[error("Invalid migration state. Migration up queries empty")]
-    MigrationUpQueriesEmpty,
-
-    /// A migration has no down queries.
-    #[error("Invalid migration state. Migration down queries empty")]
-    MigrationDownQueriesEmpty,
-
     /// The project directory (`CARGO_MANIFEST_DIR`) is not set.
     #[error("Invalid path")]
     PathDoesNotExist,
-
-    /// A migration file could not be read.
-    #[error("Problem reading migration file. Error: {0}")]
-    ProblemReadingMigrationFile(String),
 
     /// A field's `old_name` names no field of the migrations' schema, which holds neither the old
     /// nor the new field. (Once the rename is applied, the new field exists and `old_name` is
@@ -167,22 +120,6 @@ pub enum MigrationError {
         old_name: Box<Field>,
         /// The fields that can be renamed.
         renamables: String,
-    },
-
-    /// A renamed field is not defined by the codebase.
-    #[error(
-        "The field - {field_expected} - on table - {table} - does not exist. \
-        It must have already been renamed previously or never existed before or wrongly spelt. \
-         Also, make sure you are using the correct case for the field name. It should be one of these: {valid_fields}",
-        field_expected = .field_expected.to_debug_sql()
-    )]
-    FieldNameDoesNotExist {
-        /// The field expected.
-        field_expected: Box<Field>,
-        /// Its table.
-        table: Table,
-        /// The table's fields.
-        valid_fields: String,
     },
 
     /// A field is both renamed and the old name of another field.
@@ -214,19 +151,6 @@ pub enum MigrationError {
         table: Table,
         /// The fields that can be renamed.
         renamables: String,
-    },
-
-    /// A field's `old_name` is its own name.
-    #[error(
-        "You are trying to use the same old field name - {field} - for new field name - {field}. \
-        This is likely not intentional. Use a different name for the new field",
-        field = .field.to_debug_sql()
-    )]
-    FieldNameReused {
-        /// The field.
-        field: Field,
-        /// Its table.
-        table: Table,
     },
 
     /// A database defines a kind of resource migrations do not manage.
@@ -366,17 +290,6 @@ pub enum MigrationError {
         local_dir_migration_count: usize,
     },
 
-    /// Neither direction could be detected.
-    #[error(
-        "Problem detecting migration mode. One way error: {one_way_error}. Two way error: {two_way_error}"
-    )]
-    ProblemDetectingMigrationMode {
-        /// Why one-way detection failed.
-        one_way_error: String,
-        /// Why two-way detection failed.
-        two_way_error: String,
-    },
-
     /// The migration directory holds both one-way and two-way files, or neither.
     #[error("Ambiguous migration direction. Both or neither one-way and two-way file types found in migration directory. Use one or the other.
 Up only should not be sufficed with 'up.surql' or 'down.surql' but up and down migrations can be.
@@ -388,31 +301,21 @@ There are {one_way_filecount} up only files and {two_way_filecount} up and down 
         two_way_filecount: usize,
     },
 
-    /// Migration files are not applied yet.
-    #[error(
-        "There {migration_count} unapplied migration files. Apply the Unapplied migration files to the database instance \
-        using the command 'cargo run -- up' to apply it/them or delete all unapplied migrations using 'cargo run -- prune'."
-    )]
-    UnappliedMigrationExists {
-        /// How many.
-        migration_count: usize,
-    },
-
-    /// The direction of the migrations could not be detected.
-    #[error("Invalid migration flag detection: {0}")]
-    MigrationFlagDetectionError(String),
-
-    /// Up and down files do not pair up.
-    #[error("Invalid migration file count: {0}")]
-    InvalidUpsVsDownsMigrationFileCount(String),
-
     /// A query failed.
     #[error(transparent)]
     ProblemWithQuery(#[from] crate::Error),
 
     /// A file system operation failed.
-    #[error("Invalid migration file name: {0}")]
-    IoError(String),
+    #[error("{action} `{}` failed", .path.display())]
+    Io {
+        /// What was being done, e.g. `reading the migration file`.
+        action: &'static str,
+        /// The file or directory.
+        path: PathBuf,
+        /// The cause.
+        #[source]
+        source: std::io::Error,
+    },
 
     /// A prompt failed.
     #[error(transparent)]
