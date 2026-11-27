@@ -164,6 +164,147 @@ pub(crate) async fn execute_with_stats(
     Ok(response)
 }
 
+/// An item of a [`RowStream`]: a row of a statement, or the end of a statement.
+///
+/// A [`Row`](Self::Row) is provisional until its statement's [`End`](Self::End): a statement that
+/// fails retracts every row it emitted. Inside `BEGIN … COMMIT`, or on an SDK
+/// [`Transaction`], the rows of every statement stay provisional until the transaction commits:
+/// the `End` of the `COMMIT`, or [`Transaction::commit`] returning `Ok`.
+///
+/// Deliberately exhaustive, as the SDK's `StreamItem` is: a consumer matches every item.
+#[derive(Debug)]
+pub enum StreamEvent<T> {
+    /// One row of a statement's results. A row that doesn't decode into `T` is
+    /// [`Error::Conversion`], and the stream goes on: the failure belongs to that row.
+    Row {
+        /// The statement that produced it, counting from 0.
+        statement: usize,
+        /// The decoded row.
+        value: Result<T>,
+    },
+    /// A statement is finished; no later item belongs to it.
+    End {
+        /// The statement, counting from 0.
+        statement: usize,
+        /// How long the statement took, when the engine reports it.
+        execution_time: Option<std::time::Duration>,
+        /// Whether it succeeded, the failure classified as statement errors are. Whether the
+        /// statements after a failed one still run is the database's rule: outside a transaction
+        /// they do; inside one they end cancelled.
+        result: Result<()>,
+    },
+}
+
+/// A query's results as a stream, from [`stream`](crate::statements::SelectStatement::stream) or
+/// [`Query::stream`].
+///
+/// The stream's own `Err` is a failure that belongs to no statement, such as the transport; the
+/// stream ends after it. A statement's failure is its [`StreamEvent::End`], and a row that
+/// doesn't decode is its [`StreamEvent::Row`].
+///
+/// Embedded and gRPC engines stream rows as the statements produce them. WebSocket and HTTP send
+/// each result once the query has finished, which the SDK then streams.
+///
+/// Dropping the stream is never a rollback. On an engine that streams incrementally it asks the
+/// execution to stop, which it notices only when it next emits a row: a phase that emits nothing
+/// runs to its end and commits its transaction. Over WebSocket and HTTP the query has already
+/// finished. Undo work explicitly, with `CANCEL` or [`Transaction::cancel`].
+#[must_use = "streams do nothing unless you poll them"]
+pub struct RowStream<T> {
+    items: surrealdb::method::ItemStream,
+    decode: fn(Value) -> Result<T>,
+    ended: bool,
+}
+
+impl<T> futures::Stream for RowStream<T> {
+    type Item = Result<StreamEvent<T>>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        use std::task::Poll;
+
+        use futures::StreamExt as _;
+        use surrealdb::method::StreamItem;
+
+        let this = self.get_mut();
+        if this.ended {
+            return Poll::Ready(None);
+        }
+        let item = match this.items.poll_next_unpin(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(None) => {
+                this.ended = true;
+                return Poll::Ready(None);
+            }
+            Poll::Ready(Some(item)) => item,
+        };
+        Poll::Ready(Some(match item {
+            Ok(StreamItem::Row { statement, value }) => Ok(StreamEvent::Row {
+                statement,
+                value: (this.decode)(value),
+            }),
+            Ok(StreamItem::StatementEnd {
+                statement,
+                stats,
+                result,
+            }) => Ok(StreamEvent::End {
+                statement,
+                execution_time: stats.execution_time,
+                result: result.map_err(|source| {
+                    classify(
+                        source,
+                        Some(StatementContext {
+                            index: statement,
+                            related: Vec::new(),
+                        }),
+                    )
+                }),
+            }),
+            Err(error) => {
+                this.ended = true;
+                Err(Error::from(error))
+            }
+        }))
+    }
+}
+
+// The SDK's `ItemStream` is `Unpin`, and the rest is plain data.
+impl<T> Unpin for RowStream<T> {}
+
+/// Decodes a row or notification into `T`.
+pub(crate) fn decode<T: SurrealValue>(value: Value) -> Result<T> {
+    T::from_value(value).map_err(Error::Conversion)
+}
+
+/// Streams `query`'s results on `db`, decoding each row with `decode`.
+pub(crate) fn stream_query<T>(
+    db: &impl Executor,
+    query: Query,
+    decode: fn(Value) -> Result<T>,
+) -> Result<RowStream<T>> {
+    let (sql, vars) = query.into_parts();
+    let items = db.query(sql).bind(vars).stream_items()?;
+    Ok(RowStream {
+        items,
+        decode,
+        ended: false,
+    })
+}
+
+impl Query {
+    /// Streams the query's results: each statement's rows as [`Value`]s, then the statement's
+    /// end. See [`RowStream`] for what the items guarantee.
+    ///
+    /// # Errors
+    ///
+    /// The SDK's refusal to start the query, such as a closed connection.
+    pub fn stream(self, db: &impl Executor) -> Result<RowStream<Value>> {
+        stream_query(db, self, Ok)
+    }
+}
+
 /// Fails with the response's chosen statement failure, if it holds one.
 fn check(results: &mut IndexedResults) -> Result<()> {
     // Counted first: `take_errors` removes the failed statements from the results.
