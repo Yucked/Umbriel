@@ -24,7 +24,9 @@ use crate::DbResources;
 use clap::{ArgAction, Parser};
 
 pub use self::config::{COMPARISON_PASSWORD_VARIABLE, DatabaseConnection, Experimental};
-use crate::migrations::{Comparison, MigrationConfig, MockPrompter, Mode, Prompter, RealPrompter};
+use crate::migrations::{
+    Comparison, MigrationConfig, MigrationResult, Mode, Prompter, RealPrompter,
+};
 
 /// Umbriel CLI
 #[derive(Parser, Debug, Clone)]
@@ -73,11 +75,12 @@ impl Migrator {
 
     /// The connected database.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// If the connection has not been set up.
-    pub fn db(&self) -> &Surreal<Any> {
-        self.db_connection.db().expect("Failed to get db")
+    /// [`MigrationError::NotConnected`](crate::migrations::MigrationError::NotConnected) before
+    /// [`setup_db`](Self::setup_db).
+    pub fn db(&self) -> MigrationResult<&Surreal<Any>> {
+        self.db_connection.db()
     }
 
     /// Sets the subcommand to run.
@@ -105,100 +108,45 @@ impl Migrator {
     ///
     /// impl DbResources for Resources {}
     ///
-    /// // A migrator binary awaits this in its `main`, on the runtime it uses.
-    /// async fn migrate() {
-    ///     Migrator::run(Resources).await;
+    /// // A migrator binary runs this in its `main`, on the runtime it uses, and decides how a
+    /// // failure ends the process.
+    /// async fn migrate() -> umbriel::migrations::MigrationResult<()> {
+    ///     Migrator::run(Resources).await
     /// }
     /// ```
-    pub async fn run(codebase_resources: impl DbResources) {
+    ///
+    /// # Errors
+    ///
+    /// The subcommand's failure, as [`run_fn`](Self::run_fn).
+    pub async fn run(codebase_resources: impl DbResources) -> MigrationResult<()> {
         let mut cli = Self::parse();
         cli.setup_logging();
-        cli.run_fn(codebase_resources, RealPrompter).await;
-    }
-
-    /// Runs the command line from the process arguments, answering prompts with a
-    /// [`MockPrompter`] that allows empty migrations and renames replaced fields.
-    pub async fn run_test_main(codebase_resources: impl DbResources) {
-        let mut cli = Self::parse();
-        cli.setup_logging();
-        cli.run_fn(codebase_resources, MockPrompter::default())
-            .await;
+        cli.run_fn(codebase_resources, RealPrompter).await
     }
 
     /// Runs the configured subcommand, `up` when none is set, answering prompts with `prompter`.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// If `init`, `generate` or `reset` runs without `codebase_resources`, or the subcommand
-    /// fails.
-    pub async fn run_test(
+    /// The subcommand's failure: connecting, reading or writing the migration directory,
+    /// generating or applying migrations.
+    pub async fn run_fn(
         &mut self,
-        codebase_resources: Option<impl DbResources>,
-        prompter: MockPrompter,
-    ) {
+        codebase_resources: impl DbResources,
+        prompter: impl Prompter,
+    ) -> MigrationResult<()> {
         match self.subcmd.clone() {
-            None => {
-                Up::default().run(self).await;
+            None => Up::default().run(self).await,
+            Some(SubCommand::Init(init)) => init.run(self, codebase_resources, prompter).await,
+            Some(SubCommand::Generate(generate)) => {
+                generate.run(self, codebase_resources, prompter).await
             }
-            Some(subcmd) => match subcmd {
-                SubCommand::Init(init) => {
-                    init.run(
-                        self,
-                        codebase_resources.expect("resources must be provided for init command"),
-                        prompter,
-                    )
-                    .await
-                }
-                SubCommand::Generate(generate) => {
-                    generate
-                        .run(
-                            self,
-                            codebase_resources
-                                .expect("resources must be provided for generate command"),
-                            prompter,
-                        )
-                        .await
-                }
-                SubCommand::Up(up) => up.run(self).await,
-                SubCommand::Down(down) => down.run(self).await,
-                SubCommand::Prune(prune) => prune.run(self).await,
-                SubCommand::List(prune) => prune.run(self).await,
-                SubCommand::Reset(reset) => {
-                    reset
-                        .run(
-                            self,
-                            codebase_resources
-                                .expect("resources must be provided for reset command"),
-                            prompter,
-                        )
-                        .await
-                }
-            },
-        };
-    }
-
-    /// Runs the configured subcommand, `up` when none is set.
-    ///
-    /// # Panics
-    ///
-    /// If the subcommand fails.
-    pub async fn run_fn(&mut self, codebase_resources: impl DbResources, prompter: impl Prompter) {
-        match self.subcmd.clone() {
-            None => {
-                Up::default().run(self).await;
-            }
-            Some(subcmd) => match subcmd {
-                SubCommand::Init(init) => init.run(self, codebase_resources, prompter).await,
-                SubCommand::Generate(generate) => {
-                    generate.run(self, codebase_resources, prompter).await
-                }
-                SubCommand::Up(up) => up.run(self).await,
-                SubCommand::Down(down) => down.run(self).await,
-                SubCommand::Prune(prune) => prune.run(self).await,
-                SubCommand::List(prune) => prune.run(self).await,
-                SubCommand::Reset(reset) => reset.run(self, codebase_resources, prompter).await,
-            },
-        };
+            Some(SubCommand::Up(up)) => up.run(self).await,
+            Some(SubCommand::Down(down)) => down.run(self).await,
+            Some(SubCommand::Prune(prune)) => prune.run(self).await,
+            Some(SubCommand::List(list)) => list.run(self).await,
+            Some(SubCommand::Reset(reset)) => reset.run(self, codebase_resources, prompter).await,
+        }
     }
 
     pub(crate) fn setup_logging(&self) {
@@ -220,19 +168,24 @@ impl Migrator {
     }
 
     /// Connects to the database unless already connected.
-    pub async fn setup_db(&mut self) {
+    ///
+    /// # Errors
+    ///
+    /// As [`DatabaseConnection::setup`].
+    pub async fn setup_db(&mut self) -> MigrationResult<()> {
         if self.db_connection.db_connection.is_none() {
-            self.db_connection.setup().await;
+            self.db_connection.setup().await?;
         }
+        Ok(())
     }
 
     /// The comparison `init`, `generate` and `reset` generate migrations in (see
     /// [`DatabaseConnection::comparison`]).
     ///
-    /// # Panics
+    /// # Errors
     ///
     /// As [`DatabaseConnection::comparison`].
-    pub async fn comparison(&mut self) -> Comparison<Any> {
+    pub async fn comparison(&mut self) -> MigrationResult<Comparison<Any>> {
         self.db_connection.comparison().await
     }
 }
