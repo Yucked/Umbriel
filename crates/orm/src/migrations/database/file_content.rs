@@ -21,8 +21,11 @@ impl FileContent {
     /// Reads the file at `file_path`.
     pub fn from_file(file_path: impl Into<PathBuf>) -> MigrationResult<Self> {
         let file_path = file_path.into();
-        let content = fs::read_to_string(file_path)
-            .map_err(|e| MigrationError::IoError(format!("Error: {e}")))?;
+        let content = fs::read_to_string(&file_path).map_err(|source| MigrationError::Io {
+            action: "reading the migration file",
+            path: file_path,
+            source,
+        })?;
         Ok(Self(content))
     }
 

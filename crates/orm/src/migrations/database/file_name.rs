@@ -254,25 +254,24 @@ impl MigrationFilename {
         let migration_dir = file_namager.resolve_migration_directory(true)?;
         let file_path = migration_dir.join(self.to_string());
 
-        if let Err(err) = fs::create_dir_all(&migration_dir) {
-            return Err(MigrationError::IoError(format!(
-                "Failed to create migrations directory: {err}"
-            )));
-        }
-
-        let mut file = File::create(&file_path).map_err(|e| {
-            MigrationError::IoError(format!(
-                "Failed to create file path: {}. Error: {e}",
-                file_path.to_string_lossy(),
-            ))
+        fs::create_dir_all(&migration_dir).map_err(|source| MigrationError::Io {
+            action: "creating the migration directory",
+            path: migration_dir.clone(),
+            source,
         })?;
 
-        file.write_all(query.as_bytes()).map_err(|e| {
-            MigrationError::IoError(format!(
-                "Failed to create file. Filename - {}: {e}",
-                file_path.to_string_lossy(),
-            ))
+        let mut file = File::create(&file_path).map_err(|source| MigrationError::Io {
+            action: "creating the migration file",
+            path: file_path.clone(),
+            source,
         })?;
+
+        file.write_all(query.as_bytes())
+            .map_err(|source| MigrationError::Io {
+                action: "writing the migration file",
+                path: file_path.clone(),
+                source,
+            })?;
 
         Ok(())
     }
