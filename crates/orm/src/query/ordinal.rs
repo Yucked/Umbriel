@@ -1,6 +1,6 @@
 use surrealdb::types::{self, SurrealValue, Value};
 
-use super::Field;
+use crate::Field;
 use crate::{Render, Renderer, ValueLike};
 
 /// A value that can be ordered: a number, datetime or geometry, or a field holding one.
