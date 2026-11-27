@@ -217,8 +217,8 @@ impl DbResources for Resources {
 }
 
 #[tokio::main]
-async fn main() {
-    Migrator::run(Resources).await;
+async fn main() -> umbriel::migrations::MigrationResult<()> {
+    Migrator::run(Resources).await
 }
 ```
 
