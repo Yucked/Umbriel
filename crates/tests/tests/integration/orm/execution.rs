@@ -128,7 +128,7 @@ mod shared_client {
             .expect("a statement");
         assert_eq!(via_stats.expect("an id"), own, "run_with_stats");
 
-        let via_function: Option<Value> = session::id!().run(db).await.expect("ran");
+        let via_function: Option<Value> = session::id().run(db).await.expect("ran");
         assert_eq!(via_function.unwrap_or(Value::None), own, "Function::run");
     }
 

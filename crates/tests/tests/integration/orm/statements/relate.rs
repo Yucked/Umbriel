@@ -67,7 +67,7 @@ fn relates_records_subqueries_and_options() {
             CompanyLikeUser::schema()
                 .time()
                 .connected
-                .equal_to(Field::from_expr(umbriel::functions::time::now!())),
+                .equal_to(Field::from_expr(umbriel::functions::time::now())),
         ),
         "RELATE ONLY company:acme->like->user:alice SET time.connected = time::now();",
     );
@@ -379,7 +379,7 @@ async fn relating_creates_edges_between_every_pair() {
         CompanyLikeUser::schema()
             .time()
             .connected
-            .equal_to(Field::from_expr(umbriel::functions::time::now!())),
+            .equal_to(Field::from_expr(umbriel::functions::time::now())),
     )
     .execute(&db)
     .await

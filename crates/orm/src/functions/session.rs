@@ -2,7 +2,7 @@
 //!
 //! ```rust
 //! use umbriel::{*, functions::session};
-//! assert_eq!(session::db!().to_debug_sql(), "session::db()");
+//! assert_eq!(session::db().to_debug_sql(), "session::db()");
 //! ```
 
 use crate::kinds;

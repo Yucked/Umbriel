@@ -34,11 +34,11 @@ async fn sets_and_bytes_bind_as_their_kind() {
     assert!(!binds_as(umbriel::ArrayLike::from(vec![1u8, 2]), "bytes").await);
 
     let (db, _guard) = db().await;
-    let length: Option<i64> = bound(&db, &umbriel::functions::bytes::len!(vec![1u8, 2, 3])).await;
+    let length: Option<i64> = bound(&db, &umbriel::functions::bytes::len(vec![1u8, 2, 3])).await;
     assert_eq!(length, Some(3));
     let size: Option<i64> = bound(
         &db,
-        &umbriel::functions::set::len!(BTreeSet::from([1, 2, 2])),
+        &umbriel::functions::set::len(BTreeSet::from([1, 2, 2])),
     )
     .await;
     assert_eq!(size, Some(2));
@@ -46,13 +46,13 @@ async fn sets_and_bytes_bind_as_their_kind() {
 
 #[test]
 fn generated_bindings_are_ordered_through_nested_calls() {
-    let nested = string::len!(string::concat!(Param::new("a"), "x"));
+    let nested = string::len(string::concat!(Param::new("a"), "x"));
     let (sql, vars) = nested.to_query().expect("renders").into_parts();
     assert_eq!(sql, "string::len(string::concat($a, $_p0))");
     assert_eq!(vars.len(), 1);
     assert_eq!(vars.get("_p0"), Some(&Value::String("x".to_owned())));
 
-    let mapped = array::map!(
+    let mapped = array::map(
         vec![1, 2],
         closure(["n"], |[n]| n.multiply(10).add(Field::new("offset")))
     );

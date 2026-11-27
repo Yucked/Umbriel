@@ -3,7 +3,7 @@
 //! ```rust
 //! use umbriel::{*, functions::geo};
 //! let area = Field::new("area");
-//! assert_eq!(geo::area!(area.clone()).to_debug_sql(), "geo::area(area)");
+//! assert_eq!(geo::area(area.clone()).to_debug_sql(), "geo::area(area)");
 //! assert_eq!(GeometryLike::from(area).centroid().to_debug_sql(), "area.centroid()");
 //! ```
 

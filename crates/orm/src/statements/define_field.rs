@@ -271,7 +271,7 @@ impl DefineFieldStatement {
     ///
     /// let statement = define_field(Field::new("email"))
     ///     .on_table(Table::from("user"))
-    ///     .value(string::lowercase!(Param::new("value")));
+    ///     .value(string::lowercase(Param::new("value")));
     /// assert_eq!(
     ///     statement.to_debug_sql(),
     ///     "DEFINE FIELD email ON TABLE user VALUE string::lowercase($value);"

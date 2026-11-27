@@ -76,7 +76,7 @@ async fn tokens(db: &Surreal<Any>, analyzer: &str, text: &str) -> Vec<String> {
         db,
         &format!(
             "RETURN {};",
-            search::analyze!(analyzer, text).to_debug_sql()
+            search::analyze(analyzer, text).to_debug_sql()
         ),
     )
     .await

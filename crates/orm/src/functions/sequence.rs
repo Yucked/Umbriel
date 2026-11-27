@@ -3,7 +3,7 @@
 //! ```rust
 //! use umbriel::{*, functions::sequence};
 //! assert_eq!(
-//!     sequence::nextval!("order_number").to_debug_sql(),
+//!     sequence::nextval("order_number").to_debug_sql(),
 //!     "sequence::nextval('order_number')"
 //! );
 //! ```

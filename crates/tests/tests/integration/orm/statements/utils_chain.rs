@@ -181,9 +181,9 @@ async fn a_block_computes_a_value_from_other_records() {
     let created = create::<WeaponStats>(WeaponStats::table()).set(object_partial!(WeaponStats {
         averageStrength: block! {
             let strengths = select_value(strength).from(weapon);
-            let total = math::sum!(strengths);
-            let count = umbriel::functions::array::len!(strengths);
-            return math::ceil!((((total / count) * (count * total)) / (total + 4)) * 100);
+            let total = math::sum(strengths);
+            let count = umbriel::functions::array::len(strengths);
+            return math::ceil((((total / count) * (count * total)) / (total + 4)) * 100);
         }
     }));
     assert_eq!(

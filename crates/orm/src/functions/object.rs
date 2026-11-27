@@ -3,7 +3,7 @@
 //! ```rust
 //! use umbriel::{*, functions::object};
 //! let settings = Field::new("settings");
-//! assert_eq!(object::keys!(settings.clone()).to_debug_sql(), "object::keys(settings)");
+//! assert_eq!(object::keys(settings.clone()).to_debug_sql(), "object::keys(settings)");
 //! assert_eq!(ObjectLike::from(settings).len().to_debug_sql(), "settings.len()");
 //! ```
 

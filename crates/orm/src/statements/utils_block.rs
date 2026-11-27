@@ -11,7 +11,7 @@ use crate::{Fragment, QueryChain, Queryable, Render, Renderer, ValueLike};
 /// let average_sales = Field::new("average_sales");
 ///
 /// let ref sales = let_("sales").equal_to(select_value(quantity).from(sales));
-/// let ref total = let_("total").equal_to(math::sum!(sales));
+/// let ref total = let_("total").equal_to(math::sum(sales));
 /// let ref count = let_("count").equal_to(count!(sales));
 ///
 /// let returned = return_(bracket(total.divide(count)));

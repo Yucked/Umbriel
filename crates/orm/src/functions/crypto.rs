@@ -2,7 +2,7 @@
 //!
 //! ```rust
 //! use umbriel::{*, functions::crypto};
-//! assert_eq!(crypto::sha256!("text").to_debug_sql(), "crypto::sha256('text')");
+//! assert_eq!(crypto::sha256("text").to_debug_sql(), "crypto::sha256('text')");
 //! ```
 
 use crate::kinds;

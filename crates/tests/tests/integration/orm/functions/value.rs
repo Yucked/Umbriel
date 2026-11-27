@@ -14,13 +14,13 @@ async fn results() {
     holds_all!(
         &db,
         [
-            (value::chain!(2, closure(["n"], |[n]| n.multiply(3))), "6"),
+            (value::chain(2, closure(["n"], |[n]| n.multiply(3))), "6"),
             (
                 value::expect!(5, closure(["n"], |[n]| n.greater_than(1))),
                 "5"
             ),
             (
-                value::patch!(before.clone(), value::diff!(before.clone(), after)),
+                value::patch(before.clone(), value::diff(before.clone(), after)),
                 "{ name: 'Bob' }",
             ),
             (
@@ -31,7 +31,7 @@ async fn results() {
     );
     is_a(
         &db,
-        &value::diff!(before, BTreeMap::<String, &str>::new()),
+        &value::diff(before, BTreeMap::<String, &str>::new()),
         "array",
     )
     .await;
@@ -39,7 +39,7 @@ async fn results() {
 
 #[test]
 fn generated_bindings() {
-    let nested = value::chain!(Param::new("score"), closure(["n"], |[n]| n.add(10)));
+    let nested = value::chain(Param::new("score"), closure(["n"], |[n]| n.add(10)));
     let (sql, vars) = nested.to_query().expect("renders").into_parts();
     assert_eq!(sql, "value::chain($score, |$n| $n + $_p0)");
     assert_eq!(vars.len(), 1);
@@ -69,19 +69,19 @@ async fn methods_run() {
         [
             (
                 ValueLike::from(2).chain(triple()),
-                value::chain!(2, triple())
+                value::chain(2, triple())
             ),
             (
                 ValueLike::from(before()).diff(after()),
-                value::diff!(before(), after())
+                value::diff(before(), after())
             ),
             (
                 ValueLike::from(5).expect(positive(), None::<&str>),
                 value::expect!(5, positive())
             ),
             (
-                ValueLike::from(before()).patch(value::diff!(before(), after())),
-                value::patch!(before(), value::diff!(before(), after())),
+                ValueLike::from(before()).patch(value::diff(before(), after())),
+                value::patch(before(), value::diff(before(), after())),
             ),
         ]
     );

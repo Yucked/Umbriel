@@ -12,7 +12,7 @@ async fn sleep_runs() {
         &db,
         &format!(
             "RETURN {};",
-            sleep::sleep!(Duration::from_millis(1)).to_debug_sql()
+            sleep::sleep(Duration::from_millis(1)).to_debug_sql()
         ),
     )
     .await;

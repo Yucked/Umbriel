@@ -26,7 +26,7 @@ pub struct Closure {
 ///
 /// ```rust
 /// use umbriel::{*, functions::array};
-/// let doubled = array::map!(vec![1, 2], closure(["n"], |[n]| n.multiply(2)));
+/// let doubled = array::map(vec![1, 2], closure(["n"], |[n]| n.multiply(2)));
 /// assert_eq!(doubled.to_debug_sql(), "array::map([1, 2], |$n| $n * 2)");
 /// ```
 pub fn closure<const N: usize, B: Into<ValueLike>>(

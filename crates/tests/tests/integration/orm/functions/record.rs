@@ -10,10 +10,10 @@ async fn results() {
     holds_all!(
         &db,
         [
-            (record::id!(User::id("alice")), "'alice'"),
-            (record::tb!(User::id("alice")), "'user'"),
-            (record::table!(User::id("alice")), "'user'"),
-            (record::exists!(User::id("alice")), "false"),
+            (record::id(User::id("alice")), "'alice'"),
+            (record::tb(User::id("alice")), "'user'"),
+            (record::table(User::id("alice")), "'user'"),
+            (record::exists(User::id("alice")), "false"),
             (RecordIdLike::from(User::id("alice")).id(), "'alice'"),
         ]
     );
@@ -27,16 +27,16 @@ async fn results() {
     holds_all!(
         &db,
         [
-            (record::exists!(User::id("alice")), "true"),
-            (record::is_edge!(User::id("alice")), "false"),
-            (record::is_edge!(Field::raw("follows:x")), "true"),
+            (record::exists(User::id("alice")), "true"),
+            (record::is_edge(User::id("alice")), "false"),
+            (record::is_edge(Field::raw("follows:x")), "true"),
         ]
     );
 }
 
 #[test]
 fn generated_bindings() {
-    let call = record::tb!(Param::new("id"));
+    let call = record::tb(Param::new("id"));
     let (sql, vars) = call.to_query().expect("renders").into_parts();
     assert_eq!(sql, "record::tb($id)");
     assert_eq!(vars.len(), 0);
@@ -58,11 +58,11 @@ async fn methods_run() {
     same_all!(
         &db,
         [
-            (r().exists(), record::exists!(User::id("alice"))),
-            (r().id(), record::id!(User::id("alice"))),
-            (r().is_edge(), record::is_edge!(User::id("alice"))),
-            (r().table(), record::table!(User::id("alice"))),
-            (r().tb(), record::tb!(User::id("alice"))),
+            (r().exists(), record::exists(User::id("alice"))),
+            (r().id(), record::id(User::id("alice"))),
+            (r().is_edge(), record::is_edge(User::id("alice"))),
+            (r().table(), record::table(User::id("alice"))),
+            (r().tb(), record::tb(User::id("alice"))),
         ]
     );
 }

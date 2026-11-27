@@ -14,7 +14,7 @@
 //!     "search::highlight('<b>', '</b>', 1, true)"
 //! );
 //! assert_eq!(
-//!     search::analyze!("english", "Hello world").to_debug_sql(),
+//!     search::analyze("english", "Hello world").to_debug_sql(),
 //!     "search::analyze('english', 'Hello world')"
 //! );
 //! ```

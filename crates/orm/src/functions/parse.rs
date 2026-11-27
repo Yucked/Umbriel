@@ -3,7 +3,7 @@
 //! ```rust
 //! use umbriel::{*, functions::parse};
 //! assert_eq!(
-//!     parse::url::host!("https://example.com").to_debug_sql(),
+//!     parse::url::host("https://example.com").to_debug_sql(),
 //!     "parse::url::host('https://example.com')"
 //! );
 //! ```

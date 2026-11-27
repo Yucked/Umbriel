@@ -73,7 +73,7 @@ async fn constants_render_without_parentheses_and_evaluate() {
     let is_duration: bool = read(&db, "RETURN type::is_duration(duration::MAX);").await;
     assert!(is_duration);
 
-    let rounded = math::round!(math::PI);
+    let rounded = math::round(math::PI);
     assert_eq!(rounded.to_debug_sql(), "math::round(math::PI)");
     holds(&db, &rounded, "3").await;
     holds(&db, &time::year!(time::EPOCH), "1970").await;

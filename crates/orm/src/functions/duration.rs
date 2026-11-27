@@ -3,7 +3,7 @@
 //! ```rust
 //! use umbriel::{*, functions::duration};
 //! let elapsed = Field::new("elapsed");
-//! assert_eq!(duration::days!(elapsed.clone()).to_debug_sql(), "duration::days(elapsed)");
+//! assert_eq!(duration::days(elapsed.clone()).to_debug_sql(), "duration::days(elapsed)");
 //! assert_eq!(DurationLike::from(elapsed).days().to_debug_sql(), "elapsed.days()");
 //! ```
 

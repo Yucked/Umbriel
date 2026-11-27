@@ -12,23 +12,23 @@ async fn results() {
     holds_all!(
         &db,
         [
-            (parse::email::host!("alice@example.com"), "'example.com'"),
-            (parse::email::user!("alice@example.com"), "'alice'"),
-            (parse::url::domain!(URL), "'example.com'"),
-            (parse::url::fragment!(URL), "'fragment'"),
-            (parse::url::host!(URL), "'example.com'"),
-            (parse::url::path!(URL), "'/topics'"),
-            (parse::url::port!(URL), "443"),
-            (parse::url::query!(URL), "'arg=value'"),
-            (parse::url::scheme!(URL), "'https'"),
-            (parse::url::fragment!("https://example.com"), "NONE"),
+            (parse::email::host("alice@example.com"), "'example.com'"),
+            (parse::email::user("alice@example.com"), "'alice'"),
+            (parse::url::domain(URL), "'example.com'"),
+            (parse::url::fragment(URL), "'fragment'"),
+            (parse::url::host(URL), "'example.com'"),
+            (parse::url::path(URL), "'/topics'"),
+            (parse::url::port(URL), "443"),
+            (parse::url::query(URL), "'arg=value'"),
+            (parse::url::scheme(URL), "'https'"),
+            (parse::url::fragment("https://example.com"), "NONE"),
         ]
     );
 }
 
 #[test]
 fn generated_bindings() {
-    let call = parse::url::host!(Param::new("link"));
+    let call = parse::url::host(Param::new("link"));
     let (sql, vars) = call.to_query().expect("renders").into_parts();
     assert_eq!(sql, "parse::url::host($link)");
     assert_eq!(vars.len(), 0);

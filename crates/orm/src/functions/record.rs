@@ -3,7 +3,7 @@
 //! ```rust
 //! use umbriel::{*, functions::record};
 //! let owner = Field::new("owner");
-//! assert_eq!(record::tb!(owner.clone()).to_debug_sql(), "record::tb(owner)");
+//! assert_eq!(record::tb(owner.clone()).to_debug_sql(), "record::tb(owner)");
 //! assert_eq!(RecordIdLike::from(owner).id().to_debug_sql(), "owner.id()");
 //! ```
 

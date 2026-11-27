@@ -50,15 +50,15 @@ async fn array_map_filter_fold_run() {
         &db,
         [
             (
-                array::map!(numbers.clone(), closure(["n"], |[n]| n.multiply(2))),
+                array::map(numbers.clone(), closure(["n"], |[n]| n.multiply(2))),
                 "[2, 4, 6]"
             ),
             (
-                array::filter!(numbers.clone(), closure(["n"], |[n]| n.greater_than(1))),
+                array::filter(numbers.clone(), closure(["n"], |[n]| n.greater_than(1))),
                 "[2, 3]"
             ),
             (
-                array::fold!(
+                array::fold(
                     numbers.clone(),
                     0,
                     closure(["total", "n"], |[total, n]| total.add(n))
@@ -66,14 +66,14 @@ async fn array_map_filter_fold_run() {
                 "6",
             ),
             (
-                array::reduce!(
+                array::reduce(
                     numbers.clone(),
                     closure(["total", "n"], |[total, n]| total.add(n))
                 ),
                 "6",
             ),
             (
-                array::find!(numbers.clone(), closure(["n"], |[n]| n.greater_than(1))),
+                array::find(numbers.clone(), closure(["n"], |[n]| n.greater_than(1))),
                 "2"
             ),
             (
@@ -85,7 +85,7 @@ async fn array_map_filter_fold_run() {
                 "true"
             ),
             (
-                set::map!(BTreeSet::from([1, 2]), closure(["n"], |[n]| n.add(1))),
+                set::map(BTreeSet::from([1, 2]), closure(["n"], |[n]| n.add(1))),
                 "<set> [2, 3]",
             ),
         ]

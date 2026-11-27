@@ -9,7 +9,7 @@
 //! ```rust
 //! use umbriel::{*, functions::file, types::File};
 //! let avatar = FileLike::from(File::new("avatars", "alice.png"));
-//! assert_eq!(file::get!(avatar.clone()).to_debug_sql(), "file::get(f\"avatars:/alice.png\")");
+//! assert_eq!(file::get(avatar.clone()).to_debug_sql(), "file::get(f\"avatars:/alice.png\")");
 //! assert_eq!(avatar.exists().to_debug_sql(), "(f\"avatars:/alice.png\").exists()");
 //! ```
 

@@ -19,59 +19,59 @@ async fn results() {
     holds_all!(
         &db,
         [
-            (set::add!(numbers(), 4), "<set> [1, 2, 3, 4]"),
+            (set::add(numbers(), 4), "<set> [1, 2, 3, 4]"),
             (set::all!(numbers()), "true"),
             (set::any!(numbers(), 2), "true"),
-            (set::at!(numbers(), 0), "1"),
-            (set::complement!(numbers(), other.clone()), "<set> [1, 2]"),
-            (set::contains!(numbers(), 2), "true"),
+            (set::at(numbers(), 0), "1"),
+            (set::complement(numbers(), other.clone()), "<set> [1, 2]"),
+            (set::contains(numbers(), 2), "true"),
             (
-                set::difference!(numbers(), other.clone()),
+                set::difference(numbers(), other.clone()),
                 "<set> [1, 2, 4]"
             ),
             (
-                set::filter!(numbers(), closure(["n"], |[n]| n.greater_than(1))),
+                set::filter(numbers(), closure(["n"], |[n]| n.greater_than(1))),
                 "<set> [2, 3]"
             ),
             (
-                set::find!(numbers(), closure(["n"], |[n]| n.greater_than(1))),
+                set::find(numbers(), closure(["n"], |[n]| n.greater_than(1))),
                 "2"
             ),
-            (set::first!(numbers()), "1"),
+            (set::first(numbers()), "1"),
             (
-                set::fold!(numbers(), 0, closure(["a", "b"], |[a, b]| a.add(b))),
+                set::fold(numbers(), 0, closure(["a", "b"], |[a, b]| a.add(b))),
                 "6"
             ),
-            (set::intersect!(numbers(), other.clone()), "<set> [3]"),
-            (set::is_empty!(BTreeSet::<i64>::new()), "true"),
-            (set::join!(numbers(), "-"), "'1-2-3'"),
-            (set::last!(numbers()), "3"),
-            (set::len!(numbers()), "3"),
+            (set::intersect(numbers(), other.clone()), "<set> [3]"),
+            (set::is_empty(BTreeSet::<i64>::new()), "true"),
+            (set::join(numbers(), "-"), "'1-2-3'"),
+            (set::last(numbers()), "3"),
+            (set::len(numbers()), "3"),
             (
-                set::map!(numbers(), closure(["n"], |[n]| n.multiply(2))),
+                set::map(numbers(), closure(["n"], |[n]| n.multiply(2))),
                 "<set> [2, 4, 6]"
             ),
-            (set::max!(numbers()), "3"),
-            (set::min!(numbers()), "1"),
+            (set::max(numbers()), "3"),
+            (set::min(numbers()), "1"),
             (
-                set::reduce!(numbers(), closure(["a", "b"], |[a, b]| a.add(b))),
+                set::reduce(numbers(), closure(["a", "b"], |[a, b]| a.add(b))),
                 "6"
             ),
-            (set::remove!(numbers(), 2), "<set> [1, 3]"),
+            (set::remove(numbers(), 2), "<set> [1, 3]"),
             (set::slice!(numbers(), 1, 2), "<set> [2]"),
-            (set::union!(numbers(), other), "<set> [1, 2, 3, 4]"),
+            (set::union(numbers(), other), "<set> [1, 2, 3, 4]"),
         ]
     );
-    is_a(&db, &set::flatten!(numbers()), "set").await;
+    is_a(&db, &set::flatten(numbers()), "set").await;
 }
 
 #[tokio::test]
 async fn result_kinds() {
     let (db, _guard) = db().await;
-    let len = NumberLike::from(set::len!(numbers()));
+    let len = NumberLike::from(set::len(numbers()));
     let all = BoolLike::from(set::all!(numbers()));
-    let joined = StrandLike::from(set::join!(numbers(), ","));
-    let union = SetLike::from(set::union!(numbers(), numbers()));
+    let joined = StrandLike::from(set::join(numbers(), ","));
+    let union = SetLike::from(set::union(numbers(), numbers()));
     for (expression, kind) in [
         (len.to_debug_sql(), "int"),
         (all.to_debug_sql(), "bool"),
@@ -85,7 +85,7 @@ async fn result_kinds() {
 
 #[test]
 fn generated_bindings() {
-    let nested = set::len!(set::add!(Param::new("tags"), "x"));
+    let nested = set::len(set::add(Param::new("tags"), "x"));
     let (sql, vars) = nested.to_query().expect("renders").into_parts();
     assert_eq!(sql, "set::len(set::add($tags, $_p0))");
     assert_eq!(vars.len(), 1);
@@ -110,36 +110,36 @@ async fn methods_run() {
     same_all!(
         &db,
         [
-            (s().add(4), set::add!(numbers(), 4)),
+            (s().add(4), set::add(numbers(), 4)),
             (s().all(None::<i64>), set::all!(numbers())),
             (s().any(Some(2)), set::any!(numbers(), 2)),
-            (s().at(1), set::at!(numbers(), 1)),
+            (s().at(1), set::at(numbers(), 1)),
             (
                 s().complement(other()),
-                set::complement!(numbers(), other())
+                set::complement(numbers(), other())
             ),
-            (s().contains(2), set::contains!(numbers(), 2)),
+            (s().contains(2), set::contains(numbers(), 2)),
             (
                 s().difference(other()),
-                set::difference!(numbers(), other())
+                set::difference(numbers(), other())
             ),
-            (s().filter(big()), set::filter!(numbers(), big())),
-            (s().find(big()), set::find!(numbers(), big())),
-            (s().first(), set::first!(numbers())),
-            (s().flatten(), set::flatten!(numbers())),
-            (s().fold(10, sum()), set::fold!(numbers(), 10, sum())),
-            (s().intersect(other()), set::intersect!(numbers(), other())),
-            (s().is_empty(), set::is_empty!(numbers())),
-            (s().join("-"), set::join!(numbers(), "-")),
-            (s().last(), set::last!(numbers())),
-            (s().len(), set::len!(numbers())),
-            (s().map(double()), set::map!(numbers(), double())),
-            (s().max(), set::max!(numbers())),
-            (s().min(), set::min!(numbers())),
-            (s().reduce(sum()), set::reduce!(numbers(), sum())),
-            (s().remove(2), set::remove!(numbers(), 2)),
+            (s().filter(big()), set::filter(numbers(), big())),
+            (s().find(big()), set::find(numbers(), big())),
+            (s().first(), set::first(numbers())),
+            (s().flatten(), set::flatten(numbers())),
+            (s().fold(10, sum()), set::fold(numbers(), 10, sum())),
+            (s().intersect(other()), set::intersect(numbers(), other())),
+            (s().is_empty(), set::is_empty(numbers())),
+            (s().join("-"), set::join(numbers(), "-")),
+            (s().last(), set::last(numbers())),
+            (s().len(), set::len(numbers())),
+            (s().map(double()), set::map(numbers(), double())),
+            (s().max(), set::max(numbers())),
+            (s().min(), set::min(numbers())),
+            (s().reduce(sum()), set::reduce(numbers(), sum())),
+            (s().remove(2), set::remove(numbers(), 2)),
             (s().slice(Some(1), Some(3)), set::slice!(numbers(), 1, 3)),
-            (s().union(other()), set::union!(numbers(), other())),
+            (s().union(other()), set::union(numbers(), other())),
         ]
     );
 }

@@ -6,7 +6,7 @@
 //! ```rust
 //! use umbriel::{*, functions::math};
 //! let score = Field::new("score");
-//! assert_eq!(math::abs!(score.clone()).to_debug_sql(), "math::abs(score)");
+//! assert_eq!(math::abs(score.clone()).to_debug_sql(), "math::abs(score)");
 //! assert_eq!(NumberLike::from(score).round().to_debug_sql(), "score.round()");
 //! assert_eq!(math::PI.to_debug_sql(), "math::PI");
 //! ```

@@ -9,7 +9,7 @@
 //! ```rust
 //! use umbriel::{*, functions::type_};
 //! let age = Field::new("age");
-//! assert_eq!(type_::int!(age.clone()).to_debug_sql(), "type::int(age)");
+//! assert_eq!(type_::int(age.clone()).to_debug_sql(), "type::int(age)");
 //! assert_eq!(ValueLike::from(age).to_int().to_debug_sql(), "age.to_int()");
 //! ```
 

@@ -15,7 +15,7 @@ async fn values_increase_from_the_start() {
     let mut drawn = Vec::new();
     for _ in 0..3 {
         drawn.push(
-            bound::<i64, _>(&db, &sequence::nextval!("order_number"))
+            bound::<i64, _>(&db, &sequence::nextval("order_number"))
                 .await
                 .expect("a value"),
         );
@@ -27,6 +27,6 @@ async fn values_increase_from_the_start() {
 #[tokio::test]
 async fn an_undefined_sequence_fails() {
     let (db, _guard) = db().await;
-    let error = call_failure(&db, &sequence::nextval!("missing")).await;
+    let error = call_failure(&db, &sequence::nextval("missing")).await;
     assert!(error.contains("missing"), "{error}");
 }

@@ -16,20 +16,20 @@ async fn results() {
     holds_all!(
         &db,
         [
-            (object::entries!(alice()), "[['age', 30], ['score', 7]]"),
+            (object::entries(alice()), "[['age', 30], ['score', 7]]"),
             (
-                object::extend!(alice(), BTreeMap::from([("age".to_owned(), 31)])),
+                object::extend(alice(), BTreeMap::from([("age".to_owned(), 31)])),
                 "{ age: 31, score: 7 }"
             ),
             (
-                object::from_entries!(object::entries!(alice())),
+                object::from_entries(object::entries(alice())),
                 "{ age: 30, score: 7 }"
             ),
-            (object::is_empty!(BTreeMap::<String, i64>::new()), "true"),
-            (object::keys!(alice()), "['age', 'score']"),
-            (object::len!(alice()), "2"),
-            (object::remove!(alice(), "age"), "{ score: 7 }"),
-            (object::values!(alice()), "[30, 7]"),
+            (object::is_empty(BTreeMap::<String, i64>::new()), "true"),
+            (object::keys(alice()), "['age', 'score']"),
+            (object::len(alice()), "2"),
+            (object::remove(alice(), "age"), "{ score: 7 }"),
+            (object::values(alice()), "[30, 7]"),
             (ObjectLike::from(alice()).len(), "2"),
         ]
     );
@@ -37,7 +37,7 @@ async fn results() {
 
 #[test]
 fn generated_bindings() {
-    let nested = object::len!(object::extend!(Param::new("settings"), alice()));
+    let nested = object::len(object::extend(Param::new("settings"), alice()));
     let (sql, vars) = nested.to_query().expect("renders").into_parts();
     assert_eq!(sql, "object::len(object::extend($settings, $_p0))");
     assert_eq!(vars.len(), 1);
@@ -59,13 +59,13 @@ async fn methods_run() {
     same_all!(
         &db,
         [
-            (o().entries(), object::entries!(alice())),
-            (o().extend(other()), object::extend!(alice(), other())),
-            (o().is_empty(), object::is_empty!(alice())),
-            (o().keys(), object::keys!(alice())),
-            (o().len(), object::len!(alice())),
-            (o().remove("age"), object::remove!(alice(), "age")),
-            (o().values(), object::values!(alice())),
+            (o().entries(), object::entries(alice())),
+            (o().extend(other()), object::extend(alice(), other())),
+            (o().is_empty(), object::is_empty(alice())),
+            (o().keys(), object::keys(alice())),
+            (o().len(), object::len(alice())),
+            (o().remove("age"), object::remove(alice(), "age")),
+            (o().values(), object::values(alice())),
         ]
     );
 }

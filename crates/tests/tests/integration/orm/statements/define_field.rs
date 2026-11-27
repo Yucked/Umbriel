@@ -527,7 +527,7 @@ mod definitions {
         assert_sql(
             &define_field(Field::new("email"))
                 .on_table(Table::from("user"))
-                .value(string::lowercase!(Param::new("value"))),
+                .value(string::lowercase(Param::new("value"))),
             "DEFINE FIELD email ON TABLE user VALUE string::lowercase($value);",
         );
         assert_sql(
@@ -664,7 +664,7 @@ mod definitions {
             define_field(Field::new("name"))
                 .on_table(Table::from("player"))
                 .type_(Kind::String)
-                .value(string::lowercase!(Param::new("value"))),
+                .value(string::lowercase(Param::new("value"))),
         )
         .await;
 

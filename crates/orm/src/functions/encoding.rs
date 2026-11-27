@@ -3,7 +3,7 @@
 //! ```rust
 //! use umbriel::{*, functions::encoding};
 //! assert_eq!(
-//!     encoding::base64::decode!("aGk=").to_debug_sql(),
+//!     encoding::base64::decode("aGk=").to_debug_sql(),
 //!     "encoding::base64::decode('aGk=')"
 //! );
 //! ```

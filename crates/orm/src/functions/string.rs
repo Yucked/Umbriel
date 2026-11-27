@@ -3,7 +3,7 @@
 //! ```rust
 //! use umbriel::{*, functions::string};
 //! let name = Field::new("name");
-//! assert_eq!(string::len!(name.clone()).to_debug_sql(), "string::len(name)");
+//! assert_eq!(string::len(name.clone()).to_debug_sql(), "string::len(name)");
 //! assert_eq!(StrandLike::from(name).uppercase().to_debug_sql(), "name.uppercase()");
 //! ```
 

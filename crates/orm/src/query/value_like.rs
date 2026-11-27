@@ -265,7 +265,7 @@ value_like_from_write_statement!(
 ///         2,
 ///         3,
 ///         count!().__as__(total),
-///         math::sum!(age),
+///         math::sum(age),
 ///         country,
 ///         54,
 ///         Duration::from_secs(43)

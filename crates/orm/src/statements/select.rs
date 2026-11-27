@@ -603,7 +603,7 @@ impl<O: 'static, C: Cardinality> Conditional for SelectStatement<O, C> {}
 ///  # let country = Field::new("country");
 ///  # let gender = Field::new("gender");
 ///  # let total = AliasName::new("total");
-///  select(arr![count!().__as__(total), math::sum!(age), &gender, &country])
+///  select(arr![count!().__as__(total), math::sum(age), &gender, &country])
 ///     .from(user)
 ///     .group_by(&[gender, country]);
 ///

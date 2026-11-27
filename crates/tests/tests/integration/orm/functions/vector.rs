@@ -10,54 +10,54 @@ async fn results() {
     // The calls have different result kinds, so they are compared as rendered SurrealQL.
     let cases = [
         (
-            vector::add!(vec![1, 2], vec![3, 4]).to_debug_sql(),
+            vector::add(vec![1, 2], vec![3, 4]).to_debug_sql(),
             "[4, 6]",
         ),
         (
-            vector::cross!(vec![1, 0, 0], vec![0, 1, 0]).to_debug_sql(),
+            vector::cross(vec![1, 0, 0], vec![0, 1, 0]).to_debug_sql(),
             "[0, 0, 1]",
         ),
         (
-            vector::divide!(vec![4, 6], vec![2, 3]).to_debug_sql(),
+            vector::divide(vec![4, 6], vec![2, 3]).to_debug_sql(),
             "[2, 2]",
         ),
-        (vector::dot!(vec![1, 2], vec![3, 4]).to_debug_sql(), "11"),
-        (vector::magnitude!(vec![3, 4]).to_debug_sql(), "5"),
+        (vector::dot(vec![1, 2], vec![3, 4]).to_debug_sql(), "11"),
+        (vector::magnitude(vec![3, 4]).to_debug_sql(), "5"),
         (
-            vector::multiply!(vec![1, 2], vec![3, 4]).to_debug_sql(),
+            vector::multiply(vec![1, 2], vec![3, 4]).to_debug_sql(),
             "[3, 8]",
         ),
-        (vector::normalize!(vec![3, 4]).to_debug_sql(), "[0.6, 0.8]"),
+        (vector::normalize(vec![3, 4]).to_debug_sql(), "[0.6, 0.8]"),
         (
-            vector::project!(vec![2, 0], vec![1, 0]).to_debug_sql(),
+            vector::project(vec![2, 0], vec![1, 0]).to_debug_sql(),
             "[2, 0]",
         ),
         (
-            vector::subtract!(vec![4, 6], vec![1, 2]).to_debug_sql(),
+            vector::subtract(vec![4, 6], vec![1, 2]).to_debug_sql(),
             "[3, 4]",
         ),
         (
-            vector::distance::chebyshev!(vec![1, 2], vec![4, 6]).to_debug_sql(),
+            vector::distance::chebyshev(vec![1, 2], vec![4, 6]).to_debug_sql(),
             "4",
         ),
         (
-            vector::distance::euclidean!(vec![1, 2], vec![4, 6]).to_debug_sql(),
+            vector::distance::euclidean(vec![1, 2], vec![4, 6]).to_debug_sql(),
             "5",
         ),
         (
-            vector::distance::hamming!(vec![1, 2], vec![1, 3]).to_debug_sql(),
+            vector::distance::hamming(vec![1, 2], vec![1, 3]).to_debug_sql(),
             "1",
         ),
         (
-            vector::distance::manhattan!(vec![1, 2], vec![4, 6]).to_debug_sql(),
+            vector::distance::manhattan(vec![1, 2], vec![4, 6]).to_debug_sql(),
             "7",
         ),
         (
-            vector::distance::minkowski!(vec![1, 2], vec![4, 6], 2).to_debug_sql(),
+            vector::distance::minkowski(vec![1, 2], vec![4, 6], 2).to_debug_sql(),
             "5",
         ),
         (
-            vector::similarity::cosine!(vec![1, 0], vec![1, 0]).to_debug_sql(),
+            vector::similarity::cosine(vec![1, 0], vec![1, 0]).to_debug_sql(),
             "1",
         ),
     ];
@@ -65,10 +65,10 @@ async fn results() {
         let equal: bool = read(&db, &format!("RETURN {call} = {expected};")).await;
         assert!(equal, "`{call}` is not {expected}");
     }
-    is_a(&db, &vector::angle!(vec![1, 0], vec![0, 1]), "number").await;
+    is_a(&db, &vector::angle(vec![1, 0], vec![0, 1]), "number").await;
     is_a(
         &db,
-        &vector::similarity::jaccard!(vec![1, 2], vec![2, 3]),
+        &vector::similarity::jaccard(vec![1, 2], vec![2, 3]),
         "number",
     )
     .await;
@@ -88,9 +88,9 @@ async fn number_elements<K: KindOf>(db: &Surreal<Any>, function: &Function<K>) -
 async fn normalize_project_and_divide_give_number_elements() {
     let (db, _guard) = db().await;
     for function in [
-        vector::normalize!(vec![3, 4]),
-        vector::project!(vec![2, 1], vec![1, 1]),
-        vector::divide!(vec![1, 2], vec![2, 4]),
+        vector::normalize(vec![3, 4]),
+        vector::project(vec![2, 1], vec![1, 1]),
+        vector::divide(vec![1, 2], vec![2, 4]),
     ] {
         is_a(&db, &function, "array").await;
         assert!(
@@ -105,11 +105,11 @@ async fn normalize_project_and_divide_give_number_elements() {
 async fn add_subtract_multiply_cross_and_integer_scale_keep_integer_elements() {
     let (db, _guard) = db().await;
     for function in [
-        vector::add!(vec![1, 2], vec![3, 4]),
-        vector::subtract!(vec![4, 6], vec![1, 2]),
-        vector::multiply!(vec![1, 2], vec![3, 4]),
-        vector::cross!(vec![1, 0, 0], vec![0, 1, 0]),
-        vector::scale!(vec![1, 2], 3),
+        vector::add(vec![1, 2], vec![3, 4]),
+        vector::subtract(vec![4, 6], vec![1, 2]),
+        vector::multiply(vec![1, 2], vec![3, 4]),
+        vector::cross(vec![1, 0, 0], vec![0, 1, 0]),
+        vector::scale(vec![1, 2], 3),
     ] {
         let call = function.to_debug_sql();
         let integers: bool = read(
@@ -119,22 +119,22 @@ async fn add_subtract_multiply_cross_and_integer_scale_keep_integer_elements() {
         .await;
         assert!(integers, "`{call}` has an element that is not an integer");
     }
-    holds(&db, &vector::scale!(vec![1, 2], 3), "[3, 6]").await;
+    holds(&db, &vector::scale(vec![1, 2], 3), "[3, 6]").await;
 }
 
 #[tokio::test]
 async fn new_functions_give_their_results() {
     let (db, _guard) = db().await;
-    holds(&db, &vector::sum!(vec![vec![1, 2], vec![3, 4]]), "[4, 6]").await;
+    holds(&db, &vector::sum(vec![vec![1, 2], vec![3, 4]]), "[4, 6]").await;
     holds(
         &db,
-        &vector::distance::mahalanobis!(vec![1, 2], vec![1, 2], vec![vec![1, 0], vec![0, 1]]),
+        &vector::distance::mahalanobis(vec![1, 2], vec![1, 2], vec![vec![1, 0], vec![0, 1]]),
         "0",
     )
     .await;
     for function in [
-        vector::similarity::pearson!(vec![1, 2, 3], vec![2, 4, 6]),
-        vector::similarity::spearman!(vec![1, 2, 3], vec![1, 4, 9]),
+        vector::similarity::pearson(vec![1, 2, 3], vec![2, 4, 6]),
+        vector::similarity::spearman(vec![1, 2, 3], vec![1, 4, 9]),
     ] {
         let call = function.to_debug_sql();
         let one: bool = read(&db, &format!("RETURN math::abs({call} - 1) < 0.000001;")).await;
@@ -145,7 +145,7 @@ async fn new_functions_give_their_results() {
 #[tokio::test]
 async fn sum_of_no_vectors_is_none() {
     let (db, _guard) = db().await;
-    let call = vector::sum!(Vec::<Vec<i32>>::new()).to_debug_sql();
+    let call = vector::sum(Vec::<Vec<i32>>::new()).to_debug_sql();
     let none: bool = read(&db, &format!("RETURN {call} IS NONE;")).await;
     assert!(none, "`{call}` is not NONE");
 }
@@ -154,11 +154,11 @@ async fn sum_of_no_vectors_is_none() {
 async fn float_results_decode_as_floats() {
     let (db, _guard) = db().await;
     for function in [
-        vector::distance::minkowski!(vec![1, 2], vec![4, 6], 2),
-        vector::distance::mahalanobis!(vec![1, 2], vec![2, 2], vec![vec![1, 0], vec![0, 1]]),
-        vector::similarity::jaccard!(vec![1, 2], vec![2, 3]),
-        vector::similarity::pearson!(vec![1, 2, 3], vec![1, 2, 4]),
-        vector::similarity::spearman!(vec![1, 2, 3], vec![1, 3, 2]),
+        vector::distance::minkowski(vec![1, 2], vec![4, 6], 2),
+        vector::distance::mahalanobis(vec![1, 2], vec![2, 2], vec![vec![1, 0], vec![0, 1]]),
+        vector::similarity::jaccard(vec![1, 2], vec![2, 3]),
+        vector::similarity::pearson(vec![1, 2, 3], vec![1, 2, 4]),
+        vector::similarity::spearman(vec![1, 2, 3], vec![1, 3, 2]),
     ] {
         is_a(&db, &function, "float").await;
     }
@@ -169,7 +169,7 @@ async fn mahalanobis_rejects_a_matrix_that_is_not_positive_definite() {
     let (db, _guard) = db().await;
     let message = call_failure(
         &db,
-        &vector::distance::mahalanobis!(vec![1, 2], vec![2, 2], vec![vec![0, 0], vec![0, 0]]),
+        &vector::distance::mahalanobis(vec![1, 2], vec![2, 2], vec![vec![0, 0], vec![0, 0]]),
     )
     .await;
     assert!(message.contains("positive-definite"), "{message}");
@@ -180,7 +180,7 @@ async fn pearson_rejects_zero_variance() {
     let (db, _guard) = db().await;
     let message = call_failure(
         &db,
-        &vector::similarity::pearson!(vec![1, 1, 1], vec![1, 2, 3]),
+        &vector::similarity::pearson(vec![1, 1, 1], vec![1, 2, 3]),
     )
     .await;
     assert!(message.contains("variance"), "{message}");
@@ -224,13 +224,13 @@ fn new_functions_render() {
 #[tokio::test]
 async fn dot_of_integers_is_an_integer() {
     let (db, _guard) = db().await;
-    is_a(&db, &vector::dot!(vec![1, 2], vec![3, 4]), "int").await;
+    is_a(&db, &vector::dot(vec![1, 2], vec![3, 4]), "int").await;
 }
 
 #[tokio::test]
 async fn hamming_is_an_integer_count() {
     let (db, _guard) = db().await;
-    let function = vector::distance::hamming!(vec![1.5, 2.5], vec![1.5, 3.5]);
+    let function = vector::distance::hamming(vec![1.5, 2.5], vec![1.5, 3.5]);
     is_a(&db, &function, "int").await;
     holds(&db, &function, "1").await;
 }

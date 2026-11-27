@@ -153,7 +153,7 @@ mod rendering {
     #[test]
     fn computed_targets() {
         assert_sql(
-            &select(All).from(umbriel::functions::type_::table!("organization")),
+            &select(All).from(umbriel::functions::type_::table("organization")),
             "SELECT * FROM type::table('organization');",
         );
         assert_sql(
@@ -858,7 +858,7 @@ mod timeout {
     async fn a_bound_timeout_cuts_a_slow_select_short() {
         let (db, _guard) = db().await;
         let failed = select(All)
-            .from(umbriel::functions::sleep::sleep!(Duration::from_millis(
+            .from(umbriel::functions::sleep::sleep(Duration::from_millis(
                 500
             )))
             .timeout(Duration::from_millis(10))
@@ -920,7 +920,7 @@ mod clauses_and_results {
             "SELECT count() AS total, country FROM user GROUP BY country;",
         );
         assert_sql(
-            &select(math::sum!(Field::new("age")))
+            &select(math::sum(Field::new("age")))
                 .from(&user)
                 .group_all(),
             "SELECT math::sum(age) FROM user GROUP ALL;",

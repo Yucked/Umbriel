@@ -10,8 +10,8 @@ async fn results() {
     holds_all!(
         &db,
         [
-            (bytes::len!(vec![1u8, 2, 3]), "3"),
-            (bytes::len!(Vec::<u8>::new()), "0"),
+            (bytes::len(vec![1u8, 2, 3]), "3"),
+            (bytes::len(Vec::<u8>::new()), "0"),
             (BytesLike::from(vec![1u8]).len(), "1"),
         ]
     );
@@ -31,7 +31,7 @@ async fn methods_run() {
     same(
         &db,
         &BytesLike::from(vec![1u8, 2, 3]).len(),
-        &bytes::len!(vec![1u8, 2, 3]),
+        &bytes::len(vec![1u8, 2, 3]),
     )
     .await;
 }

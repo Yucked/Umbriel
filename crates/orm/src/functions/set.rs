@@ -6,7 +6,7 @@
 //! ```rust
 //! use umbriel::{*, functions::set};
 //! let tags = Field::new("tags");
-//! assert_eq!(set::len!(tags.clone()).to_debug_sql(), "set::len(tags)");
+//! assert_eq!(set::len(tags.clone()).to_debug_sql(), "set::len(tags)");
 //! assert_eq!(SetLike::from(tags).first().to_debug_sql(), "tags.first()");
 //! ```
 

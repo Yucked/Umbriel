@@ -7,14 +7,14 @@ use umbriel_tests::*;
 #[test]
 fn rendering() {
     calls!(
-        (session::ac!(), "session::ac()"),
-        (session::db!(), "session::db()"),
-        (session::id!(), "session::id()"),
-        (session::ip!(), "session::ip()"),
-        (session::ns!(), "session::ns()"),
-        (session::origin!(), "session::origin()"),
-        (session::rd!(), "session::rd()"),
-        (session::token!(), "session::token()"),
+        (session::ac(), "session::ac()"),
+        (session::db(), "session::db()"),
+        (session::id(), "session::id()"),
+        (session::ip(), "session::ip()"),
+        (session::ns(), "session::ns()"),
+        (session::origin(), "session::origin()"),
+        (session::rd(), "session::rd()"),
+        (session::token(), "session::token()"),
     );
 }
 
@@ -24,9 +24,9 @@ async fn results() {
     holds_all!(
         &db,
         [
-            (session::ns!(), &format!("'{}'", guard.namespace())),
-            (session::db!(), &format!("'{}'", guard.database())),
-            (session::rd!(), "NONE"),
+            (session::ns(), &format!("'{}'", guard.namespace())),
+            (session::db(), &format!("'{}'", guard.database())),
+            (session::rd(), "NONE"),
         ]
     );
 }

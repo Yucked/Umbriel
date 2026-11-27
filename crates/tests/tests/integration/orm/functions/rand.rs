@@ -36,10 +36,10 @@ async fn results() {
     is_each!(
         &db,
         [
-            (rand_fn::rand!(), "float"),
-            (rand_fn::bool!(), "bool"),
+            (rand_fn::rand(), "float"),
+            (rand_fn::bool(), "bool"),
             (
-                rand_fn::duration!(Duration::from_secs(1), Duration::from_secs(60)),
+                rand_fn::duration(Duration::from_secs(1), Duration::from_secs(60)),
                 "duration"
             ),
             (rand_fn::float!(1, 2), "float"),
@@ -54,8 +54,8 @@ async fn results() {
             (rand_fn::id!(), "string"),
         ]
     );
-    holds(&db, &string::len!(rand_fn::string!(8)), "8").await;
-    holds(&db, &string::len!(rand_fn::id!(10)), "10").await;
+    holds(&db, &string::len(rand_fn::string!(8)), "8").await;
+    holds(&db, &string::len(rand_fn::id!(10)), "10").await;
     let picked: String = read(
         &db,
         &format!("RETURN {};", rand_fn::enum_!("a", "b").to_debug_sql()),
@@ -72,7 +72,7 @@ async fn results() {
 
 #[test]
 fn generated_bindings() {
-    let nested = string::len!(rand_fn::string!(8));
+    let nested = string::len(rand_fn::string!(8));
     let (sql, vars) = nested.to_query().expect("renders").into_parts();
     assert_eq!(sql, "string::len(rand::string($_p0))");
     assert_eq!(vars.len(), 1);

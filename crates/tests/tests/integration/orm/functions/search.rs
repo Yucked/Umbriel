@@ -151,7 +151,7 @@ async fn analyze_tokenizes_with_the_named_analyzer() {
     );
     holds(
         &db,
-        &search::analyze!("words", "Hello World"),
+        &search::analyze("words", "Hello World"),
         "['hello', 'world']",
     )
     .await;
@@ -161,7 +161,7 @@ async fn analyze_tokenizes_with_the_named_analyzer() {
 async fn analyze_of_a_non_string_parameter_is_none() {
     let (db, _guard) = db().await;
     // A raw `42` stands for a parameter or path that holds a number at run time.
-    let function = search::analyze!("words", Field::raw("42"));
+    let function = search::analyze("words", Field::raw("42"));
     assert!(
         is_none_alone(&db, &function).await,
         "`{}` is not NONE for a number",
@@ -181,7 +181,7 @@ async fn linear_and_rrf_fuse_two_result_lists() {
     let (db, _guard) = db().await;
     let lists = Field::raw(LISTS);
     for function in [
-        search::linear!(lists.clone(), vec![1, 1], 2, "minmax"),
+        search::linear(lists.clone(), vec![1, 1], 2, "minmax"),
         search::rrf!(lists.clone(), 2),
     ] {
         let call = function.to_debug_sql();
@@ -198,7 +198,7 @@ async fn fusing_no_lists_is_empty() {
     holds(&db, &search::rrf!(Vec::<i32>::new(), 5), "[]").await;
     holds(
         &db,
-        &search::linear!(Vec::<i32>::new(), Vec::<i32>::new(), 5, "zscore"),
+        &search::linear(Vec::<i32>::new(), Vec::<i32>::new(), 5, "zscore"),
         "[]",
     )
     .await;

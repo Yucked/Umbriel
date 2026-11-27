@@ -3,7 +3,7 @@
 //! ```rust
 //! use umbriel::{*, functions::array};
 //! let tags = Field::new("tags");
-//! assert_eq!(array::len!(tags.clone()).to_debug_sql(), "array::len(tags)");
+//! assert_eq!(array::len(tags.clone()).to_debug_sql(), "array::len(tags)");
 //! assert_eq!(ArrayLike::from(tags).distinct().to_debug_sql(), "tags.distinct()");
 //! ```
 

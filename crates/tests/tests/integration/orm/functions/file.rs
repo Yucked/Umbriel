@@ -32,7 +32,7 @@ fn prefixed(prefix: &str) -> Object {
 fn rendering() {
     calls!(
         (
-            file::bucket!(alice()),
+            file::bucket(alice()),
             "file::bucket(f\"avatars:/alice.txt\")"
         ),
         (
@@ -62,25 +62,25 @@ async fn avatars() -> (Surreal<Any>, TestDb) {
 async fn a_file_is_written_read_copied_renamed_listed_and_deleted() {
     let (db, _guard) = avatars().await;
     assert_eq!(
-        run::<bool, _>(&db, file::exists!(alice())).await,
+        run::<bool, _>(&db, file::exists(alice())).await,
         Some(false)
     );
-    let missing = run::<Value, _>(&db, file::get!(alice())).await;
+    let missing = run::<Value, _>(&db, file::get(alice())).await;
     assert!(matches!(missing, None | Some(Value::None)), "{missing:?}");
 
     run::<Value, _>(&db, alice().put("Alice")).await;
     assert_eq!(run::<bool, _>(&db, alice().exists()).await, Some(true));
-    let contents = run::<Bytes, _>(&db, file::get!(alice()))
+    let contents = run::<Bytes, _>(&db, file::get(alice()))
         .await
         .expect("the file is read")
         .into_inner();
     assert_eq!(contents.as_ref(), b"Alice");
-    let head: Object = run(&db, file::head!(alice()))
+    let head: Object = run(&db, file::head(alice()))
         .await
         .expect("the file has metadata");
     assert_eq!(head.get("size"), Some(&Value::Number(Number::Int(5))));
     assert_eq!(
-        run::<String, _>(&db, file::key!(alice())).await.as_deref(),
+        run::<String, _>(&db, file::key(alice())).await.as_deref(),
         Some("/alice.txt")
     );
     assert_eq!(
@@ -88,7 +88,7 @@ async fn a_file_is_written_read_copied_renamed_listed_and_deleted() {
         Some("avatars")
     );
 
-    run::<Value, _>(&db, file::copy!(alice(), "bob.txt")).await;
+    run::<Value, _>(&db, file::copy(alice(), "bob.txt")).await;
     let listed: Vec<Object> = run(&db, file::list!("avatars"))
         .await
         .expect("the bucket is listed");
@@ -98,18 +98,18 @@ async fn a_file_is_written_read_copied_renamed_listed_and_deleted() {
         .expect("the bucket is listed");
     assert_eq!(limited.len(), 1, "{limited:?}");
 
-    run::<Value, _>(&db, file::delete!(bob())).await;
-    run::<Value, _>(&db, file::rename!(alice(), "bob.txt")).await;
+    run::<Value, _>(&db, file::delete(bob())).await;
+    run::<Value, _>(&db, file::rename(alice(), "bob.txt")).await;
     assert_eq!(
-        run::<bool, _>(&db, file::exists!(alice())).await,
+        run::<bool, _>(&db, file::exists(alice())).await,
         Some(false)
     );
-    assert_eq!(run::<bool, _>(&db, file::exists!(bob())).await, Some(true));
+    assert_eq!(run::<bool, _>(&db, file::exists(bob())).await, Some(true));
 }
 
 /// The contents of `pointer`, which must exist.
 async fn contents(db: &Surreal<Any>, pointer: FileLike) -> Vec<u8> {
-    run::<Bytes, _>(db, file::get!(pointer))
+    run::<Bytes, _>(db, file::get(pointer))
         .await
         .expect("the file is read")
         .into_inner()
@@ -121,12 +121,12 @@ async fn contents(db: &Surreal<Any>, pointer: FileLike) -> Vec<u8> {
 #[tokio::test]
 async fn the_if_not_exists_forms_leave_an_existing_target_unchanged() {
     let (db, _guard) = avatars().await;
-    run::<Value, _>(&db, file::put!(alice(), "Alice")).await;
-    run::<Value, _>(&db, file::put!(bob(), "Bob")).await;
+    run::<Value, _>(&db, file::put(alice(), "Alice")).await;
+    run::<Value, _>(&db, file::put(bob(), "Bob")).await;
     for no_op in [
-        file::put_if_not_exists!(alice(), "Alicia"),
-        file::copy_if_not_exists!(alice(), "bob.txt"),
-        file::rename_if_not_exists!(alice(), "bob.txt"),
+        file::put_if_not_exists(alice(), "Alicia"),
+        file::copy_if_not_exists(alice(), "bob.txt"),
+        file::rename_if_not_exists(alice(), "bob.txt"),
     ] {
         let result: umbriel::Result<Option<Value>> = no_op.run(&db).await;
         assert!(result.is_ok(), "{}: {result:?}", no_op.to_debug_sql());
@@ -146,14 +146,14 @@ async fn the_if_not_exists_forms_leave_an_existing_target_unchanged() {
 #[tokio::test]
 async fn the_if_not_exists_forms_act_on_a_missing_target() {
     let (db, _guard) = avatars().await;
-    run::<Value, _>(&db, file::put_if_not_exists!(alice(), "Alice")).await;
+    run::<Value, _>(&db, file::put_if_not_exists(alice(), "Alice")).await;
     assert_eq!(contents(&db, alice()).await, b"Alice");
-    run::<Value, _>(&db, file::copy_if_not_exists!(alice(), "bob.txt")).await;
+    run::<Value, _>(&db, file::copy_if_not_exists(alice(), "bob.txt")).await;
     assert_eq!(contents(&db, bob()).await, b"Alice");
-    run::<Value, _>(&db, file::delete!(bob())).await;
-    run::<Value, _>(&db, file::rename_if_not_exists!(alice(), "bob.txt")).await;
+    run::<Value, _>(&db, file::delete(bob())).await;
+    run::<Value, _>(&db, file::rename_if_not_exists(alice(), "bob.txt")).await;
     assert_eq!(
-        run::<bool, _>(&db, file::exists!(alice())).await,
+        run::<bool, _>(&db, file::exists(alice())).await,
         Some(false)
     );
     assert_eq!(contents(&db, bob()).await, b"Alice");
@@ -168,7 +168,7 @@ async fn a_read_only_bucket_refuses_writes() {
         .run(&db)
         .await
         .expect("bucket defined");
-    let result: umbriel::Result<Option<Value>> = file::put!(alice(), "Alice").run(&db).await;
+    let result: umbriel::Result<Option<Value>> = file::put(alice(), "Alice").run(&db).await;
     assert!(result.is_err(), "{result:?}");
 }
 
@@ -176,6 +176,6 @@ async fn a_read_only_bucket_refuses_writes() {
 #[tokio::test]
 async fn files_need_the_files_feature() {
     let (db, _guard) = restricted_db().await;
-    let error = call_failure(&db, &file::exists!(alice())).await;
+    let error = call_failure(&db, &file::exists(alice())).await;
     assert!(error.to_lowercase().contains("files"), "{error}");
 }

@@ -12,7 +12,7 @@ use umbriel_tests::*;
 fn every_argument_form_renders() {
     calls!(
         // `a: T`: fixed arguments.
-        (string::len!(Field::new("name")), "string::len(name)"),
+        (string::len(Field::new("name")), "string::len(name)"),
         // `a: T; b: U, c: V`: optional trailing arguments, given or left out.
         (string::slice!("Alice", 1), "string::slice('Alice', 1)"),
         (
@@ -48,7 +48,7 @@ fn names_that_are_not_rust_names_render_as_surrealql() {
         // `name = sql_name`.
         (rand_fn::enum_!("a", "b"), "rand::enum('a', 'b')"),
         (
-            time::format_!(Field::new("created"), "%Y"),
+            time::format_(Field::new("created"), "%Y"),
             "time::format(created, '%Y')"
         ),
         // `Receiver.rust_name = sql_method`.

@@ -5,7 +5,7 @@
 //! let doubled = ValueLike::from(Field::new("score"))
 //!     .chain(closure(["n"], |[n]| n.multiply(2)));
 //! assert_eq!(doubled.to_debug_sql(), "score.chain(|$n| $n * 2)");
-//! assert_eq!(value::diff!(1, 2).to_debug_sql(), "value::diff(1, 2)");
+//! assert_eq!(value::diff(1, 2).to_debug_sql(), "value::diff(1, 2)");
 //! ```
 
 use crate::kinds;
