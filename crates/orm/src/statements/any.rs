@@ -4,13 +4,15 @@
 
 use std::marker::PhantomData;
 
-use surrealdb::types::{self, SurrealValue, Table, ToSql, Value};
+use surrealdb::types::{self, SurrealValue, Table, Value};
 
-use crate::{DurationLike, RecordId, Renderer, Setter, TableOf, TableSpec, ValueLike, Writable};
+use crate::{
+    DurationLike, RecordId, Render, Renderer, Setter, TableOf, TableSpec, ValueLike, Writable,
+};
 
 use super::{
     Cardinality, Many, One, ReturnAfter, ReturnDiff, ReturnMode, ReturnNone, ReturnNull, Returning,
-    Statement, data::DataClause, impl_statement,
+    Statement, data::DataClause, impl_statement, returning::return_methods,
 };
 
 /// A union of models, one per variant, from `#[derive(Models)]`. No two variants' table families
@@ -23,11 +25,6 @@ use super::{
 pub trait Models: SurrealValue + 'static {
     /// The table family of each variant, in declaration order.
     const MEMBERS: &'static [TableSpec];
-
-    /// Whether `table` belongs to a variant.
-    fn accepts_table(table: &str) -> bool {
-        Self::MEMBERS.iter().any(|member| member.accepts(table))
-    }
 }
 
 /// A [`Models`] union whose every variant can be written, which [`insert_any`] requires.
@@ -95,13 +92,13 @@ impl AnyTarget {
             AnyTargetKind::Table(table) => (table, ValueLike::table(table.clone())),
             AnyTargetKind::Record(id) => (&id.table, ValueLike::value(id.clone())),
         };
-        if !M::accepts_table(table.as_str()) {
+        if !M::MEMBERS
+            .iter()
+            .any(|member| member.accepts(table.as_str()))
+        {
             out.push_error(format!(
                 "target `{}` is not in a table of the union's models",
-                match &self.0 {
-                    AnyTargetKind::Table(table) => table.as_str().to_owned(),
-                    AnyTargetKind::Record(id) => id.to_sql(),
-                }
+                target.to_debug_sql()
             ));
         }
         out.push(&target);
@@ -180,26 +177,6 @@ impl<M: Models, R: ReturnMode, C: Cardinality> CreateAnyStatement<M, R, C> {
         self
     }
 
-    /// `RETURN NONE`.
-    pub fn return_none(self) -> CreateAnyStatement<M, ReturnNone, C> {
-        self.with_mode(ReturnNone)
-    }
-
-    /// `RETURN NULL`: one `NULL` per created record.
-    pub fn return_null(self) -> CreateAnyStatement<M, ReturnNull, C> {
-        self.with_mode(ReturnNull)
-    }
-
-    /// `RETURN AFTER`: each created record, as its variant.
-    pub fn return_after(self) -> CreateAnyStatement<M, ReturnAfter<M>, C> {
-        self.with_mode(ReturnAfter::explicit())
-    }
-
-    /// `RETURN DIFF`: for each record, the JSON Patch operations, not tied to a variant.
-    pub fn return_diff(self) -> CreateAnyStatement<M, ReturnDiff, C> {
-        self.with_mode(ReturnDiff)
-    }
-
     fn with_mode<N: ReturnMode>(self, mode: N) -> CreateAnyStatement<M, N, C> {
         CreateAnyStatement {
             targets: self.targets,
@@ -217,12 +194,9 @@ impl<M: Models, R: ReturnMode, C: Cardinality> Statement for CreateAnyStatement<
         if C::ONLY {
             out.push_str("ONLY ");
         }
-        for (index, target) in self.targets.iter().enumerate() {
-            if index > 0 {
-                out.push_str(", ");
-            }
+        out.push_joined_with(&self.targets, ", ", |out, target| {
             target.render::<M>(out);
-        }
+        });
         if self.targets.is_empty() {
             out.push_error("a CREATE statement needs at least one target");
         }
@@ -233,6 +207,8 @@ impl<M: Models, R: ReturnMode, C: Cardinality> Statement for CreateAnyStatement<
         }
     }
 }
+
+return_methods!([M: Models] CreateAnyStatement<M> { none, null, after, diff });
 
 impl_statement!([M: Models, R: ReturnMode, C: Cardinality] CreateAnyStatement<M, R, C>);
 
