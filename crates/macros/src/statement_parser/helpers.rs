@@ -1,10 +1,24 @@
-use crate::helpers::get_crate_name;
-use quote::format_ident;
+use std::cell::Cell;
+
+use proc_macro2::Span;
 use syn::Ident;
 
+thread_local! {
+    /// The index of the next local the current expansion generates. Each query macro resets it
+    /// before it parses its input, so the names depend only on that input.
+    static NEXT_LOCAL: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Starts the numbering of generated locals over, for a new expansion.
+pub fn reset_variable_names() {
+    NEXT_LOCAL.set(0);
+}
+
+/// A fresh name for a local that a query macro generates. It resolves with mixed-site hygiene, so
+/// it can't collide with a name the caller writes, nor with the locals of another expansion
+/// (nested `chain!`s included, which each have their own hygiene context). The index keeps the
+/// locals of one expansion apart, and the same input always expands to the same names.
 pub fn generate_variable_name() -> Ident {
-    // Already a valid identifier: the crate path is one, and a simple uuid is lowercase hex.
-    let sanitized_uuid = uuid::Uuid::new_v4().simple();
-    let crate_name = get_crate_name(false);
-    format_ident!("_{crate_name}__private__internal_variable_prefix__{sanitized_uuid}")
+    let index = NEXT_LOCAL.replace(NEXT_LOCAL.get() + 1);
+    Ident::new(&format!("__umbriel_local_{index}"), Span::mixed_site())
 }
