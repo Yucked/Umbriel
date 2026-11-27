@@ -266,8 +266,9 @@ mod lifecycle {
     }
 
     /// L12: dropping a stream ends its live query on the server, leaves other subscriptions
-    /// working, and surfaces nothing. The test never issues a `KILL`: the SDK sends it from a task
-    /// of its own, so the table's live queries are counted until only the watcher's remains.
+    /// working, and surfaces nothing. The test never issues a `KILL`: the stream's drop sends it
+    /// from a task of its own, so the table's live queries are counted until only the watcher's
+    /// remains. The SDK's own drop `KILL` runs in a new, empty session and ends nothing.
     #[tokio::test]
     async fn dropping_a_stream_leaves_the_others() {
         let (db, _guard) = db().await;
