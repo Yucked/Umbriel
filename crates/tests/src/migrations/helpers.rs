@@ -323,6 +323,19 @@ impl Project {
         resources: impl DbResources,
         prompter: MockPrompter,
     ) {
+        self.try_run(command, resources, prompter)
+            .await
+            .expect("the command succeeds");
+    }
+
+    /// Runs `command` as [`run`](Self::run) does and returns its outcome, for the commands a
+    /// test expects to fail.
+    pub async fn try_run(
+        &self,
+        command: impl Into<SubCommand>,
+        resources: impl DbResources,
+        prompter: MockPrompter,
+    ) -> MigrationResult<()> {
         let connection = DatabaseConnection::connected(
             UrlDb::Others(Endpoint::Main.url()),
             self.db.clone(),
@@ -330,7 +343,7 @@ impl Project {
         );
         let mut migrator = Migrator::connected(connection, self.dir.clone(), self.mode);
         migrator.set_cmd(command.into());
-        migrator.run_test(Some(resources), prompter).await;
+        migrator.run_fn(resources, prompter).await
     }
 
     /// The migration files' base names, oldest first, one per migration (a two-way pair counts
