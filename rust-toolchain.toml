@@ -1,3 +1,5 @@
 [toolchain]
-channel = "nightly"
+# A dated nightly: diagnostics change between nightlies, and the trybuild `.stderr` files pin them.
+# This is the 2026-11-26 release (rustc 1.102.0-nightly 6c709eb42 2026-11-25).
+channel = "nightly-2026-11-26"
 components = ["rustfmt", "clippy"]
