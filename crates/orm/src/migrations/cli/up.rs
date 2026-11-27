@@ -1,18 +1,32 @@
 use crate::migrations::*;
 
 use clap::Args;
-use typed_builder::TypedBuilder;
 
 /// Applies pending migrations: all of them (`up`, `up --latest`), a number of them
 /// (`up --number 2`), or those up to and including one (`up --till
 /// 20240101120000_create_users`), named by its timestamp and name.
-#[derive(Args, Debug, TypedBuilder, Clone, Default)]
+#[derive(Args, Debug, Clone, Default)]
 pub struct Up {
     #[command(flatten)]
     pub(crate) fast_forward: FastForwardDelta,
 }
 
 impl Up {
+    /// Applies pending migrations as `strategy` says.
+    pub fn new(strategy: UpdateStrategy) -> Self {
+        let mut fast_forward = FastForwardDelta {
+            latest: false,
+            number: None,
+            till: None,
+        };
+        match strategy {
+            UpdateStrategy::Latest => fast_forward.latest = true,
+            UpdateStrategy::Number(number) => fast_forward.number = Some(number),
+            UpdateStrategy::Till(till) => fast_forward.till = Some(till),
+        }
+        Self { fast_forward }
+    }
+
     /// How far to apply pending migrations.
     pub fn update_strategy(&self) -> UpdateStrategy {
         UpdateStrategy::from(&self.fast_forward)
@@ -20,22 +34,19 @@ impl Up {
 }
 
 /// The arguments for applying pending migrations; at most one is given, and none means all.
-#[derive(Args, Debug, Clone, TypedBuilder)]
+#[derive(Args, Debug, Clone)]
 #[group(required = false, multiple = false)]
 pub struct FastForwardDelta {
     /// Apply every pending migration
     #[arg(long)]
-    #[builder(default)]
     pub(crate) latest: bool,
 
     /// Apply this many pending migrations
     #[arg(short, long)]
-    #[builder(default, setter(strip_option))]
     pub(crate) number: Option<u32>,
 
     /// Apply pending migrations up to and including this one
     #[arg(short, long)]
-    #[builder(default, setter(strip_option))]
     pub(crate) till: Option<MigrationFilename>,
 }
 
