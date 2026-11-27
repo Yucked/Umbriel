@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use surrealdb::Connection;
 
 use crate::{DbResources, Raw, Runnable, statements::begin_transaction};
@@ -27,7 +25,7 @@ impl<C: Connection> RightDatabase<C> {
         {
             transaction = transaction.query(definition);
         }
-        transaction.commit_transaction().run(self.db()).await?;
+        transaction.commit_transaction().run(self.0.db()).await?;
         Ok(())
     }
 
@@ -51,13 +49,5 @@ impl<C: Connection> RightDatabase<C> {
         .into_iter()
         .flatten()
         .collect()
-    }
-}
-
-impl<C: Connection> Deref for RightDatabase<C> {
-    type Target = MigratorDatabase<C>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }

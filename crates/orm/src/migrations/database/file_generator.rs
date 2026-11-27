@@ -96,7 +96,7 @@ impl<C: Connection> ComparisonDatabase<C> {
     /// Removes both databases, by name, and returns `outcome` unless a removal failed (see
     /// [`remove_comparison`]).
     async fn finish<T>(self, outcome: MigrationResult<T>) -> MigrationResult<T> {
-        let namespace = self.left.namespace.clone();
+        let namespace = self.left.0.namespace.clone();
         remove_comparison(
             &namespace,
             [self.left.0.removal(), self.right.0.removal()],
@@ -137,8 +137,8 @@ impl<C: Connection> ComparisonDatabase<C> {
             name: self.user.clone(),
         };
         Ok((
-            self.left.schema().await?.without(&user),
-            self.right.schema().await?.without(&user),
+            self.left.0.schema().await?.without(&user),
+            self.right.0.schema().await?.without(&user),
         ))
     }
 }

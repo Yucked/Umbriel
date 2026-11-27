@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use surrealdb::Connection;
 
 use super::db_runner::run_transaction;
@@ -12,14 +10,6 @@ pub struct LeftDatabase<C: Connection>(
     pub MigratorDatabase<C>,
 );
 
-impl<C: Connection> Deref for LeftDatabase<C> {
-    type Target = MigratorDatabase<C>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl<C: Connection> LeftDatabase<C> {
     /// Applies every two-way migration's up file in order, each in its own transaction.
     pub async fn run_twoway_up_migrations(
@@ -28,7 +18,7 @@ impl<C: Connection> LeftDatabase<C> {
         create_migration_table: bool,
     ) -> MigrationResult<()> {
         for migration in file_manager.get_two_way_migrations_sorted_asc(create_migration_table)? {
-            run_transaction(self.db(), migration.up.content.to_string()).await?;
+            run_transaction(self.0.db(),migration.up.content.to_string()).await?;
         }
         Ok(())
     }
@@ -40,7 +30,7 @@ impl<C: Connection> LeftDatabase<C> {
         create_migration_table: bool,
     ) -> MigrationResult<&Self> {
         for migration in fm.get_oneway_migrations_sorted_asc(create_migration_table)? {
-            run_transaction(self.db(), migration.content().to_string()).await?;
+            run_transaction(self.0.db(),migration.content().to_string()).await?;
         }
         Ok(self)
     }
