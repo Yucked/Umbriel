@@ -3,15 +3,15 @@
 
 use std::collections::BTreeMap;
 
-use surrealdb::{opt::auth::Record, types::Value};
+use surrealdb::opt::auth::Record;
 use umbriel::{
-    Operatable, Param, Raw, Render, Runnable,
+    Error, Operatable, Param, Raw, Render, Runnable,
     statements::{define_access, define_param, record_access},
 };
 use umbriel_tests::*;
 
-/// A record user may read a `PERMISSIONS FULL` param, and gets nothing for a `PERMISSIONS NONE`
-/// one (S23, left by #13 for #15's record-access setup).
+/// A record user may read a `PERMISSIONS FULL` param, and reading a `PERMISSIONS NONE` one is
+/// refused as `NotAllowed` (S23, left by #13 for #15's record-access setup).
 #[tokio::test]
 async fn permissions_decide_what_a_record_user_reads() {
     let (db, guard) = db().await;
@@ -55,8 +55,11 @@ async fn permissions_decide_what_a_record_user_reads() {
     .await;
     let public: String = read(&user, "RETURN $public;").await;
     assert_eq!(public, "Hello");
-    let secret: Value = read(&user, "RETURN $secret;").await;
-    assert_eq!(secret, Value::None, "PERMISSIONS NONE hides the param");
+    match Raw::new("RETURN $secret;").run(&user).await {
+        Err(Error::NotAllowed { .. }) => {}
+        Err(other) => panic!("expected NotAllowed, got {other}"),
+        Ok(_) => panic!("PERMISSIONS NONE lets a record user read the param"),
+    }
 }
 
 #[test]
