@@ -68,10 +68,11 @@ impl<Q> Runnable for Q where Q: Queryable {}
 /// Checks that every field is one of `T`'s record links, comparing rendered paths, so a caller's
 /// `Field::new("author")`, a `Field::raw("author")` and the generated schema field all match.
 fn validate_fields_to_fetch<T: Model>(linked_fields_to_fetch: &[Field]) -> Result<()> {
+    // Compared as rendered paths, so raw, generated and ordinary field paths match.
     let linked_fields = T::get_linked_fields()
         .iter()
         .map(Render::to_debug_sql)
-        .collect::<Vec<_>>();
+        .collect::<std::collections::HashSet<_>>();
     let unfetchable = linked_fields_to_fetch
         .iter()
         .map(Render::to_debug_sql)
@@ -90,7 +91,11 @@ fn validate_fields_to_fetch<T: Model>(linked_fields_to_fetch: &[Field]) -> Resul
 /// of an array too (2.x needed `.*.*` for arrays). A link to a missing record becomes `NULL`.
 pub(crate) fn link_projections(linked_fields: Vec<Field>) -> Projections {
     std::iter::once(crate::All.into())
-        .chain(linked_fields.iter().map(|field| field.all().into()))
+        .chain(
+            linked_fields
+                .into_iter()
+                .map(|field| field.into_all().into()),
+        )
         .collect::<Vec<ValueLike>>()
         .into()
 }
