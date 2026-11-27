@@ -498,4 +498,49 @@ mod behaviour {
             "a token without the required audience is not allowed"
         );
     }
+
+    /// A synthetic RS256 key pair, the one `test_signin_record_with_jwt_issuer` in
+    /// `surrealdb-core` 3.3.4's `iam/signin.rs` uses. Test data only; it protects nothing.
+    const RS256_PUBLIC_KEY: &str = include_str!("../../fixtures/jwt_rs256_public.pem");
+    const RS256_PRIVATE_KEY: &str = include_str!("../../fixtures/jwt_rs256_private.pem");
+
+    /// Asymmetric `WITH ISSUER KEY`: SurrealDB signs the tokens it issues with the private key,
+    /// and the public key verifies them. Once the access verifies with a shared HS512 key
+    /// instead, the same token is refused.
+    #[tokio::test]
+    async fn an_asymmetric_issuer_key_signs_what_the_public_key_verifies() {
+        let (db, guard) = db().await;
+        run(
+            &db,
+            define_access("account").on_database().record(
+                umbriel::statements::record_access()
+                    .signup(signup_expression())
+                    .signin(signin_expression())
+                    .with_jwt(
+                        jwt_access()
+                            .algorithm(JwtAlgorithm::RS256)
+                            .key(RS256_PUBLIC_KEY.trim_end())
+                            .with_issuer_key(RS256_PRIVATE_KEY.trim_end()),
+                    ),
+            ),
+        )
+        .await;
+        let token = guest_in(&guard)
+            .await
+            .signup(person(&guard, "account", "Alice", "example-password"))
+            .await
+            .expect("signed up with a token signed by the private key")
+            .access;
+        guest_in(&guard)
+            .await
+            .authenticate(token.clone())
+            .await
+            .expect("the public key verifies the issued token");
+
+        run(&db, record_with_audience(&[])).await;
+        assert!(
+            guest_in(&guard).await.authenticate(token).await.is_err(),
+            "an RS256 token is refused once the access verifies with a shared key"
+        );
+    }
 }
