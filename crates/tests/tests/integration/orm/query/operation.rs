@@ -1,4 +1,4 @@
-//! The operators added in `orm/src/traits/operation.rs`: `??`, `?:`, `%`, `!`, `!!` and unary
+//! The operators added in `orm/src/query/operation.rs`: `??`, `?:`, `%`, `!`, `!!` and unary
 //! `-`, rendered and evaluated by SurrealDB, and kept in their precedence.
 
 use std::collections::BTreeMap;

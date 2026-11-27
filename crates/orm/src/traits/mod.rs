@@ -2,7 +2,6 @@ pub(crate) mod access;
 pub(crate) mod db_resources;
 pub(crate) mod general;
 pub(crate) mod model;
-pub(crate) mod operation;
 pub(crate) mod patch_op;
 pub(crate) mod raw;
 pub(crate) mod setter;

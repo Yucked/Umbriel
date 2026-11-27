@@ -17,6 +17,7 @@ pub(crate) mod interval;
 pub(crate) mod links;
 pub(crate) mod merge;
 pub(crate) mod object;
+pub(crate) mod operation;
 pub(crate) mod ordinal;
 pub(crate) mod param;
 pub(crate) mod params_standard;

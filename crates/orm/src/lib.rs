@@ -73,7 +73,7 @@ pub use traits::model::{
     Edge, FieldMetadata, Links, Model, Node, Object, SchemaGetter, SurrealCrud, SurrealCrudNode,
     SurrealRead, Writable,
 };
-pub use traits::operation::{Match, Operatable, Operation, Operator, negate, not, truthy};
+pub use query::operation::{Match, Operatable, Operation, Operator, negate, not, truthy};
 pub use traits::patch_op::{PatchOp, PatchOpConversionError, Patchable};
 pub use traits::raw::Raw;
 pub use traits::setter::{

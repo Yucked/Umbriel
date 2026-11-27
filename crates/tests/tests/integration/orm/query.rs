@@ -11,6 +11,7 @@ mod flatten;
 mod function;
 mod links;
 mod merge;
+mod operation;
 mod param;
 mod params_standard;
 mod patch;
