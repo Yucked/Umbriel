@@ -78,16 +78,6 @@ impl Default for RollbackOptions {
 }
 
 impl RollbackOptions {
-    /// Rolls back the previous migration in strict mode.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Whether the mode is strict.
-    pub fn is_strict(&self) -> bool {
-        self.mode == Mode::Strict
-    }
-
     /// Sets how far to roll back.
     pub fn strategy(mut self, rollback_strategy: RollbackStrategy) -> Self {
         self.rollback_strategy = rollback_strategy;
@@ -194,7 +184,7 @@ impl MigrationRunner {
                     select(All)
                         .from(Migration::table())
                         .where_(
-                            cond(timestamp.gt(timestamp_value))
+                            cond(timestamp.greater_than(timestamp_value))
                                 .or(cond(timestamp.equal(timestamp_value))
                                     .and(name.equal(file_cursor.to_string()))),
                         )
@@ -304,7 +294,7 @@ impl MigrationRunner {
 
         let pending_migrations = mig_config
             .get_migrations_filenames(false)?
-            .all()
+            .into_vec()
             .into_iter()
             .filter(|filename| {
                 latest_migration.as_ref().is_none_or(|latest_migration| {
@@ -356,7 +346,7 @@ impl MigrationRunner {
         migrations_from_db: Vec<Migration>,
         mode: &Mode,
     ) -> MigrationResult<(Vec<String>, Vec<PathBuf>)> {
-        if mode.is_strict() {
+        if *mode == Mode::Strict {
             for (m_from_file, m_from_db) in
                 migrations_to_rollback.iter().zip(migrations_from_db.iter())
             {
@@ -466,6 +456,10 @@ impl MigrationRunner {
             run_transaction(db, format!("{guard}\n{content}\n{record}"))
                 .await
                 .map_err(|error| match error {
+                    // The history check is a `THROW` in the migration's transaction. SDK 3.3.4
+                    // marks thrown errors (`is_thrown`) but carries no code to tell them apart,
+                    // and a migration's own SQL may throw too, so only the message identifies
+                    // this one.
                     MigrationError::ProblemWithQuery(ref inner)
                         if inner.to_string().contains(Migration::HISTORY_CHANGED) =>
                     {
@@ -500,27 +494,18 @@ impl MigrationRunner {
                 pending.into_iter().take(count as usize).collect::<Vec<_>>()
             }
             UpdateStrategy::Till(filecursor) => {
-                let pending_migs = pending;
-
-                let mut migration_found = false;
-                let mut filtered_migs: Vec<PendingMigrationFile> = vec![];
-
-                for mig in pending_migs {
-                    filtered_migs.push(mig.clone());
-                    // if *mig.name_forward() == filecursor {
-                    if mig.name_forward().to_up() == filecursor.to_up() {
-                        migration_found = true;
-                        break;
-                    }
-                }
-
-                if !migration_found {
+                let mut pending = pending;
+                let target = filecursor.to_up();
+                let Some(position) = pending
+                    .iter()
+                    .position(|mig| mig.name_forward().to_up() == target)
+                else {
                     return Err(MigrationError::MigrationNotFoundFromPendingMigrations(
                         filecursor,
                     ));
-                }
-
-                filtered_migs
+                };
+                pending.truncate(position + 1);
+                pending
             }
         };
 
@@ -583,8 +568,7 @@ impl MigrationRunner {
             .filter(|name| db_migs.contains(name))
             .collect::<Vec<_>>();
 
-        // TODO:: Check that the files are contiguous?
-        if mode.is_strict() && filtered_local_migrations.len() != db_migs.len() {
+        if mode == Mode::Strict && filtered_local_migrations.len() != db_migs.len() {
             return Err(MigrationError::InvalidMigrationState {
                 db_migration_count: db_migs.len(),
                 local_dir_migration_count: filtered_local_migrations.len(),
