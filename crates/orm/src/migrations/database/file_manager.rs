@@ -5,21 +5,20 @@ use std::{
 
 use crate::DbResources;
 use surrealdb::{Connection, Surreal, engine::any::Any};
-use typed_builder::TypedBuilder;
 
 use crate::migrations::*;
 
-/// Where the migration files are and how they are checked.
-#[derive(Debug, Clone, Default, TypedBuilder)]
+/// Where the migration files are and how they are checked. Built with [`new`](Self::new) and
+/// the consuming setters.
+#[derive(Debug, Clone, Default)]
 pub struct MigrationConfig {
     /// How closely migration files are checked against the history.
-    pub mode: Mode,
+    mode: Mode,
     /// The migration directory relative to `CARGO_MANIFEST_DIR`; `migrations` by default.
-    pub custom_path: Option<PathBuf>,
+    custom_path: Option<PathBuf>,
     /// Whether migrations are one-way or two-way. `None` until known: the directory cannot tell
     /// before it is initialized.
-    #[builder(default)]
-    pub migration_flag: Option<MigrationFlag>,
+    migration_flag: Option<MigrationFlag>,
 }
 
 impl MigrationConfig {
@@ -49,18 +48,6 @@ impl MigrationConfig {
     /// The mode.
     pub fn mode(&self) -> Mode {
         self.mode
-    }
-
-    /// Switches to strict mode.
-    pub fn make_strict(mut self) -> Self {
-        self.mode = Mode::Strict;
-        self
-    }
-
-    /// Switches to lax mode.
-    pub fn relax(mut self) -> Self {
-        self.mode = Mode::Lax;
-        self
     }
 
     /// Sets the migration directory, relative to `CARGO_MANIFEST_DIR`.
@@ -130,17 +117,25 @@ impl MigrationConfig {
             .as_ref()
             .map_or(default_path, |fp| cargo_manifests_dir.join(Path::new(&fp)));
 
-        if path.exists() && path.is_dir() {
-            Ok(path)
-        } else {
-            if create_dir_if_not_exists {
-                fs::create_dir(&path).map_err(|e| MigrationError::IoError(e.to_string()))?;
-                return Ok(path);
-            }
-            Err(MigrationError::MigrationDirectoryDoesNotExist(
-                path.to_string_lossy().to_string(),
-            ))
+        let exists = fs::exists(&path).map_err(|source| MigrationError::Io {
+            action: "checking the migration directory",
+            path: path.clone(),
+            source,
+        })?;
+        if exists && path.is_dir() {
+            return Ok(path);
         }
+        if create_dir_if_not_exists {
+            fs::create_dir(&path).map_err(|source| MigrationError::Io {
+                action: "creating the migration directory",
+                path: path.clone(),
+                source,
+            })?;
+            return Ok(path);
+        }
+        Err(MigrationError::MigrationDirectoryDoesNotExist(
+            path.to_string_lossy().to_string(),
+        ))
     }
 
     /// The migration directory's file names, sorted.
@@ -149,26 +144,19 @@ impl MigrationConfig {
         create_dir_if_not_exists: bool,
     ) -> MigrationResult<MigrationFilenames> {
         let migration_dir_path = self.resolve_migration_directory(create_dir_if_not_exists)?;
-        let migration_dir_path_str = migration_dir_path.to_string_lossy().to_string();
+        log::info!("Migration dir path: {}", migration_dir_path.display());
 
-        log::info!("Migration dir path: {migration_dir_path_str}");
-
-        let migrations = fs::read_dir(&migration_dir_path).map_err(|e| {
-            MigrationError::IoError(format!(
-                "Failed to read migration directory: {migration_dir_path_str}. Error: {e}"
-            ))
-        })?;
-
-        log::info!("Migration dir path: {migration_dir_path_str}");
+        let read_error = |source| MigrationError::Io {
+            action: "reading the migration directory",
+            path: migration_dir_path.clone(),
+            source,
+        };
+        let migrations = fs::read_dir(&migration_dir_path).map_err(read_error)?;
 
         let mut filenames = vec![];
 
         for migration in migrations {
-            let migration = migration.map_err(|e| {
-                MigrationError::IoError(format!(
-                    "Failed to read migration directory: {migration_dir_path_str}. Error: {e}"
-                ))
-            })?;
+            let migration = migration.map_err(read_error)?;
             let filename: MigrationFilename = migration
                 .file_name()
                 .to_string_lossy()
@@ -217,14 +205,6 @@ impl MigrationConfig {
 #[derive(Debug, Clone)]
 pub struct FileManagerUni(MigrationConfig);
 
-impl std::ops::Deref for FileManagerUni {
-    type Target = MigrationConfig;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl FileManagerUni {
     pub(crate) fn new(file_manager: MigrationConfig) -> Self {
         Self(file_manager)
@@ -251,7 +231,7 @@ impl FileManagerUni {
         MigratorDatabase::generate_migrations(
             comparison,
             migration_basename,
-            self,
+            &self.0,
             codebase_resources,
             prompter,
         )
@@ -307,14 +287,6 @@ impl FileManagerUni {
 /// Generates, applies, rolls back and lists two-way migrations.
 #[derive(Debug, Clone)]
 pub struct FileManagerBi(MigrationConfig);
-
-impl std::ops::Deref for FileManagerBi {
-    type Target = MigrationConfig;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 impl FileManagerBi {
     pub(crate) fn new(file_manager: MigrationConfig) -> Self {
@@ -387,7 +359,7 @@ impl FileManagerBi {
         db: &Surreal<Any>,
         rollback_options: RollbackOptions,
     ) -> MigrationResult<()> {
-        MigrationRunner::rollback_migrations(db, self, rollback_options).await?;
+        MigrationRunner::rollback_migrations(db, &self.0, rollback_options).await?;
 
         Ok(())
     }
