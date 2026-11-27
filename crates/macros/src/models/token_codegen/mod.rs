@@ -44,20 +44,20 @@ pub struct Codegen<'a> {
     /// Usually, this is every field except the many-to-many relation fields which
     /// are not serialized because they are not directly part of the struct.
     /// They are readonly fields that are accessed through the relation field.
-    pub serialized_fmt_db_field_names_instance: Vec<SerializableField>,
+    pub serialized_fmt_db_field_names_instance: Vec<TokenStream>,
     /// The stored names `object!` takes: the stored fields without the computed ones, which are
     /// never written.
-    pub object_field_names: Vec<SerializableField>,
+    pub object_field_names: Vec<TokenStream>,
     /// The name of the all fields that are linked i.e line_one, line_many, or line_self.
-    pub linked_fields: Vec<LinkedField>,
+    pub linked_fields: Vec<TokenStream>,
     /// The names of link_one fields
-    pub link_one_fields: Vec<LinkOneField>,
+    pub link_one_fields: Vec<TokenStream>,
     /// The names of link_self fields
-    pub link_self_fields: Vec<LinkSelfField>,
+    pub link_self_fields: Vec<TokenStream>,
     /// The names of link_one and link_self fields
-    pub link_one_and_self_fields: Vec<LinkOneAndSelfField>,
+    pub link_one_and_self_fields: Vec<TokenStream>,
     /// The names of link_many fields
-    pub link_many_fields: Vec<LinkManyField>,
+    pub link_many_fields: Vec<TokenStream>,
     /// Generated example: pub timeWritten: Field,
     /// key(normalized_field_name)-value(Field) e.g pub out: Field, of field name and Field type
     /// to build up struct for generating fields of a Schema of the Edge
@@ -71,13 +71,13 @@ pub struct Codegen<'a> {
     ///     pub timeWritten: __6Writes11timeWrittenField<In, Out>,
     /// }
     /// ```
-    pub schema_struct_fields_types_kv: Vec<SchemaStructFieldsTypesKv>,
+    pub schema_struct_fields_types_kv: Vec<TokenStream>,
 
     pub field_wrapper_type_custom_implementations: Vec<FieldSetterImplTokens>,
 
     /// Generated example: `timeWritten: ___________path.clone().with_field("timeWritten").into(),`
     /// Each schema field is the schema's path followed by the field's stored name.
-    pub schema_struct_fields_names_kv: Vec<SchemaStructFieldsNamesKv>,
+    pub schema_struct_fields_names_kv: Vec<TokenStream>,
     /// The schema's field idents, for its fieldwise `Clone`.
     pub schema_field_idents: Vec<TokenStream>,
 
@@ -90,7 +90,7 @@ pub struct Codegen<'a> {
     ///                pub writtenBooks: AliasName,
     ///          }
     /// ```
-    pub aliases_struct_fields_types_kv: Vec<AliasesStructFieldsTypesKv>,
+    pub aliases_struct_fields_types_kv: Vec<TokenStream>,
 
     /// Generated example: pub writtenBooks: "writtenBooks".into(),
     /// This is used to build the actual instance of the struct with aliases
@@ -101,7 +101,7 @@ pub struct Codegen<'a> {
     ///                pub writtenBooks: AliasName,
     /// }
     /// ```
-    pub aliases_struct_fields_names_kv: Vec<AliasesStructFieldsNamesKv>,
+    pub aliases_struct_fields_names_kv: Vec<TokenStream>,
 
     /// Field names after taking into consideration
     /// serde serialized renaming or casings
@@ -127,7 +127,7 @@ pub struct Codegen<'a> {
     /// #crate_name::validators::assert_type_eq_all!(LinkOne<Book>, LinkOne<Book>);
     /// ```
     /// Perform all necessary static checks
-    pub static_assertions: Vec<StaticAssertionToken>,
+    pub static_assertions: Vec<TokenStream>,
 
     /// When a field references another model as Link, we want to generate a method for that
     /// to be able to access the foreign fields
@@ -139,20 +139,20 @@ pub struct Codegen<'a> {
     /// ```
     pub record_link_fields_methods: Vec<LinkFieldTraversalMethodToken>,
     /// Each stored field's name and definitions, written for the table `_____table`.
-    pub field_metadata: Vec<FieldMetadataToken>,
+    pub field_metadata: Vec<TokenStream>,
     /// The types of flattened objects, whose fields are stored as this model's own.
     pub flattened_objects: Vec<TokenStream>,
     /// The Rust names of flattened fields: `object!` requires them, and rejects them since their
     /// schemas are objects rather than assignable fields.
     pub flattened_field_keys: Vec<TokenStream>,
     pub node_edge_metadata: NodeEdgeMetadataLookupTable<'a>,
-    pub fields_relations_aliased: Vec<FieldsRelationsAliased>,
+    pub fields_relations_aliased: Vec<TokenStream>,
     /// e.g `pub time: umbriel::Patch<Time>` in `<Model>Patch`.
-    pub patch_fields: Vec<PatchField>,
+    pub patch_fields: Vec<TokenStream>,
     /// e.g `time: umbriel::Patch::Keep`.
-    pub patch_defaults: Vec<PatchDefault>,
+    pub patch_defaults: Vec<TokenStream>,
     /// Adds the assignment of a patch field that is not `Keep`.
-    pub patch_setters: Vec<PatchSetter>,
+    pub patch_setters: Vec<TokenStream>,
     /// e.g `pub time: umbriel::Merge<Time, <Time as umbriel::Object>::Merge>` in `<Model>Merge`.
     pub merge_fields: Vec<TokenStream>,
     /// e.g `time: umbriel::Merge::Keep`.
@@ -163,7 +163,7 @@ pub struct Codegen<'a> {
     pub link_path_fields: Vec<TokenStream>,
     /// e.g `wallet: umbriel::__private::link_path("wallet")`, under the field's stored name.
     pub link_path_inits: Vec<TokenStream>,
-    pub renamed_serialized_fields_kv: Vec<RenamedSerializedFields>,
+    pub renamed_serialized_fields_kv: Vec<TokenStream>,
     /// The Rust field holding the record's `id`.
     pub record_id_field: Option<syn::Ident>,
 
