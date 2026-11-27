@@ -1,29 +1,12 @@
-// Statement syntax
-// UPSERT [ ONLY ] @targets
-// 	[ WITH NOINDEX | WITH INDEX @indexes ]
-// 	[ CONTENT @value
-// 	  | MERGE @value
-// 	  | PATCH @value
-// 	  | REPLACE @value
-// 	  | [ SET @field = @value, ... | UNSET @field, ... ]
-// 	]
-// 	[ WHERE @condition ]
-// 	[ RETURN NONE | RETURN BEFORE | RETURN AFTER | RETURN DIFF | RETURN @statement_param, ... | RETURN VALUE @statement_param ]
-// 	[ TIMEOUT @duration ]
-// 	[ EXPLAIN [ FULL ]]
-// ;
+//! `UPSERT`. Syntax: <https://surrealdb.com/docs/surrealql/statements/upsert>.
+
 use std::marker::PhantomData;
 
-use surrealdb::types::SurrealValue;
-
-use crate::{
-    Conditional, DurationLike, Filter, Model, ModelMerge, PatchOp, Renderer, Setter, ValueLike,
-    Writable,
-};
+use crate::{Conditional, Filter, Model, Renderer, ValueLike, Writable};
 
 use super::{
     Cardinality, Explained, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
-    data::{DataClause, Unsettables},
+    data::DataClause,
     impl_statement,
     returning::return_methods,
     update::{TargettablesForUpdate, UpdateBody, update_clauses},
