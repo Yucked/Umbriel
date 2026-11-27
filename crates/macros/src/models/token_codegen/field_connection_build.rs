@@ -33,12 +33,11 @@ impl Codegen<'_> {
             .split_for_impl();
 
         self.schema_struct_fields_types_kv
-            .push(quote!(pub #field_ident_normalized: #field_wrapper #ty_generics, ).into());
+            .push(quote!(pub #field_ident_normalized: #field_wrapper #ty_generics, ));
 
         // The field's path is the model's path followed by its stored name.
         self.schema_struct_fields_names_kv.push(
-            quote!(#field_ident_normalized: #___________path.clone().with_field(#field_name_serialized).into(),)
-                .into(),
+            quote!(#field_ident_normalized: #___________path.clone().with_field(#field_name_serialized).into(),),
         );
         self.schema_field_idents
             .push(quote!(#field_ident_normalized));
