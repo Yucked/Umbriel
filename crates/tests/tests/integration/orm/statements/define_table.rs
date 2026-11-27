@@ -12,6 +12,76 @@ async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
 }
 
+/// A7 (#15): a record user reads only the rows `FOR select` lets it, and a write the table
+/// doesn't permit is refused.
+#[tokio::test]
+async fn permissions_restrict_a_record_user() {
+    use std::collections::BTreeMap;
+
+    use surrealdb::{opt::auth::Record, types::Value};
+    use umbriel::{
+        CrudType::{Create, Select},
+        NONE, Param, Raw,
+        statements::{define_access, for_permission, record_access},
+    };
+
+    let (db, guard) = db().await;
+    run(
+        &db,
+        define_table(Table::from("note"))
+            .permissions(
+                for_permission(Select).where_(Field::new("owner").equal(Param::new("auth"))),
+            )
+            // Never true for a signed-in record user.
+            .permissions(for_permission(Create).where_(Param::new("auth").is(NONE))),
+    )
+    .await;
+    run(
+        &db,
+        define_access("account").on_database().record(
+            record_access()
+                .signup(Raw::new("CREATE person SET name = $name"))
+                .signin(Raw::new("SELECT * FROM person WHERE name = $name")),
+        ),
+    )
+    .await;
+
+    let alice = guest(Endpoint::Main).await;
+    bounded(
+        "signing up",
+        alice.signup(Record {
+            namespace: guard.namespace().to_owned(),
+            database: guard.database().to_owned(),
+            access: "account".to_owned(),
+            params: BTreeMap::from([("name".to_owned(), "Alice".to_owned())]),
+        }),
+    )
+    .await;
+    bounded("selecting the test database", async {
+        alice
+            .use_ns(guard.namespace())
+            .use_db(guard.database())
+            .await
+    })
+    .await;
+    assert!(
+        succeeds(
+            &db,
+            "CREATE note:mine SET owner = (SELECT VALUE id FROM ONLY person WHERE name = 'Alice' LIMIT 1); \
+             CREATE note:theirs SET owner = person:bob;",
+        )
+        .await,
+        "the notes are created"
+    );
+    let visible: Vec<Value> = read(&alice, "SELECT VALUE id FROM note;").await;
+    assert_eq!(visible.len(), 1, "only the owned note: {visible:?}");
+
+    // Whether SurrealDB reports the refused write or returns nothing, nothing is written.
+    let _ = succeeds(&alice, "CREATE note:new SET owner = $auth;").await;
+    let count: i64 = read(&db, "RETURN count(SELECT * FROM note);").await;
+    assert_eq!(count, 2, "FOR create refuses the write");
+}
+
 mod rendering {
     use super::*;
 
@@ -119,7 +189,7 @@ pub struct Sale {
 pub fn totals() -> SelectStatement {
     select(All)
         .from(Table::new("sale"))
-        .where_(Field::new("amount").gte(10))
+        .where_(Field::new("amount").greater_than_or_equal(10))
 }
 
 /// Sales of at least 10, kept by SurrealDB from `sale`.
@@ -212,11 +282,15 @@ mod definitions {
         assert_sql(
             &define_table(Table::from("adult"))
                 .drop()
-                .as_(select(All).from(Table::from("user")).where_(age.gte(18)))
-                .permissions(for_permission(Select).where_(age.gte(18)))
+                .as_(
+                    select(All)
+                        .from(Table::from("user"))
+                        .where_(age.greater_than_or_equal(18)),
+                )
+                .permissions(for_permission(Select).where_(age.greater_than_or_equal(18)))
                 .permissions([
                     for_permission([Create, Delete]).where_(name.is("Alice")),
-                    for_permission(Update).where_(age.lte(130)),
+                    for_permission(Update).where_(age.less_than_or_equal(130)),
                 ]),
             "DEFINE TABLE adult DROP AS \n\tSELECT * FROM user WHERE age >= 18\n\
              PERMISSIONS\nFOR select\n\tWHERE age >= 18\n\
