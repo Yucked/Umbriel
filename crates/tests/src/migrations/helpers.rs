@@ -14,7 +14,8 @@ use umbriel::{
     migrations::{
         Basename, DatabaseConnection, Migration, MigrationConfig, MigrationFilename, MigrationFlag,
         MigrationResult, Migrator, MockPrompter, Mode, RenameOrDelete, ResourceKey, ResourceKind,
-        RightDatabase, RollbackOptions, Schema, SubCommand, UpdateStrategy, config::UrlDb,
+        RollbackOptions, Schema, SubCommand, UpdateStrategy, codebase_schema_queries,
+        config::UrlDb,
     },
     statements::begin_transaction,
 };
@@ -82,7 +83,7 @@ pub async fn schema_of(resources: &impl DbResources, flag: MigrationFlag) -> Sch
     let mut transaction = begin_transaction().query(Migration::define_table());
     for definition in Migration::define_fields(flag)
         .into_iter()
-        .chain(RightDatabase::<Any>::get_codebase_schema_queries(resources))
+        .chain(codebase_schema_queries(resources))
     {
         transaction = transaction.query(definition);
     }

@@ -4,9 +4,10 @@ use surrealdb::{Connection, Surreal, opt::auth};
 
 use crate::{
     DbResources, Raw, Runnable,
-    statements::{UserRole, define_database, define_user, remove_database},
+    statements::{UserRole, begin_transaction, define_database, define_user, remove_database},
 };
 
+use super::db_runner::run_transaction;
 use crate::migrations::{resources::SchemaDiff, *};
 
 /// The prefix of every comparison database's name, and of the generator's user in it, so the
@@ -63,10 +64,30 @@ impl<C: Connection> Comparison<C> {
 /// holds the codebase's schema.
 #[derive(Debug, Clone)]
 pub struct ComparisonDatabase<C: Connection> {
-    left: LeftDatabase<C>,
-    right: RightDatabase<C>,
+    /// The database the migration directory is replayed into.
+    left: MigratorDatabase<C>,
+    /// The database holding the codebase's schema.
+    right: MigratorDatabase<C>,
     /// The generator's user, defined in both databases.
     user: String,
+}
+
+/// The codebase's definitions in creation order (see [`ResourceKind`]), so each one's
+/// prerequisites exist when it runs: a module may load from a bucket, an analyzer may use a
+/// function, an index an analyzer, and an API a function or table.
+pub fn codebase_schema_queries(db_resources: &impl DbResources) -> Vec<Raw> {
+    let mut queries = db_resources.buckets();
+    queries.extend(db_resources.modules());
+    queries.extend(db_resources.functions());
+    queries.extend(db_resources.analyzers());
+    queries.extend(db_resources.params());
+    queries.extend(db_resources.sequences());
+    queries.extend(db_resources.accesses());
+    queries.extend(db_resources.users());
+    queries.extend(db_resources.tables());
+    queries.extend(db_resources.apis());
+    queries.extend(db_resources.configs());
+    queries
 }
 
 impl<C: Connection> ComparisonDatabase<C> {
@@ -87,7 +108,7 @@ impl<C: Connection> ComparisonDatabase<C> {
     /// each database's connection with a clone signed in as it.
     async fn sign_in(&mut self) -> MigrationResult<()> {
         let password = uuid::Uuid::new_v4().simple().to_string();
-        for database in [&mut self.left.0, &mut self.right.0] {
+        for database in [&mut self.left, &mut self.right] {
             database.sign_in(&self.user, &password).await?;
         }
         Ok(())
@@ -96,10 +117,10 @@ impl<C: Connection> ComparisonDatabase<C> {
     /// Removes both databases, by name, and returns `outcome` unless a removal failed (see
     /// [`remove_comparison`]).
     async fn finish<T>(self, outcome: MigrationResult<T>) -> MigrationResult<T> {
-        let namespace = self.left.0.namespace.clone();
+        let namespace = self.left.namespace.clone();
         remove_comparison(
             &namespace,
-            [self.left.0.removal(), self.right.0.removal()],
+            [self.left.removal(), self.right.removal()],
             outcome,
         )
         .await
@@ -115,19 +136,34 @@ impl<C: Connection> ComparisonDatabase<C> {
     ) -> MigrationResult<(Schema, Schema)> {
         let migration_flag = file_manager.migration_flag_checked()?;
         if replay_directory {
-            match migration_flag {
-                MigrationFlag::TwoWay => {
-                    self.left
-                        .run_twoway_up_migrations(file_manager, true)
-                        .await?;
-                }
-                MigrationFlag::OneWay => {
-                    self.left.run_oneway_migrations(file_manager, true).await?;
-                }
+            // Each migration's up (or only) file in order, each in its own transaction.
+            let contents = match migration_flag {
+                MigrationFlag::TwoWay => file_manager
+                    .get_two_way_migrations_sorted_asc(true)?
+                    .into_iter()
+                    .map(|pair| pair.up().content.to_string())
+                    .collect::<Vec<_>>(),
+                MigrationFlag::OneWay => file_manager
+                    .get_oneway_migrations_sorted_asc(true)?
+                    .into_iter()
+                    .map(|file| file.content().to_string())
+                    .collect(),
+            };
+            for content in contents {
+                run_transaction(self.left.db(), content).await?;
             }
         }
-        self.right
-            .run_codebase_schema_queries(codebase_resources, migration_flag)
+        // The history table and the codebase's definitions, in one transaction.
+        let mut transaction = begin_transaction().query(Migration::define_table());
+        for definition in Migration::define_fields(migration_flag)
+            .into_iter()
+            .chain(codebase_schema_queries(codebase_resources))
+        {
+            transaction = transaction.query(definition);
+        }
+        transaction
+            .commit_transaction()
+            .run(self.right.db())
             .await?;
         // Its password hash differs between the databases, so it would compare as a changed
         // secret.
@@ -137,8 +173,8 @@ impl<C: Connection> ComparisonDatabase<C> {
             name: self.user.clone(),
         };
         Ok((
-            self.left.0.schema().await?.without(&user),
-            self.right.0.schema().await?.without(&user),
+            self.left.schema().await?.without(&user),
+            self.right.schema().await?.without(&user),
         ))
     }
 }
@@ -169,8 +205,8 @@ pub async fn init_comparison_with<C: Connection>(
             }
         };
     let mut databases = ComparisonDatabase {
-        left: LeftDatabase(left),
-        right: RightDatabase(right),
+        left,
+        right,
         user: format!("{COMPARISON_PREFIX}{run}"),
     };
     match prepare(&mut databases).await {
