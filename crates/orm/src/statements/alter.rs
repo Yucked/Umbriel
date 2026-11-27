@@ -477,7 +477,7 @@ impl Statement for AlterFieldStatement {
         });
         self.default.render(out, "DEFAULT", FieldDefault::render);
         render_comment(&self.comment, out);
-        out.push(&self.permissions);
+        self.permissions.render_for_field(out);
     }
 }
 
@@ -1216,7 +1216,8 @@ impl_alter_common!(AlterModuleStatement);
 impl_definition!(AlterModuleStatement);
 
 /// Alters a system user: `ALTER USER [IF EXISTS] @name ON ROOT | NAMESPACE | DATABASE
-/// [PASSWORD @string | PASSHASH @string] [ROLES @role, …] [DURATION FOR TOKEN …, FOR SESSION …]
+/// [PASSWORD @string | PASSHASH @string] [PASSSCRAM @string] [ROLES @role, …]
+/// [DURATION FOR TOKEN …, FOR SESSION …]
 /// [COMMENT @string | DROP COMMENT]`.
 ///
 /// Unlike `DEFINE USER`, SurrealDB 3.3.4 takes the durations of `ALTER USER` as duration literals
@@ -1252,6 +1253,7 @@ impl AlterUserInit {
             level,
             if_exists: false,
             credential: None,
+            scram: None,
             roles: Vec::new(),
             token_duration: None,
             session_duration: None,
@@ -1282,6 +1284,7 @@ pub struct AlterUserStatement {
     level: crate::Level,
     if_exists: bool,
     credential: Option<super::define_user::UserCredential>,
+    scram: Option<String>,
     roles: Vec<super::UserRole>,
     token_duration: Option<Option<Duration>>,
     session_duration: Option<Option<Duration>>,
@@ -1289,6 +1292,12 @@ pub struct AlterUserStatement {
 }
 
 impl AlterUserStatement {
+    /// `PASSSCRAM`: replaces the SCRAM-SHA-256 verifier for SCRAM sign-in.
+    pub fn passscram(mut self, verifier: impl Into<String>) -> Self {
+        self.scram = Some(verifier.into());
+        self
+    }
+
     /// `PASSWORD`: replaces the credential with a plain-text password, which SurrealDB hashes.
     pub fn password(mut self, password: impl Into<super::define_user::Password>) -> Self {
         self.credential = Some(super::define_user::UserCredential::Password(
@@ -1331,6 +1340,7 @@ impl Statement for AlterUserStatement {
         if let Some(credential) = &self.credential {
             credential.render(out);
         }
+        super::define_user::push_scram(out, self.scram.as_ref());
         super::define_user::push_roles(out, &self.roles);
         let durations = [
             ("TOKEN", &self.token_duration),
