@@ -57,7 +57,7 @@ fn generated_bindings_are_ordered_through_nested_calls() {
         closure(["n"], |[n]| n.multiply(10).add(Field::new("offset")))
     );
     let (sql, vars) = mapped.to_query().expect("renders").into_parts();
-    assert_eq!(sql, "array::map($_p0, |$n| $n * $_p1 + offset)");
+    assert_eq!(sql, "array::map($_p0, |$n| ($n * $_p1) + offset)");
     assert_eq!(vars.len(), 2);
     assert_eq!(vars.get("_p0"), Some(&vec![1i64, 2].into_value()));
     assert_eq!(vars.get("_p1"), Some(&10i64.into_value()));
