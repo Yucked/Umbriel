@@ -294,7 +294,16 @@ impl Drop for Removal {
     }
 }
 
-/// Runs the removal `statement` on `endpoint`, in `namespace` when given.
+/// How many times a removal runs before its failure is reported. Work a test leaves running on
+/// the server, such as a concurrent index build, can make the removal's transaction conflict.
+const REMOVAL_ATTEMPTS: u32 = 5;
+
+/// The pause before a conflicting removal runs again.
+const REMOVAL_RETRY_DELAY: Duration = Duration::from_millis(100);
+
+/// Runs the removal `statement` on `endpoint`, in `namespace` when given. A transaction conflict
+/// ([`Retry::Safe`](umbriel::Retry::Safe)) is run again, up to [`REMOVAL_ATTEMPTS`] times, all
+/// within [`WAIT`].
 fn remove(endpoint: Endpoint, namespace: Option<&str>, statement: &str) -> Result<(), String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -307,13 +316,26 @@ fn remove(endpoint: Endpoint, namespace: Option<&str>, statement: &str) -> Resul
             if let Some(namespace) = namespace {
                 db.use_ns(namespace).await?;
             }
-            db.query(statement.to_owned())
-                .await
-                .and_then(IndexedResults::check)
+            let mut attempt = 1;
+            loop {
+                let error = match db
+                    .query(statement.to_owned())
+                    .await
+                    .and_then(IndexedResults::check)
+                {
+                    Ok(_) => return Ok(()),
+                    Err(error) => umbriel::Error::from(error),
+                };
+                if attempt == REMOVAL_ATTEMPTS || error.retry() != umbriel::Retry::Safe {
+                    return Err(error);
+                }
+                attempt += 1;
+                tokio::time::sleep(REMOVAL_RETRY_DELAY).await;
+            }
         })
         .await;
         match removed {
-            Ok(Ok(_)) => Ok(()),
+            Ok(Ok(())) => Ok(()),
             Ok(Err(error)) => Err(error.to_string()),
             Err(_) => Err(format!("no answer within {WAIT:?}")),
         }
