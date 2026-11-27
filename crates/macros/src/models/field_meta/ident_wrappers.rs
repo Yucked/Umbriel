@@ -20,10 +20,6 @@ macro_rules! create_ident_wrapper {
                             Err(darling::Error::custom("Expected a string literal."))
                         }
                     }
-                    // Expr::Verbatim(expr_verbatim) => {
-                    //     let ident = syn::parse2(expr_verbatim.clone().into_token_stream())?;
-                    //     Ok(TableNameIdent(ident))
-                    // }
                     ::syn::Expr::Path(expr_path) => {
                         let ident = expr_path
                             .path
