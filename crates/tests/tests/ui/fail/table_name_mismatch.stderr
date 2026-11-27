@@ -22,7 +22,7 @@ help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implem
   | impl<T: Model> SurrealValue for RecordId<T> {
   | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |         |
-  |         unsatisfied requirement introduced here: `_: Model`
+  |         unsatisfied requirement introduced here: `User: Model`
   = note: required for `umbriel::RecordId<User>` to implement `umbriel::surrealdb_types::SurrealValue`
 
 error[E0507]: cannot move out of dereference of `umbriel::RecordId<User>`
@@ -37,8 +37,6 @@ error[E0507]: cannot move out of dereference of `umbriel::RecordId<User>`
 note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
  --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
   |
-  | pub trait SurrealValue {
-...
   |     fn into_value(self) -> Value;
   |                   ^^^^
 help: you can `clone` the value and consume it, but this might not be your desired behavior

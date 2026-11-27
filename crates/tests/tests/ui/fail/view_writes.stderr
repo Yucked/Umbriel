@@ -76,7 +76,7 @@ note: the trait `Writable` must be implemented
    = note: the following trait defines an item `patch`, perhaps you need to implement it:
            candidate #1: `SurrealCrud`
 
-error[E0599]: no method named `merge` found for struct `SaleCopy` in the current scope
+error[E0599]: `SaleCopy` cannot be written to
   --> tests/ui/fail/view_writes.rs:34:23
    |
 17 | pub struct SaleCopy {
