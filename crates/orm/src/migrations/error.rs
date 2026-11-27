@@ -28,6 +28,32 @@ pub enum MigrationError {
         migration_name: String,
     },
 
+    /// `init` found migrations already in the directory.
+    #[error(
+        "Migrations already initialized. Run 'cargo run -- reset' to reset migration. You can also \
+        specify the '-r' or '--reversible' argument to set as reversible. Or delete the migrations \
+        directory and run 'cargo run -- init' again."
+    )]
+    AlreadyInitialized,
+
+    /// A command needs an argument, or an environment variable, that was not given.
+    #[error("{argument} is required for this command")]
+    MissingArgument {
+        /// The argument or variable, e.g. `--comparison-ns`.
+        argument: &'static str,
+    },
+
+    /// `down` was asked to roll back one-way migrations, which have no down files.
+    #[error(
+        "Cannot rollback one way migrations. Create a new migration to reverse the changes or run \
+        cargo run -- reset -r to use two way migrations"
+    )]
+    OneWayRollback,
+
+    /// The command line's database was used before it was connected.
+    #[error("the database is not connected")]
+    NotConnected,
+
     /// The history holds no migrations to roll back.
     #[error("No migrations have yet been registered in the database")]
     NoMigrationsRegisteredYetInDb,
