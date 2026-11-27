@@ -40,6 +40,3 @@ pub trait Conditional: Render + Into<ValueLike> {
         false
     }
 }
-
-/// Used for marking a struct used in UPDATE MERGE statement.
-pub trait DataUpdater {}
