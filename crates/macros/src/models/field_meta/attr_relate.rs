@@ -2,10 +2,9 @@ use crate::models::*;
 use darling::FromMeta;
 use proc_macro2::TokenStream;
 use quote::quote;
-use std::collections::HashSet;
 use syn::{
     Constraint, GenericArgument, Ident, Lifetime, Path, PathArguments, PathSegment, Type,
-    TypeParamBound, WhereClause,
+    TypeParamBound,
     visit::{self, Visit},
 };
 
@@ -32,18 +31,20 @@ impl EdgeType {
         edge_type_ident: &Ident,
         edge_types: &[Self],
     ) -> EdgeTypeWithAggregatedGenerics {
-        let mut common_lifetimes = HashSet::new();
-        let mut common_generics = HashSet::new();
+        // In the order the edge types first name them: the order of a type's generic arguments
+        // is part of the type, and the expansion must not depend on hash order.
+        let mut common_lifetimes = Vec::new();
+        let mut common_generics = Vec::new();
 
         for edge_type in edge_types {
             let mut visitor = UniqueTypeVisitor::default();
             visitor.visit_type(edge_type.inner());
 
-            for lt in visitor.lifetimes.iter() {
-                common_lifetimes.insert(lt.to_string());
+            for lt in visitor.lifetimes {
+                insert_once(&mut common_lifetimes, lt);
             }
-            for generic in visitor.generics.iter() {
-                common_generics.insert(generic.to_string());
+            for generic in visitor.generics {
+                insert_once(&mut common_generics, generic);
             }
         }
 
@@ -70,26 +71,29 @@ impl EdgeType {
     }
 }
 
+/// Adds `name` to `names` unless it's already there, keeping first-seen order.
+fn insert_once(names: &mut Vec<String>, name: String) {
+    if !names.contains(&name) {
+        names.push(name);
+    }
+}
+
+/// The lifetimes and type parameters a type names, each once, in the order it names them.
 #[derive(Default)]
 struct UniqueTypeVisitor {
-    lifetimes: HashSet<String>,
-    generics: HashSet<String>,
+    lifetimes: Vec<String>,
+    generics: Vec<String>,
 }
 
 impl<'ast> Visit<'ast> for UniqueTypeVisitor {
     fn visit_lifetime(&mut self, i: &'ast syn::Lifetime) {
-        self.lifetimes.insert(i.ident.to_string());
+        insert_once(&mut self.lifetimes, i.ident.to_string());
         visit::visit_lifetime(self, i);
     }
 
     fn visit_type_param(&mut self, i: &'ast syn::TypeParam) {
-        self.generics.insert(i.ident.to_string());
+        insert_once(&mut self.generics, i.ident.to_string());
         visit::visit_type_param(self, i);
-    }
-
-    fn visit_type(&mut self, i: &'ast Type) {
-        // Handle nested types by recursively visiting them
-        visit::visit_type(self, i);
     }
 
     // Visit path arguments to handle generics in paths, e.g., `Vec<T>`
@@ -143,7 +147,7 @@ impl<'ast> Visit<'ast> for UniqueTypeVisitor {
     }
 
     fn visit_constraint(&mut self, i: &'ast Constraint) {
-        self.generics.insert(i.ident.to_string());
+        insert_once(&mut self.generics, i.ident.to_string());
         for bound in i.bounds.iter() {
             self.visit_type_param_bound(bound)
         }
@@ -160,34 +164,17 @@ impl<'ast> Visit<'ast> for UniqueTypeVisitor {
             }
             // e.g., `?Sized` in `T: ?Sized`
             TypeParamBound::Verbatim(token) if token.to_string() == "?Sized" => {
-                self.generics.insert(token.to_string());
+                insert_once(&mut self.generics, token.to_string());
             }
             _ => {}
         }
 
         visit::visit_type_param_bound(self, bound);
     }
-
-    // Optionally handle `WhereClause` for capturing lifetimes and generics in trait bounds and where clauses
-    fn visit_where_clause(&mut self, i: &'ast WhereClause) {
-        visit::visit_where_clause(self, i);
-    }
 }
 
 impl FromMeta for Relate {
-    // // TODO: Revisit this whether we can and should allow only the
-    // model to be specified if we can infer the connection direction at
-    // compile time.
-    // fn from_string(value: &str) -> darling::Result<Self> {
-    //     Ok(Self {
-    //         connection: value.into(),
-    //         model: None,
-    //     })
-    // }
-
     fn from_list(items: &[darling::ast::NestedMeta]) -> darling::Result<Self> {
-        // Todo: Just use Rrelate alone if we dont have to specify connection direction
-        // explicitly
         #[derive(FromMeta)]
         struct FullRelate {
             model: EdgeType,
