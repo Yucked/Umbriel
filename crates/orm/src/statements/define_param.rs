@@ -1,17 +1,12 @@
 use std::ops::Deref;
 
-use crate::{Conditional, Filter, Param, Renderer, ValueLike};
+use crate::{Param, Renderer, ValueLike};
 
 use super::{
-    DefineOptions, Statement, for_permission::PermissionValue, impl_define_options, impl_definition,
+    DefineOptions, Statement,
+    for_permission::{PermissionValue, impl_permissions},
+    impl_define_options, impl_definition,
 };
-
-// DEFINE PARAM statement
-// The DEFINE PARAM statement allows you to define global (database-wide) parameters that are available to every client.
-//
-// Statement syntax
-// DEFINE PARAM [ OVERWRITE | IF NOT EXISTS ] $@name VALUE @value [ COMMENT @string ]
-// 	[ PERMISSIONS [ NONE | FULL | WHERE @condition ] ];
 
 /// Define a new parameter. DEFINE PARAM statement allows you to define global (database-wide) parameters that are available to every client.
 ///
@@ -68,48 +63,7 @@ impl DefineParamStatementBuilder {
     }
 }
 
-impl DefineParamStatement {
-    /// `PERMISSIONS NONE`: record users and guests cannot read the param.
-    ///
-    /// ```rust
-    /// use umbriel::{*, statements::define_param};
-    ///
-    /// let statement = define_param(&Param::new("api_key")).value("secret").permissions_none();
-    /// assert_eq!(
-    ///     statement.to_debug_sql(),
-    ///     "DEFINE PARAM $api_key VALUE 'secret' PERMISSIONS NONE;"
-    /// );
-    /// ```
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions = Some(PermissionValue::None);
-        self
-    }
-
-    /// `PERMISSIONS FULL`: everyone who can query the database can read the param.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions = Some(PermissionValue::Full);
-        self
-    }
-
-    /// `PERMISSIONS WHERE @condition`: record users and guests can read the param when
-    /// `condition` holds. Params take one permission, with no `FOR`.
-    ///
-    /// ```rust
-    /// use umbriel::{*, statements::define_param};
-    ///
-    /// let statement = define_param(&Param::new("greeting"))
-    ///     .value("Hello")
-    ///     .permissions_where(Param::new("public").is(true));
-    /// assert_eq!(
-    ///     statement.to_debug_sql(),
-    ///     "DEFINE PARAM $greeting VALUE 'Hello' PERMISSIONS WHERE $public IS true;"
-    /// );
-    /// ```
-    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
-        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
-        self
-    }
-}
+impl_permissions!(single: DefineParamStatement);
 
 impl Statement for DefineParamStatement {
     fn render_body(&self, out: &mut Renderer) {
