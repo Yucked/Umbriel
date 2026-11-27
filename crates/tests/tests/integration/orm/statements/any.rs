@@ -42,8 +42,13 @@ fn drafts() -> TableOf<Note> {
 #[test]
 fn the_union_lists_its_members_and_targets_outside_it_fail() {
     assert_eq!(<Item as Models>::MEMBERS.len(), 2);
-    assert!(Item::accepts_table("note_drafts"));
-    assert!(!Item::accepts_table("tag"));
+    let accepts = |table: &str| {
+        <Item as Models>::MEMBERS
+            .iter()
+            .any(|member| member.accepts(table))
+    };
+    assert!(accepts("note_drafts"));
+    assert!(!accepts("tag"));
 
     let statement = create_any::<Item>([Book::id("rust").into(), drafts().into()]);
     assert_eq!(statement.to_debug_sql(), "CREATE book:rust, note_drafts;");
