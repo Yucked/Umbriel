@@ -18,7 +18,8 @@ impl Prune {
         let db = cli.db();
 
         let res =
-            MigrationRunner::delete_unapplied_migration_files(db, &file_manager.relax()).await;
+            MigrationRunner::delete_unapplied_migration_files(db, &file_manager.set_mode(Mode::Lax))
+                .await;
 
         if let Err(ref e) = res {
             log::error!("Failed to prune migrations: {e}");
