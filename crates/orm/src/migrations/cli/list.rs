@@ -1,6 +1,5 @@
 use clap::{Args, ValueEnum};
 use std::fmt::Display;
-use typed_builder::TypedBuilder;
 
 use crate::migrations::*;
 
@@ -26,7 +25,7 @@ impl Display for Status {
 }
 
 /// List migrations according to status
-#[derive(Args, Debug, TypedBuilder, Clone)]
+#[derive(Args, Debug, Clone)]
 pub struct List {
     /// Status of migrations to list: applied, pending or all
     #[arg(value_enum, long, default_value_t = Status::Applied)]
@@ -34,6 +33,11 @@ pub struct List {
 }
 
 impl List {
+    /// Lists the migrations with `status`.
+    pub fn new(status: Status) -> Self {
+        Self { status }
+    }
+
     /// Logs the migrations with the requested status.
     pub async fn run(&self, cli: &mut Migrator) {
         cli.setup_db().await;
