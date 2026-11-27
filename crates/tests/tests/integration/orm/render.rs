@@ -8,7 +8,8 @@ mod rendering {
 
     #[test]
     fn values_are_bound_in_order_and_inlined_for_debugging() {
-        let condition = cond(Field::new("name").equal("Alice")).and(Field::new("age").gt(30));
+        let condition =
+            cond(Field::new("name").equal("Alice")).and(Field::new("age").greater_than(30));
         let query = condition.to_query().expect("valid");
         assert_eq!(query.sql(), "(name = $_p0) AND (age > $_p1)");
         assert_eq!(
@@ -27,7 +28,7 @@ mod rendering {
     #[test]
     fn reused_fragments_are_numbered_per_query() {
         // One fragment used twice binds its value once per use, under its own name.
-        let shared = Fragment::new(Field::new("age").gt(18));
+        let shared = Fragment::new(Field::new("age").greater_than(18));
         let statement = chain(return_(ValueLike::new(shared.clone())))
             .chain(return_(ValueLike::new(shared.clone())));
         let query = statement.to_query().expect("valid");
@@ -38,7 +39,7 @@ mod rendering {
         assert_eq!(statement.to_query().expect("valid"), query, "stable");
 
         // So does one condition shared by two statements.
-        let adult = Field::new("age").gt(18);
+        let adult = Field::new("age").greater_than(18);
         let statement = chain(select(All).from(Table::from("user")).where_(adult.clone()))
             .chain(select(All).from(Table::from("user")).where_(adult));
         let query = statement.to_query().expect("valid");
@@ -50,8 +51,26 @@ mod rendering {
         assert_eq!(query.vars().get("_p1"), Some(&18i64.into_value()));
 
         assert_eq!(shared.clone(), shared);
-        assert_eq!(shared, Fragment::new(Field::new("age").gt(18)));
+        assert_eq!(shared, Fragment::new(Field::new("age").greater_than(18)));
         assert_eq!(format!("{shared:?}"), "Fragment(\"age > 18\")");
+    }
+
+    /// #33 11.6: fragments that write the same text but differ in validity are not equal.
+    #[test]
+    fn same_text_with_a_validation_error_is_a_different_fragment() {
+        let checked = Fragment::new(umbriel::statements::remove_param("_p0"));
+        let raw = Fragment::new(Raw::new("REMOVE PARAM $_p0;"));
+        assert_eq!(checked.to_debug_sql(), raw.to_debug_sql(), "the same text");
+        assert!(
+            checked.to_query().is_err(),
+            "the builder refuses the reserved name"
+        );
+        assert_ne!(checked, raw);
+        assert_eq!(
+            checked,
+            Fragment::new(umbriel::statements::remove_param("_p0")),
+            "the same text and the same error"
+        );
     }
 
     #[test]
@@ -103,7 +122,7 @@ mod rendering {
         let statement = select_value(Field::new("name"))
             .from(Table::from("user"))
             .where_(
-                cond(Field::new("age").gt(18)).and(
+                cond(Field::new("age").greater_than(18)).and(
                     Field::new("team").inside(
                         select_value(Field::new("id"))
                             .from(Table::from("team"))
