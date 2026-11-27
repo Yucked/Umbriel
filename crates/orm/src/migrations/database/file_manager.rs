@@ -9,12 +9,6 @@ use typed_builder::TypedBuilder;
 
 use crate::migrations::*;
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, Default)]
-struct FileManager {}
-
-impl FileManager {}
-
 /// Where the migration files are and how they are checked.
 #[derive(Debug, Clone, Default, TypedBuilder)]
 pub struct MigrationConfig {
@@ -115,7 +109,7 @@ impl MigrationConfig {
 
     /// Whether the migration directory has no migrations yet.
     pub fn is_first_migration(&self) -> MigrationResult<bool> {
-        Ok(self.get_migrations_filenames(false)?.all().is_empty())
+        Ok(self.get_migrations_filenames(false)?.is_empty())
     }
 
     /// The migration directory, which must exist.
