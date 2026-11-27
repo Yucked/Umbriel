@@ -28,6 +28,12 @@ use super::{
     select::SelectStatementInit,
 };
 
+// The executor a dropped stream's `KILL` runs on, as the SDK spawns its own tasks.
+#[cfg(not(target_family = "wasm"))]
+use tokio::spawn;
+#[cfg(target_family = "wasm")]
+use wasm_bindgen_futures::spawn_local as spawn;
+
 /// Turns a `SELECT` into a `LIVE SELECT` whose notifications decode into the select's output
 /// type `O`.
 ///
@@ -139,9 +145,12 @@ pub enum LiveEvent<O> {
 /// Invalidating the session also ends the live query on the server, but SurrealDB 3.3.4 sends
 /// no `Killed` notification for it, so the stream stays open and receives nothing: drop it.
 ///
-/// Dropping the stream ends the live query as best effort: the SDK sends a `KILL` from a task of
-/// its own and logs a failure, with nothing returned to the caller. [`kill`](Self::kill) runs
-/// the `KILL` and returns its result.
+/// Dropping the stream ends the live query as best effort: it sends a `KILL` on the session that
+/// subscribed, from a task of its own, and nothing reports a failure. [`kill`](Self::kill) runs
+/// the `KILL` and returns its result. The SDK's stream sends a `KILL` on drop as well, but
+/// SurrealDB 3.3.4's SDK runs it in a new, empty session (`From<Arc<Inner>> for Surreal`), which
+/// the server refuses; it only logs the failure. On native targets the stream must be dropped
+/// inside a Tokio runtime, which the SDK's own drop needs too.
 ///
 /// The SDK replays sign-in, `USE` and variables when a WebSocket reconnects, but not live
 /// queries: after a reconnect the stream stays open and receives nothing, and the SDK gives no
@@ -181,11 +190,11 @@ impl<O, C: Connection> LiveStream<O, C> {
 
     /// Ends the live query with `KILL` and returns its result.
     ///
-    /// The SDK ends the stream on SurrealDB's `Killed` notification. If that has already arrived
-    /// when the `KILL` returns, the stream is dropped with nothing left to end. If not, dropping
-    /// it makes the SDK send a second `KILL`, for a query that is already gone.
-    /// Umbriel doesn't wait for the notification: without a timer of its own the wait couldn't be
-    /// bounded.
+    /// After a successful `KILL` the stream's drop sends none of its own. The SDK ends its stream
+    /// on SurrealDB's `Killed` notification. If that has already arrived when the `KILL` returns,
+    /// the SDK's stream is dropped with nothing left to end. If not, the SDK sends a second
+    /// `KILL` on drop, which fails as described on [`LiveStream`] and changes nothing. Umbriel
+    /// doesn't wait for the notification: without a timer of its own the wait couldn't be bounded.
     ///
     /// # Errors
     ///
@@ -194,6 +203,7 @@ impl<O, C: Connection> LiveStream<O, C> {
     pub async fn kill(mut self) -> Result<()> {
         kill(self.query_id).run(&self.db).await?;
         drain_ready(&mut self.stream);
+        self.ended = true;
         Ok(())
     }
 
@@ -206,8 +216,8 @@ impl<O, C: Connection> LiveStream<O, C> {
     ///   discarded.
     /// - If the future is dropped while the registration is in flight, the server may register a
     ///   query whose id never reaches the client, as with any dropped `LIVE` request. If it is
-    ///   dropped later, `self` already holds the new query, and the old stream, owned by the
-    ///   future, is dropped with the SDK's best-effort `KILL`.
+    ///   dropped later, `self` already holds the new query, and the `KILL` of the old one may not
+    ///   have reached the server: the old query then stays registered until the session ends.
     ///
     /// Events between the loss of the old query and the new registration are lost, and while
     /// both are registered an event can arrive on either, so events around the switch can be
@@ -234,6 +244,22 @@ impl<O, C: Connection> LiveStream<O, C> {
                 source: Box::new(source),
             }),
         }
+    }
+}
+
+impl<O, C: Connection> Drop for LiveStream<O, C> {
+    /// Sends the live query's `KILL` on the session that subscribed, unless the stream already
+    /// ended: on `Killed`, a transport failure, or a successful [`kill`](Self::kill).
+    fn drop(&mut self) {
+        if self.ended {
+            return;
+        }
+        let db = self.db.clone();
+        let query_id = self.query_id;
+        spawn(async move {
+            // The stream is gone, so no caller is left to take the result; `kill` returns it.
+            let _ = kill(query_id).run(&db).await;
+        });
     }
 }
 
