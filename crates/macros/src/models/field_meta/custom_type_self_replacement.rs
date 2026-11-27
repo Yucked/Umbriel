@@ -1,6 +1,6 @@
 use syn::{
     AngleBracketedGenericArguments, ExprPath, GenericArgument, Ident, Path, PathArguments,
-    PathSegment, Type, TypePath, parse_quote,
+    PathSegment, TypePath, parse_quote,
     visit_mut::{self, VisitMut},
 };
 
@@ -15,15 +15,11 @@ impl ReplaceSelfVisitor {
     pub fn replace_self(&mut self, ty: &CustomType) -> CustomTypeNoSelf {
         let mut ty = ty.inner().clone();
         self.visit_type_mut(&mut ty);
-        CustomTypeNoSelf::new(ty.clone())
+        CustomTypeNoSelf::new(ty)
     }
 }
-impl VisitMut for ReplaceSelfVisitor {
-    fn visit_type_mut(&mut self, i: &mut Type) {
-        // Handle the top-level replacements and delegate deeper inspection to other visit_*_mut methods.
-        visit_mut::visit_type_mut(self, i);
-    }
 
+impl VisitMut for ReplaceSelfVisitor {
     fn visit_path_segment_mut(&mut self, segment: &mut PathSegment) {
         if segment.ident == "Self" {
             segment.ident = self.struct_ident.clone();
