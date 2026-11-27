@@ -1,12 +1,11 @@
-use super::up::{FastForwardDelta, Up};
+use super::up::{Up, UpdateStrategy};
 
 use crate::DbResources;
 use crate::migrations::*;
 use clap::Args;
-use typed_builder::TypedBuilder;
 
 /// Generate migrations
-#[derive(Args, Debug, TypedBuilder, Clone)]
+#[derive(Args, Debug, Clone)]
 pub struct Generate {
     /// Name of the migration
     #[arg(long)]
@@ -14,11 +13,15 @@ pub struct Generate {
 
     /// Whether to run the migrations after generation
     #[arg(long)]
-    #[builder(default)]
     pub(crate) run: bool,
 }
 
 impl Generate {
+    /// Generates a migration named `name`, applying it afterwards when `run`.
+    pub fn new(name: Basename, run: bool) -> Self {
+        Self { name, run }
+    }
+
     /// Generates a migration from the difference between the migration directory and the
     /// codebase's resources, and applies it if asked.
     ///
@@ -88,12 +91,6 @@ impl Generate {
     }
 
     fn up(&self) -> Up {
-        Up {
-            fast_forward: FastForwardDelta {
-                latest: true,
-                number: None,
-                till: None,
-            },
-        }
+        Up::new(UpdateStrategy::Latest)
     }
 }

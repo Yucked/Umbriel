@@ -1,11 +1,10 @@
-use super::up::{FastForwardDelta, Up};
+use super::up::{Up, UpdateStrategy};
 use crate::DbResources;
 use crate::migrations::*;
 use clap::Args;
-use typed_builder::TypedBuilder;
 
 /// Init migrations
-#[derive(Args, Debug, TypedBuilder, Clone)]
+#[derive(Args, Debug, Clone)]
 pub struct Init {
     /// Name of the first migration file(s)
     #[arg(long)]
@@ -21,6 +20,16 @@ pub struct Init {
 }
 
 impl Init {
+    /// Initializes migrations with a first migration named `name`, two-way when `reversible`,
+    /// applying it afterwards when `run`.
+    pub fn new(name: Basename, reversible: bool, run: bool) -> Self {
+        Self {
+            name,
+            run,
+            reversible,
+        }
+    }
+
     /// Whether the migrations are two-way.
     pub fn reversible(&self) -> bool {
         self.reversible
@@ -93,12 +102,6 @@ impl Init {
 
     /// The `up` that applies every pending migration.
     pub fn up(&self) -> Up {
-        Up {
-            fast_forward: FastForwardDelta {
-                latest: true,
-                number: None,
-                till: None,
-            },
-        }
+        Up::new(UpdateStrategy::Latest)
     }
 }
