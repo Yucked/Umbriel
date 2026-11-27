@@ -1,4 +1,4 @@
-use std::fmt::{self, Display};
+use std::fmt::{self, Display, Write as _};
 
 /// One line of a generated migration file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,11 +14,15 @@ pub enum QueryType {
 impl QueryType {
     /// The lines joined into a migration file's content.
     pub fn join(lines: &[QueryType]) -> String {
-        lines
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join("\n")
+        let mut content = String::new();
+        for (index, line) in lines.iter().enumerate() {
+            if index > 0 {
+                content.push('\n');
+            }
+            // invariant: writing into a `String` cannot fail.
+            let _ = write!(content, "{line}");
+        }
+        content
     }
 }
 
