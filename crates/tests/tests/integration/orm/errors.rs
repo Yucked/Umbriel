@@ -277,6 +277,41 @@ mod not_allowed {
         );
         assert_eq!(error.retry(), Retry::Never);
     }
+
+    /// K27 (SurrealDB 3.3): a database user may not reach another database or namespace. The
+    /// `USE` that tries is refused as `NotAllowed` rather than switching (#15).
+    #[tokio::test]
+    async fn a_database_user_cannot_use_another_tenant() {
+        let (db, guard) = db().await;
+        let (_other_db, other) = umbriel_tests::db().await;
+        Raw::new("DEFINE USER tenant ON DATABASE PASSWORD 'example-password' ROLES OWNER;")
+            .run(&db)
+            .await
+            .expect("defined");
+
+        let tenant = guest(Endpoint::Main).await;
+        bounded(
+            "signing in as the database user",
+            tenant.signin(surrealdb::opt::auth::Database {
+                namespace: guard.namespace().to_owned(),
+                database: guard.database().to_owned(),
+                username: "tenant".to_owned(),
+                password: "example-password".to_owned(),
+            }),
+        )
+        .await;
+
+        for refused in [
+            use_().database(other.database().to_owned()),
+            use_().namespace("umbriel_test_elsewhere".to_owned()),
+        ] {
+            let error = refused.run(&tenant).await.expect_err("refused");
+            assert!(
+                matches!(error, Error::NotAllowed { .. }),
+                "another tenant is not allowed: {error:?}"
+            );
+        }
+    }
 }
 
 mod connection {
