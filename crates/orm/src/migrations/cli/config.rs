@@ -83,62 +83,33 @@ pub struct DatabaseConnection {
     /// - IndxDB-Backend: `indxdb://MyDatabase`
     /// - TiKV-Backend: `tikv://localhost:2379`
     /// - FoundationDB-Backend: `fdb://fdb.cluster`
-    #[arg(
-            global = true,
-            long,
-            // value_name = "URL",
-            default_value = "ws://localhost:8000",
-            // default_value = "memory",
-            help = "Example:\n\
-                    - ws://localhost:8000\n\
-                    - wss://cloud.example.com\n\
-                    - http://localhost:8000\n\
-                    - https://cloud.example.com\n\
-                    - mem://\n\
-                    - file://temp.db\n\
-                    - indxdb://MyDatabase\n\
-                    - tikv://localhost:2379\n\
-                    - fdb://fdb.cluster"
-        )]
+    #[arg(global = true, long, default_value = "ws://localhost:8000")]
     pub(crate) url: UrlDb,
 
-    #[arg(global = true, long, default_value_t = String::from("test"), help = "Database name")]
+    /// Database name
+    #[arg(global = true, long, default_value_t = String::from("test"))]
     #[builder(default = "test".into())]
     pub(crate) db: String,
 
-    #[arg(global = true, long, default_value_t = String::from("test"), help = "Namespace name")]
+    /// Namespace name
+    #[arg(global = true, long, default_value_t = String::from("test"))]
     #[builder(default = "test".into())]
     pub(crate) ns: String,
 
-    /// users scope
-    #[arg(global = true, long, help = "Scope")]
-    #[builder(default, setter(strip_option))]
-    pub(crate) sc: Option<String>,
-
-    #[arg(
-        global = true,
-        short,
-        long,
-        default_value_t = String::from("root"),
-        help = "User name"
-    )]
+    /// User name
+    #[arg(global = true, short, long, default_value_t = String::from("root"))]
     #[builder(default = "root".into())]
     pub(crate) user: String,
 
-    #[arg(global = true, short, long, default_value_t = String::from("root"), help = "Password")]
+    /// Password
+    #[arg(global = true, short, long, default_value_t = String::from("root"))]
     #[builder(default = "root".into())]
     pub(crate) pass: String,
 
     /// Experimental features an embedded engine allows, such as `files` for buckets and
     /// `surrealism` for modules. None by default. A server keeps its own capabilities, so this
     /// has no effect on a remote URL.
-    #[arg(
-        global = true,
-        long,
-        value_enum,
-        value_delimiter = ',',
-        help = "Experimental features an embedded engine allows (files, surrealism); none by default"
-    )]
+    #[arg(global = true, long, value_enum, value_delimiter = ',')]
     #[builder(default)]
     pub(crate) allow_experimental: Vec<Experimental>,
 
@@ -148,22 +119,14 @@ pub struct DatabaseConnection {
 
     /// The namespace `init`, `generate` and `reset` create their comparison databases in (see
     /// [`Comparison`]). Required by those commands; no default.
-    #[arg(
-        global = true,
-        long,
-        help = "Namespace the generator creates its comparison databases in (init, generate, reset)"
-    )]
+    #[arg(global = true, long)]
     #[builder(default, setter(strip_option))]
     pub(crate) comparison_ns: Option<String>,
 
     /// The namespace-level user the generator signs in as, on the same URL: an `OWNER`, since the
     /// generator defines a user of its own in each comparison database (see [`Comparison`]). Its
     /// password is read from `UMBRIEL_COMPARISON_PASS`.
-    #[arg(
-        global = true,
-        long,
-        help = "Namespace user for the comparison databases; password from UMBRIEL_COMPARISON_PASS"
-    )]
+    #[arg(global = true, long)]
     #[builder(default, setter(strip_option))]
     pub(crate) comparison_user: Option<String>,
 
