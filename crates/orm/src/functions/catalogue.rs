@@ -1,12 +1,17 @@
 //! `functions!`: one table per namespace generates every wrapper of a built-in function.
 //!
-//! Each entry generates:
+//! Each entry with fixed arguments generates `<name>(args) -> Function<K>`. Each entry with
+//! optional or any number of arguments generates:
 //! - `<name>_fn(args) -> Function<K>`, the call;
 //! - the macro `<prefix>_<name>!` (exported at the crate root) and its alias `<name>!` in the
-//!   namespace module, which forward to the function;
+//!   namespace module, which forward to the function and let optional arguments be left out;
+//!
+//! and every entry generates:
 //! - for each `[Receiver.method]` pair, the method form `receiver.method(args)` as an inherent
 //!   method on that typed expression. A pair is listed only where SurrealDB 3.3.4 dispatches the
 //!   method on that receiver (`fnc/mod.rs` `idiom()`); nothing is derived from the path.
+//!
+//! A fixed-argument entry's function uses its Rust name, so `enum_ = enum` gives `enum_(…)`.
 //!
 //! The table starts with `$` (the generated macros need it), the namespace path and its separator
 //! (`"string" "::"`, or `"" ""` for a function at the root such as `rand`), the macro prefix and
@@ -86,26 +91,14 @@ macro_rules! functions {
         functions!(@rest_methods [$($methods)*] $ns $sep $sql $rest $rty [$kind]);
     };
 
-    // `name()`
+    // `name()`: a plain function; a fixed call needs no macro.
     (@entry [$d:tt $ns:literal $sep:literal $prefix:ident [$($module:ident)::*]]
         [$($attr:tt)*] [$sql:ident $($_name:ident)?] $name:ident [] [$kind:ty] []
     ) => {
-        paste::paste! {
-            $($attr)*
-            #[doc = ::core::concat!("\n\nCalls `", $ns, $sep, ::core::stringify!($sql), "()`.")]
-            pub fn [<$sql _fn>]() -> $crate::Function<$kind> {
-                $crate::Function::new(::core::concat!($ns, $sep, ::core::stringify!($sql)))
-            }
-
-            #[doc = ::core::concat!("`", $ns, $sep, ::core::stringify!($sql), "()`; calls `", ::core::stringify!($sql),
-                "_fn`.")]
-            #[macro_export]
-            macro_rules! [<$prefix _ $sql>] {
-                () => {
-                    $crate::functions::$($module::)*[<$sql _fn>]()
-                };
-            }
-            pub use [<$prefix _ $sql>] as $name;
+        $($attr)*
+        #[doc = ::core::concat!("\n\nCalls `", $ns, $sep, ::core::stringify!($sql), "()`.")]
+        pub fn $name() -> $crate::Function<$kind> {
+            $crate::Function::new(::core::concat!($ns, $sep, ::core::stringify!($sql)))
         }
     };
 
@@ -321,33 +314,21 @@ macro_rules! functions {
             [$o1 : $o1t, $o2 : $o2t] [$kind]);
     };
 
-    // `name(a, b)`
+    // `name(a, b)`: a plain function; a fixed call needs no macro.
     (@entry [$d:tt $ns:literal $sep:literal $prefix:ident [$($module:ident)::*]]
         [$($attr:tt)*] [$sql:ident $($_name:ident)?] $name:ident
         [$a1:ident : $t1:ident $(, $arg:ident : $ty:ident)*] [$kind:ty] [$($methods:tt)*]
     ) => {
-        paste::paste! {
-            $($attr)*
-            #[doc = ::core::concat!("\n\nCalls `", $ns, $sep, ::core::stringify!($sql), "(", ::core::stringify!($a1),
-                $(", ", ::core::stringify!($arg),)* ")`.")]
-            pub fn [<$sql _fn>](
-                $a1: impl Into<$crate::$t1>,
-                $($arg: impl Into<$crate::$ty>,)*
-            ) -> $crate::Function<$kind> {
-                $crate::Function::new(::core::concat!($ns, $sep, ::core::stringify!($sql)))
-                    .arg(Into::<$crate::$t1>::into($a1))
-                    $(.arg(Into::<$crate::$ty>::into($arg)))*
-            }
-
-            #[doc = ::core::concat!("`", $ns, $sep, ::core::stringify!($sql), "(", ::core::stringify!($a1),
-                $(", ", ::core::stringify!($arg),)* ")`; calls `", ::core::stringify!($sql), "_fn`.")]
-            #[macro_export]
-            macro_rules! [<$prefix _ $sql>] {
-                ($d $a1:expr $(, $d $arg:expr)* $d(,)?) => {
-                    $crate::functions::$($module::)*[<$sql _fn>]($d $a1 $(, $d $arg)*)
-                };
-            }
-            pub use [<$prefix _ $sql>] as $name;
+        $($attr)*
+        #[doc = ::core::concat!("\n\nCalls `", $ns, $sep, ::core::stringify!($sql), "(", ::core::stringify!($a1),
+            $(", ", ::core::stringify!($arg),)* ")`.")]
+        pub fn $name(
+            $a1: impl Into<$crate::$t1>,
+            $($arg: impl Into<$crate::$ty>,)*
+        ) -> $crate::Function<$kind> {
+            $crate::Function::new(::core::concat!($ns, $sep, ::core::stringify!($sql)))
+                .arg(Into::<$crate::$t1>::into($a1))
+                $(.arg(Into::<$crate::$ty>::into($arg)))*
         }
         functions!(@methods [$($methods)*] $ns $sep $sql [$($arg : $ty),*] [] [$kind]);
     };
