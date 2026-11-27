@@ -1,6 +1,7 @@
 //! The options every `DEFINE` takes (`orm/src/statements/mod.rs`): `OVERWRITE`, `IF NOT EXISTS`,
 //! `COMMENT`, and names read from parameters, on every definition builder.
 
+mod access;
 mod alter;
 mod any;
 mod create;
@@ -26,7 +27,9 @@ mod for_permission;
 mod ifelse;
 mod info;
 mod insert;
+mod kill;
 mod let_;
+mod live_select;
 mod rebuild;
 mod relate;
 mod remove;
@@ -477,11 +480,11 @@ mod control_flow {
         let age = Field::new("age");
         let country = Field::new("country");
         assert_sql(
-            &if_(age.gte(18)).then("adult").end(),
+            &if_(age.greater_than_or_equal(18)).then("adult").end(),
             "IF age >= 18 \n\t{ 'adult' };",
         );
         assert_sql(
-            &if_(age.gte(18))
+            &if_(age.greater_than_or_equal(18))
                 .then("adult")
                 .else_if(cond(country.is("CA")).or(country.is("NO")))
                 .then("cold")
@@ -491,7 +494,7 @@ mod control_flow {
              \nELSE\n\t{ 'other' };",
         );
         assert_sql(
-            &if_(age.gte(18))
+            &if_(age.greater_than_or_equal(18))
                 .then(select(All).from(Table::from("user")))
                 .end(),
             "IF age >= 18 \n\t{ (SELECT * FROM user) };",
@@ -572,8 +575,12 @@ mod control_flow {
         assert_eq!(ships(&db).await, ["Apollo", "Gemini"]);
 
         let age = Param::new("age");
-        let branch = chain(let_("age").equal_to(20))
-            .chain(if_(age.gte(18)).then("adult").else_("minor").end());
+        let branch = chain(let_("age").equal_to(20)).chain(
+            if_(age.greater_than_or_equal(18))
+                .then("adult")
+                .else_("minor")
+                .end(),
+        );
         let result: Option<String> = branch.run(&db).await.expect("ran").take(1).expect("value");
         assert_eq!(result.as_deref(), Some("adult"));
 
