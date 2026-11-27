@@ -488,3 +488,23 @@ mod retry {
         assert_eq!(error.retry(), Retry::Never);
     }
 }
+
+/// `StaleSubscription` names the old live query and keeps the `KILL`'s failure as its source,
+/// and it is never retried: the new subscription is already in place. SurrealDB 3.3.4 accepts a
+/// `KILL` of any id, so no server path provokes it; the contract is checked on the error itself.
+#[test]
+fn a_stale_subscription_keeps_the_old_query_and_its_cause() {
+    let query_id = surrealdb::types::Uuid::new_v4();
+    let error = Error::StaleSubscription {
+        query_id,
+        source: Box::new(Error::QueryBuilder("the KILL failed".to_owned())),
+    };
+    assert!(error.to_string().contains(&query_id.to_string()), "{error}");
+    assert!(
+        error
+            .source()
+            .is_some_and(|source| source.to_string().contains("the KILL failed")),
+        "{error:?}"
+    );
+    assert_eq!(error.retry(), Retry::Never);
+}
