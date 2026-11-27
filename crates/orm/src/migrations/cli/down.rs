@@ -94,53 +94,33 @@ impl Down {
     /// asked. When one fails, those rolled back before it stay rolled back (see
     /// [`MigrationRunner`]).
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// If the migrations are one-way or the rollback fails.
-    pub async fn run(&self, cli: &mut Migrator) {
-        cli.setup_db().await;
+    /// [`MigrationError::OneWayRollback`] for one-way migrations; otherwise the failure of
+    /// connecting, detecting the migration type, rolling back or pruning.
+    pub async fn run(&self, cli: &mut Migrator) -> MigrationResult<()> {
+        cli.setup_db().await?;
         let file_manager = cli.file_manager();
-        let db = cli.db();
-
-        if let Ok(MigrationFlag::OneWay) = file_manager.detect_migration_type() {
-            let err = "Cannot rollback one way migrations. \
-            Create a new migration to reverse the changes or run cargo run -- reset -r \
-            to use two way migrations";
-
-            log::error!("{err}");
-            panic!("{err}");
+        if file_manager.detect_migration_type()? == MigrationFlag::OneWay {
+            return Err(MigrationError::OneWayRollback);
         }
 
-        let rollback_strategy = self.rollback_strategy();
-
-        let rollback = file_manager
+        file_manager
             .two_way()
             .run_down_migrations(
-                db,
+                cli.db()?,
                 RollbackOptions {
-                    rollback_strategy,
+                    rollback_strategy: self.rollback_strategy(),
                     mode: cli.mode,
                 },
             )
-            .await;
+            .await?;
+        log::info!("Rollback successful");
 
-        if let Err(ref e) = rollback {
-            log::error!("Rollback Failed: {e}");
-            panic!("Rollback Failed: {e}");
-        } else {
-            log::info!("Rollback successful");
-
-            if self.prune {
-                log::info!("Pruning all pending migration files");
-                self.prune().run(cli).await;
-                log::info!("Pruning successful");
-            }
-
-            log::info!("Rollback Ddne");
+        if self.prune {
+            log::info!("Pruning all pending migration files");
+            Prune.run(cli).await?;
         }
-    }
-
-    fn prune(&self) -> Prune {
-        Prune
+        Ok(())
     }
 }

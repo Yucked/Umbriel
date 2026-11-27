@@ -37,67 +37,41 @@ impl Init {
 
     /// Generates the first migration from the codebase's resources, and applies it if asked.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// If migrations already exist or generation fails.
+    /// [`MigrationError::AlreadyInitialized`] when the directory holds migrations, or the
+    /// failure of reading the directory, generating or applying.
     pub async fn run(
         &self,
         cli: &mut Migrator,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
-    ) {
-        let migration_name = self.name.clone();
+    ) -> MigrationResult<()> {
         let file_manager = cli.file_manager();
-        let files = file_manager.get_migrations_filenames(true);
+        if !file_manager.get_migrations_filenames(true)?.is_empty() {
+            return Err(MigrationError::AlreadyInitialized);
+        }
 
-        match files {
-            Ok(files) => {
-                if !files.is_empty() {
-                    let err = "Migrations already initialized. Run 'cargo run -- reset' to reset migration. \
-                    You can also specify the '-r' or '--reversible' argument to set as reversible. \
-                    Or delete the migrations directory and run 'cargo run -- init' again.";
-                    log::error!("{err}");
-                    panic!("{err}");
-                }
-            }
-            Err(e) => {
-                log::error!("Failed to get migrations: {e}");
-                panic!("Failed to get migrations: {e}");
-            }
-        };
-
-        let comparison = cli.comparison().await;
+        let comparison = cli.comparison().await?;
         if self.reversible {
-            let generated = file_manager
+            file_manager
                 .two_way()
-                .generate_migrations(&comparison, &migration_name, codebase_resources, prompter)
-                .await;
-            if let Err(e) = generated {
-                log::error!("Failed to generate migrations: {e}");
-                panic!("Failed to generate migrations: {e}");
-            }
+                .generate_migrations(&comparison, &self.name, codebase_resources, prompter)
+                .await?;
         } else {
-            let generated = file_manager
+            file_manager
                 .one_way()
-                .generate_migrations(&comparison, &migration_name, codebase_resources, prompter)
-                .await;
-
-            if let Err(e) = generated {
-                log::error!("Failed to generate migrations: {e}");
-                panic!("Failed to generate migrations: {e}");
-            }
-        };
+                .generate_migrations(&comparison, &self.name, codebase_resources, prompter)
+                .await?;
+        }
 
         if self.run {
-            cli.setup_db().await;
             log::info!("Running initial migrations");
-
-            self.up().run(cli).await;
-
-            log::info!("Successfully ran initial migrations");
+            self.up().run(cli).await?;
         }
 
         log::info!("Successfully initialized and generated first migration(s)");
+        Ok(())
     }
 
     /// The `up` that applies every pending migration.

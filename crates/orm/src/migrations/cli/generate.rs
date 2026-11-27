@@ -25,69 +25,41 @@ impl Generate {
     /// Generates a migration from the difference between the migration directory and the
     /// codebase's resources, and applies it if asked.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// If the migration type cannot be detected or generation fails.
+    /// The failure of connecting the comparison, detecting the migration type (such as
+    /// [`MigrationError::MigrationDirectoryDoesNotExist`] before `init`), generating or
+    /// applying.
     pub async fn run(
         &self,
         cli: &mut Migrator,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
-    ) {
+    ) -> MigrationResult<()> {
         let file_manager = cli.file_manager();
-        let migration_basename = &self.name;
-        let mig_type = file_manager.detect_migration_type();
-        let comparison = cli.comparison().await;
-
-        match mig_type {
-            Ok(MigrationFlag::TwoWay) => {
-                log::info!("Generating two-way migration");
-                let generated = file_manager
+        let comparison = cli.comparison().await?;
+        match file_manager.detect_migration_type()? {
+            MigrationFlag::TwoWay => {
+                file_manager
                     .two_way()
-                    .generate_migrations(
-                        &comparison,
-                        migration_basename,
-                        codebase_resources,
-                        prompter,
-                    )
-                    .await;
-                if let Err(e) = generated {
-                    log::error!("Failed to generate migrations: {e}");
-                    panic!("Failed to generate migrations: {e}");
-                }
+                    .generate_migrations(&comparison, &self.name, codebase_resources, prompter)
+                    .await?;
             }
-            Ok(MigrationFlag::OneWay) => {
-                let generated = file_manager
+            MigrationFlag::OneWay => {
+                file_manager
                     .one_way()
-                    .generate_migrations(
-                        &comparison,
-                        migration_basename,
-                        codebase_resources,
-                        prompter,
-                    )
-                    .await;
-
-                if let Err(e) = generated {
-                    log::error!("Failed to generate migrations: {e}");
-                    panic!("Failed to generate migrations: {e}");
-                }
+                    .generate_migrations(&comparison, &self.name, codebase_resources, prompter)
+                    .await?;
             }
-            Err(e) => {
-                log::error!("Failed to detect migration type: {e}");
-                panic!("Failed to detect migration type");
-            }
-        };
+        }
 
         if self.run {
-            cli.setup_db().await;
             log::info!("Running generated migrations");
-
-            self.up().run(cli).await;
-
-            log::info!("Successfully ran the generated migration(s)");
+            self.up().run(cli).await?;
         }
 
         log::info!("Migration generation done.");
+        Ok(())
     }
 
     fn up(&self) -> Up {

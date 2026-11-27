@@ -52,21 +52,22 @@ impl Reset {
     /// and rolling back the database does not restore it. A failed `reset --run` leaves the
     /// regenerated files beside the unchanged history.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// If generation fails or the directory cannot be recreated.
+    /// The failure of connecting the comparison, generating, recreating the directory, writing
+    /// the migration or applying it.
     pub async fn run(
         &self,
         cli: &mut Migrator,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
-    ) {
+    ) -> MigrationResult<()> {
         let file_manager = cli.file_manager().set_flag(if self.reversible {
             MigrationFlag::TwoWay
         } else {
             MigrationFlag::OneWay
         });
-        let comparison = cli.comparison().await;
+        let comparison = cli.comparison().await?;
         let migration = MigratorDatabase::first_migration(
             &comparison,
             &self.name,
@@ -74,36 +75,25 @@ impl Reset {
             codebase_resources,
             prompter,
         )
-        .await
-        .unwrap_or_else(|e| {
-            log::error!("Failed to generate migrations: {e}");
-            panic!("Failed to generate migrations: {e}");
-        });
+        .await?;
 
-        let replaced = file_manager
-            .get_migration_dir_create_if_none()
-            .and_then(|dir| {
-                fs::remove_dir_all(&dir)
-                    .and_then(|()| fs::create_dir(&dir))
-                    .map_err(|source| MigrationError::Io {
-                        action: "recreating the migration directory",
-                        path: dir.clone(),
-                        source,
-                    })
-            })
-            .and_then(|()| migration.create_file(&file_manager));
-        if let Err(e) = replaced {
-            log::error!("Failed to replace the migrations: {e}");
-            panic!("Failed to replace the migrations: {e}");
-        }
+        let dir = file_manager.get_migration_dir_create_if_none()?;
+        fs::remove_dir_all(&dir)
+            .and_then(|()| fs::create_dir(&dir))
+            .map_err(|source| MigrationError::Io {
+                action: "recreating the migration directory",
+                path: dir.clone(),
+                source,
+            })?;
+        migration.create_file(&file_manager)?;
         log::info!("Migration directory recreated.");
 
         if self.run {
-            cli.setup_db().await;
             log::info!("Running initial migrations");
-            Up::default().run(cli).await;
+            Up::default().run(cli).await?;
         }
 
         log::info!("Reset successful");
+        Ok(())
     }
 }

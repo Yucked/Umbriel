@@ -88,51 +88,36 @@ impl Up {
     /// Applies pending migrations, each in its own transaction: when one fails, those before it
     /// stay applied (see [`MigrationRunner`]).
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// If the migration type cannot be detected or applying fails.
-    pub async fn run(&self, cli: &mut Migrator) {
-        cli.setup_db().await;
+    /// The failure of connecting, detecting the migration type (such as
+    /// [`MigrationError::MigrationDirectoryDoesNotExist`] before `init`), or applying (such as
+    /// [`MigrationError::MigrationNotFoundFromPendingMigrations`] for a `--till` target that is
+    /// not pending).
+    pub async fn run(&self, cli: &mut Migrator) -> MigrationResult<()> {
+        cli.setup_db().await?;
         let file_manager = cli.file_manager();
         let update_strategy = self.update_strategy();
-        let db = cli.db();
+        let db = cli.db()?;
 
-        match file_manager.detect_migration_type() {
-            Ok(MigrationFlag::TwoWay) => {
+        match file_manager.detect_migration_type()? {
+            MigrationFlag::TwoWay => {
                 log::info!("Running two way migrations");
-                let run = file_manager
+                file_manager
                     .two_way()
                     .run_up_pending_migrations(db, update_strategy)
-                    .await;
-                if let Err(e) = run {
-                    log::error!("Failed to run migrations: {e}");
-                    panic!("Failed to run migrations. Migration already run or not found");
-                }
+                    .await?;
             }
-            Ok(MigrationFlag::OneWay) => {
+            MigrationFlag::OneWay => {
                 log::info!("Running one way migrations");
-                let run = file_manager
+                file_manager
                     .one_way()
                     .run_pending_migrations(db, update_strategy)
-                    .await;
-                if let Err(e) = run {
-                    log::error!("Failed to run migrations: {e}");
-                    panic!("Failed to run migrations. Migration already run or not found");
-                }
+                    .await?;
             }
-            Err(e) => {
-                log::error!(
-                    "Failed to detect migration type. Make sure the migration  \
-                is first initialized or reset by running cargo run -- init -n '<migration name>'. Error: {e}"
-                );
-                panic!("Failed to detect migration type.");
-            }
-        };
+        }
 
         log::info!("Successfully ran migrations");
-        match Schema::inspect(db).await {
-            Ok(schema) => log::info!("Database: {schema:?}"),
-            Err(e) => log::error!("Failed to inspect the database schema: {e}"),
-        }
+        Ok(())
     }
 }

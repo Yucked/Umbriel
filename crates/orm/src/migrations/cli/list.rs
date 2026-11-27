@@ -39,59 +39,34 @@ impl List {
     }
 
     /// Logs the migrations with the requested status.
-    pub async fn run(&self, cli: &mut Migrator) {
-        cli.setup_db().await;
-        let db = cli.db();
+    ///
+    /// # Errors
+    ///
+    /// The failure of connecting, detecting the migration type or reading the history, such as
+    /// [`MigrationError::InvalidMigrationState`] in strict mode.
+    pub async fn run(&self, cli: &mut Migrator) -> MigrationResult<()> {
+        cli.setup_db().await?;
+        let db = cli.db()?;
         let file_manager = cli.file_manager();
 
-        match file_manager.detect_migration_type() {
-            Ok(MigrationFlag::TwoWay) => {
-                log::info!("Listing two way migrations");
-
-                let migrations = file_manager
+        let migrations = match file_manager.detect_migration_type()? {
+            MigrationFlag::TwoWay => {
+                file_manager
                     .two_way()
                     .list_migrations(db, self.status, cli.mode)
-                    .await;
-
-                match migrations {
-                    Ok(migrations) => {
-                        log::info!("Listing {} migrations.", migrations.len());
-                        log::info!("=================================================");
-                        for migration in migrations {
-                            log::info!("{migration} ");
-                        }
-                        log::info!("=================================================");
-                        log::info!("Listing end.");
-                    }
-                    Err(ref e) => {
-                        log::error!("Failed to get migrations: {e}");
-                    }
-                }
+                    .await?
             }
-            Ok(MigrationFlag::OneWay) => {
-                log::info!("Listing one way migrations");
-                let migrations = file_manager
+            MigrationFlag::OneWay => {
+                file_manager
                     .one_way()
                     .list_migrations(db, self.status, cli.mode)
-                    .await;
-
-                match migrations {
-                    Ok(migrations) => {
-                        log::info!("=================================================");
-                        for migration in migrations {
-                            log::info!("Migration name: {migration} ");
-                        }
-                        log::info!("=================================================");
-                        log::info!("Listing end.");
-                    }
-                    Err(ref e) => {
-                        log::error!("Failed to get migrations: {e}");
-                    }
-                }
-            }
-            Err(e) => {
-                log::error!("Failed to detect migration type: {e}");
+                    .await?
             }
         };
+        log::info!("Listing {} {} migrations", migrations.len(), self.status);
+        for migration in migrations {
+            log::info!("{migration}");
+        }
+        Ok(())
     }
 }
