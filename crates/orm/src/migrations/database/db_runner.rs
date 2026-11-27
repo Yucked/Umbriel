@@ -116,7 +116,7 @@ impl MigrationRunner {
                             latest_migration.name.clone().try_into()?;
                         let migrations_from_dir = all_migrations_from_dir
                             .iter()
-                            .find(|m| m.up.name == latest_migration_name.to_up())
+                            .find(|m| m.up().name == latest_migration_name.to_up())
                             .ok_or(MigrationError::RollbackFailed(format!(
                 "The latest migration - {} - does not have a corresponding down migration file",
                 latest_migration_name
@@ -153,7 +153,7 @@ impl MigrationRunner {
 
                 let migrations_to_rollback = all_migrations_from_dir
                     .into_iter()
-                    .filter(|m| m.up.name.timestamp() <= latest_migration.timestamp)
+                    .filter(|m| m.up().name.timestamp() <= latest_migration.timestamp)
                     .take(*count as usize)
                     .collect::<Vec<_>>();
 
@@ -206,12 +206,12 @@ impl MigrationRunner {
                     .clone()
                     .into_iter()
                     .filter(|m| {
-                        let is_latest = m.up.name == latest_name;
+                        let is_latest = m.up().name == latest_name;
                         let is_before_db_latest_migration =
-                            m.up.name.timestamp() < latest_migration.timestamp;
+                            m.up().name.timestamp() < latest_migration.timestamp;
 
-                        let is_after_file_cursor = m.up.name.timestamp() > file_cursor.timestamp();
-                        let is_file_cursor = &m.up.name == file_cursor;
+                        let is_after_file_cursor = m.up().name.timestamp() > file_cursor.timestamp();
+                        let is_file_cursor = &m.up().name == file_cursor;
 
                         (is_before_db_latest_migration || is_latest)
                             && (is_after_file_cursor || is_file_cursor)
@@ -347,7 +347,7 @@ impl MigrationRunner {
 
                 m_from_db
                     .checksum_up
-                    .verify(&m_from_file.up.name, &m_from_file.up.content)?;
+                    .verify(&m_from_file.up().name, &m_from_file.up().content)?;
 
                 m_from_db
                     .clone()
@@ -355,11 +355,11 @@ impl MigrationRunner {
                     .ok_or(MigrationError::NoChecksumInDb {
                         migration_name: m_from_db.name.clone(),
                     })?
-                    .verify(&m_from_file.down.name, &m_from_file.down.content)?;
+                    .verify(&m_from_file.down().name, &m_from_file.down().content)?;
 
-                if m_from_file.up.name != db_mig_name.to_up() {
+                if m_from_file.up().name != db_mig_name.to_up() {
                     return Err(MigrationError::MigrationFileVsDbNamesMismatch {
-                        migration_file_name: m_from_file.up.name.to_string(),
+                        migration_file_name: m_from_file.up().name.to_string(),
                         migration_db_name: db_mig_name.to_string(),
                     });
                 }
@@ -373,7 +373,7 @@ impl MigrationRunner {
         // and a `DELETE` from a missing table fails. Records are keyed by the up file's name.
         let file_ids = migrations_to_rollback
             .iter()
-            .map(|m| Migration::create_id(&m.up.name))
+            .map(|m| Migration::create_id(&m.up().name))
             .collect::<Vec<_>>();
         // History records without a migration file, which lax mode allows, are removed with the
         // first transaction: a later one may roll back the first migration, which removes the
@@ -387,7 +387,7 @@ impl MigrationRunner {
         let mut transactions = migrations_to_rollback
             .iter()
             .zip(&file_ids)
-            .map(|(m, id)| format!("{}\n{}", Migration::delete_raw(id), m.down.content))
+            .map(|(m, id)| format!("{}\n{}", Migration::delete_raw(id), m.down().content))
             .collect::<Vec<_>>();
         match transactions.first_mut() {
             Some(first) if !orphans.is_empty() => *first = format!("{orphans}\n{first}"),
@@ -400,8 +400,8 @@ impl MigrationRunner {
             .map(|m| {
                 fm.get_migration_dir().map(|d| {
                     vec![
-                        d.join(m.up.name.to_string()),
-                        d.join(m.down.name.to_string()),
+                        d.join(m.up().name.to_string()),
+                        d.join(m.down().name.to_string()),
                     ]
                 })
             })
@@ -437,11 +437,11 @@ impl MigrationRunner {
                 }
                 MigrationFile::TwoWay(m) => {
                     let record = Migration::create_raw(
-                        &m.up.name,
-                        &m.up.content.as_checksum()?,
-                        Some(&m.down.content.as_checksum()?),
+                        &m.up().name,
+                        &m.up().content.as_checksum()?,
+                        Some(&m.down().content.as_checksum()?),
                     );
-                    (m.up.name.clone(), m.up.content.to_string(), record)
+                    (m.up().name.clone(), m.up().content.to_string(), record)
                 }
             };
             let guard = Migration::expect_latest_raw(latest.as_ref());

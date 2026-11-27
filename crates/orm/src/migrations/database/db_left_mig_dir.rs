@@ -18,7 +18,7 @@ impl<C: Connection> LeftDatabase<C> {
         create_migration_table: bool,
     ) -> MigrationResult<()> {
         for migration in file_manager.get_two_way_migrations_sorted_asc(create_migration_table)? {
-            run_transaction(self.0.db(), migration.up.content.to_string()).await?;
+            run_transaction(self.0.db(), migration.up().content.to_string()).await?;
         }
         Ok(())
     }

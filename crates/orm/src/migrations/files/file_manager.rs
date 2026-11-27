@@ -374,7 +374,7 @@ impl FileManagerBi {
         let migrations = self
             .get_migrations()?
             .into_iter()
-            .map(|m| m.up.name)
+            .map(|m| m.up().name.clone())
             .collect::<Vec<_>>();
 
         let migrations = MigrationRunner::list_migrations(db, migrations, status, mode).await?;
