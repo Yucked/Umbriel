@@ -5,10 +5,10 @@ use surrealdb::{Surreal, engine::any::Any, types::Kind};
 use umbriel::{
     All, Field, NONE, Operatable, Param, Render, Runnable, Table, chain,
     statements::{
-        AnalyzerFilter, FunctionArgument, Tokenizer, alter_analyzer, alter_event, alter_field,
-        alter_function, alter_index, alter_param, alter_table, define_analyzer, define_event,
-        define_field, define_function, define_param, define_table, info_for, return_, select,
-        table_relation,
+        AnalyzerFilter, FunctionArgument, Tokenizer, UserRole, alter_analyzer, alter_event,
+        alter_field, alter_function, alter_index, alter_param, alter_table, alter_user,
+        define_analyzer, define_event, define_field, define_function, define_param, define_table,
+        define_user, info_for, return_, select, table_relation,
     },
     value,
 };
@@ -16,6 +16,71 @@ use umbriel_tests::*;
 
 async fn run(db: &Surreal<Any>, statement: impl Runnable + Sync) {
     statement.run(db).await.expect("ran");
+}
+
+/// `ALTER USER` (A11): every clause renders and parses, and durations are literals.
+#[test]
+fn alter_user_sets_every_clause() {
+    use std::time::Duration;
+
+    assert_sql(
+        &alter_user("alice")
+            .on_namespace()
+            .if_exists()
+            .passhash("$argon2id$example")
+            .role(UserRole::Editor)
+            .role(UserRole::Viewer)
+            .duration_for_token(None)
+            .duration_for_session(Some(Duration::from_secs(60 * 60).into()))
+            .comment("analysts"),
+        "ALTER USER IF EXISTS alice ON NAMESPACE PASSHASH '$argon2id$example' \
+         ROLES EDITOR, VIEWER DURATION FOR TOKEN NONE, FOR SESSION 1h COMMENT 'analysts';",
+    );
+    assert_sql(
+        &alter_user("alice")
+            .on_root()
+            .password("example")
+            .drop_comment(),
+        "ALTER USER alice ON ROOT PASSWORD 'example' DROP COMMENT;",
+    );
+}
+
+/// `ALTER USER` changes the stored user, and `IF EXISTS` on a missing one does nothing (A11).
+#[tokio::test]
+async fn alter_user_changes_the_stored_user() {
+    use std::time::Duration;
+
+    let (db, _guard) = db().await;
+    run(
+        &db,
+        define_user("erin")
+            .on_database()
+            .password("example-password")
+            .duration_for_session(Duration::from_secs(60 * 60)),
+    )
+    .await;
+    run(
+        &db,
+        alter_user("erin")
+            .on_database()
+            .role(UserRole::Editor)
+            .duration_for_session(Some(Duration::from_secs(2 * 60 * 60).into()))
+            .comment("altered"),
+    )
+    .await;
+    let stored = stored_definition(&db, "INFO FOR DB;", "users", "erin").await;
+    assert!(stored.contains("ROLES EDITOR"), "{stored}");
+    assert!(stored.contains("FOR SESSION 2h"), "{stored}");
+    assert!(stored.contains("COMMENT 'altered'"), "{stored}");
+
+    run(
+        &db,
+        alter_user("nobody")
+            .on_database()
+            .if_exists()
+            .role(UserRole::Viewer),
+    )
+    .await;
 }
 
 mod rendering {
