@@ -30,13 +30,6 @@ pub enum Merge<T, F = Infallible> {
     Fields(F),
 }
 
-impl<T, F> Merge<T, F> {
-    /// Whether the field is left out of the merge.
-    pub fn is_keep(&self) -> bool {
-        matches!(self, Merge::Keep)
-    }
-}
-
 impl<T: SurrealValue, F: MergeFields> Merge<T, F> {
     /// Adds the field's entry under its stored `name`, unless it is kept. A hand-written
     /// [`MergeFields`] calls it once per field.

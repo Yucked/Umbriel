@@ -304,7 +304,7 @@ fn each_value_renders_as_documented() {
         &update::<Customer>(&id).merge(CustomerMerge::default()),
         "UPDATE customer:ann MERGE {};",
     );
-    assert!(CustomerMerge::default().name.is_keep());
+    assert!(matches!(CustomerMerge::default().name, Merge::Keep));
 }
 
 #[tokio::test]

@@ -18,13 +18,6 @@ pub enum Patch<T> {
     Set(T),
 }
 
-impl<T> Patch<T> {
-    /// Whether the field is left unchanged.
-    pub fn is_keep(&self) -> bool {
-        matches!(self, Patch::Keep)
-    }
-}
-
 impl<T: SurrealValue> Patch<T> {
     /// The assignment for `field`, or `None` when the field is kept.
     #[doc(hidden)]

@@ -23,8 +23,7 @@ fn kept_fields_are_omitted_and_none_null_and_values_are_distinct() {
     assert_eq!(patch.into_setters().to_debug_sql(), "bio = 'Hello'");
 
     assert!(ProfilePatch::default().into_setters().is_empty());
-    assert!(Patch::<i64>::Keep.is_keep());
-    assert!(!Patch::Set(1).is_keep());
+    assert!(matches!(ProfilePatch::default().bio, Patch::Keep));
 }
 
 #[tokio::test]
