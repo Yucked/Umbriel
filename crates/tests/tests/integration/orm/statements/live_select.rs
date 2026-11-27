@@ -265,9 +265,9 @@ mod lifecycle {
         assert_eq!(lives(&db, "note").await, 0, "the query is gone");
     }
 
-    /// L12: dropping a stream leaves other subscriptions working, and surfaces nothing. The test
-    /// never issues a `KILL`, so it can't do the cleanup itself; whether the server still holds
-    /// the dropped query isn't observable through SDK 3.3.4's public API.
+    /// L12: dropping a stream ends its live query on the server, leaves other subscriptions
+    /// working, and surfaces nothing. The test never issues a `KILL`: the SDK sends it from a task
+    /// of its own, so the table's live queries are counted until only the watcher's remains.
     #[tokio::test]
     async fn dropping_a_stream_leaves_the_others() {
         let (db, _guard) = db().await;
@@ -280,7 +280,15 @@ mod lifecycle {
             .subscribe(&db)
             .await
             .expect("subscribed");
+        assert_eq!(lives(&db, "note").await, 2);
         drop(dropped);
+        tokio::time::timeout(WAIT, async {
+            while lives(&db, "note").await != 1 {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("the dropped query is killed within WAIT");
         ran(&db, "CREATE note:one;").await;
         assert!(matches!(
             next(&mut watcher).await,
