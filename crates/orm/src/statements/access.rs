@@ -141,8 +141,8 @@ impl AccessInit {
         self.operation(AccessOperation::Revoke(Selection::All))
     }
 
-    /// `REVOKE GRANT @id`: revokes one grant. SurrealDB 3.3.4 answers with a list, like the other
-    /// revocations: the revoked grant, unlike `SHOW GRANT`, which answers with the grant itself.
+    /// `REVOKE GRANT @id`: revokes one grant, and gives the revoked grants as a list, like the
+    /// other revocations. `SHOW GRANT` gives the grant itself.
     pub fn revoke_grant(self, id: impl Into<String>) -> AccessStatement<Vec<AccessGrant>> {
         self.operation(AccessOperation::Revoke(Selection::Grant(id.into())))
     }
@@ -242,8 +242,29 @@ impl<O: SurrealValue + 'static> AccessStatement<O> {
     pub async fn execute(&self, db: &impl Executor) -> Result<O> {
         let mut results = execute(db, self.to_query()?).await?;
         let value = results.take::<Value>(0).map_err(Error::Conversion)?;
+        let value = match &self.operation {
+            AccessOperation::Revoke(_) => flatten_revocations(value),
+            _ => value,
+        };
         O::from_value(value).map_err(Error::Conversion)
     }
+}
+
+/// SurrealDB 3.3.4 answers `REVOKE GRANT` and `REVOKE WHERE` with a list of lists of grants
+/// (`[[{…}]]`, as the statement's documentation shows), so the inner lists are joined into one.
+/// A grant outside an inner list is kept, so a flat answer decodes too.
+fn flatten_revocations(value: Value) -> Value {
+    let Value::Array(outer) = value else {
+        return value;
+    };
+    let mut grants = Vec::new();
+    for item in outer {
+        match item {
+            Value::Array(inner) => grants.extend(inner),
+            grant => grants.push(grant),
+        }
+    }
+    grants.into_value()
 }
 
 fn render_selection(selection: &Selection, out: &mut Renderer) {
