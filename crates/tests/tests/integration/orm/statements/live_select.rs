@@ -35,6 +35,11 @@ async fn ran(db: &surrealdb::Surreal<surrealdb::engine::any::Any>, sql: &str) {
     Raw::new(sql).run(db).await.expect("ran");
 }
 
+/// How many live queries `table` holds, as `INFO FOR TABLE` lists them under `lives`.
+async fn lives(db: &surrealdb::Surreal<surrealdb::engine::any::Any>, table: &str) -> i64 {
+    read(db, &format!("RETURN object::len((INFO FOR TABLE {table}).lives);")).await
+}
+
 mod rendering {
     use super::*;
 
@@ -148,7 +153,8 @@ mod notifications {
             .expect("subscribed");
 
         ran(&db, "CREATE doc:one SET name = 'a', count = 1, old = true;").await;
-        ran(&db, "UPDATE doc:one SET count = 2, extra = 'x' UNSET old;").await;
+        // SurrealDB 3.3.4 doesn't parse `SET` and `UNSET` in one `UPDATE`; `NONE` removes `old`.
+        ran(&db, "UPDATE doc:one MERGE { count: 2, extra: 'x', old: NONE };").await;
         ran(&db, "UPDATE doc:one SET name = 'b';").await;
         ran(&db, "DELETE doc:one;").await;
 
@@ -237,7 +243,7 @@ mod notifications {
 mod lifecycle {
     use super::*;
 
-    /// L11: `kill` runs `KILL`; the query is gone afterwards.
+    /// L11: `kill` runs `KILL`; the table holds no live query afterwards.
     #[tokio::test]
     async fn kill_ends_the_live_query() {
         let (db, _guard) = db().await;
@@ -246,12 +252,9 @@ mod lifecycle {
             .subscribe(&db)
             .await
             .expect("subscribed");
-        let id = stream.query_id();
+        assert_eq!(lives(&db, "note").await, 1);
         stream.kill().await.expect("killed");
-        assert!(
-            kill(id).run(&db).await.is_err(),
-            "the query is already gone"
-        );
+        assert_eq!(lives(&db, "note").await, 0, "the query is gone");
     }
 
     /// L12: dropping a stream leaves other subscriptions working, and surfaces nothing. The test
@@ -278,7 +281,8 @@ mod lifecycle {
         assert!(quiet(&mut watcher).await, "one write, one notification");
     }
 
-    /// L13: invalidating the session ends its live queries (SurrealDB 3.1.0).
+    /// L13: in SurrealDB 3.3.4, invalidating the session doesn't end its live queries: the
+    /// stream neither ends nor delivers, and the query stays registered until it is killed.
     #[tokio::test]
     async fn invalidating_the_session_ends_the_stream() {
         let (db, guard) = db().await;
@@ -296,7 +300,8 @@ mod lifecycle {
             .await
             .expect("subscribed");
         session.invalidate().await.expect("invalidated");
-        assert!(next(&mut stream).await.is_none(), "the stream ends");
+        assert!(quiet(&mut stream).await, "the stream neither ends nor delivers");
+        assert_eq!(lives(&db, "note").await, 1, "the query stays registered");
     }
 
     /// L14: the HTTP engine has no live queries.
@@ -314,7 +319,7 @@ mod resubscription {
     use super::*;
 
     /// L16a: on a healthy subscription the id changes, one write gives one notification, and the
-    /// old query is gone.
+    /// table holds only the new query.
     #[tokio::test]
     async fn resubscribing_replaces_the_query() {
         let (db, _guard) = db().await;
@@ -332,7 +337,7 @@ mod resubscription {
             Some(Ok(LiveEvent::Create(_)))
         ));
         assert!(quiet(&mut stream).await, "only the new query delivers");
-        assert!(kill(old).run(&db).await.is_err(), "the old query is gone");
+        assert_eq!(lives(&db, "note").await, 1, "the old query is gone");
     }
 
     /// L16b: two resubscriptions in a row; each gives a new id, and only the last delivers.
@@ -349,6 +354,7 @@ mod resubscription {
         let second = stream.query_id();
         stream.resubscribe().await.expect("resubscribed");
         assert!(first != second && second != stream.query_id() && first != stream.query_id());
+        assert_eq!(lives(&db, "note").await, 1, "one query is registered");
         ran(&db, "CREATE note:one;").await;
         assert!(matches!(
             next(&mut stream).await,
@@ -375,11 +381,11 @@ mod resubscription {
         assert_eq!(stream.query_id(), old);
     }
 
-    /// L16d: when the old query is already gone, its `KILL` fails, which is
-    /// `StaleSubscription` with the old id and the cause; the stream already delivers from the
-    /// new query.
+    /// L16d: when the old query is already gone, as after a reconnect, resubscribing succeeds:
+    /// SurrealDB 3.3.4 accepts a `KILL` of an id it no longer holds. The stream delivers from
+    /// the new query.
     #[tokio::test]
-    async fn a_failed_kill_of_the_old_query_is_stale_subscription() {
+    async fn resubscribing_after_the_query_is_gone() {
         let (db, _guard) = db().await;
         ran(&db, "DEFINE TABLE note;").await;
         let mut stream = live(select(All).from(Table::from("note")))
@@ -391,14 +397,10 @@ mod resubscription {
             .run(&db)
             .await
             .expect("killed behind the stream's back");
-        match stream.resubscribe().await {
-            Err(Error::StaleSubscription { query_id, source }) => {
-                assert_eq!(query_id, old);
-                assert!(!source.to_string().is_empty());
-            }
-            other => panic!("expected StaleSubscription, got {other:?}"),
-        }
+        assert_eq!(lives(&db, "note").await, 0);
+        stream.resubscribe().await.expect("resubscribed");
         assert_ne!(stream.query_id(), old);
+        assert_eq!(lives(&db, "note").await, 1);
         ran(&db, "CREATE note:one;").await;
         assert!(matches!(
             next(&mut stream).await,
