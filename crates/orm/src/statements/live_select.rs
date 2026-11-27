@@ -151,10 +151,11 @@ pub enum LiveEvent<O> {
 /// The live query lives in the stream's own session: a clone of the handle given to
 /// [`subscribe`](LiveSelectStatement::subscribe), which the stream keeps, and which
 /// [`resubscribe`](Self::resubscribe) registers on again. In SurrealDB 3.3.4's SDK each clone of
-/// a handle is a session of its own, and dropping a handle ends its session with the session's
-/// live queries. So the query outlives the caller's handle, runs with the rights that handle had
-/// when subscribing, and ends at the latest when the stream is dropped. Invalidating or
-/// re-signing the caller's handle doesn't reach it.
+/// a handle is a session of its own, and dropping a handle sends, without waiting for an answer,
+/// a detach that ends its session with the session's live queries. So the query outlives the
+/// caller's handle and runs with the rights that handle had when subscribing. Invalidating or
+/// re-signing the caller's handle doesn't reach it. Dropping the stream starts the query's
+/// cleanup but doesn't confirm it; `kill().await` returns once the server has ended the query.
 ///
 /// Dropping the stream ends the live query as best effort: unless a [`kill`](Self::kill)
 /// succeeded, it sends a `KILL` through a clone of the handle that subscribed (the same
