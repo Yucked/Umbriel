@@ -14,19 +14,16 @@
 // ;
 use std::marker::PhantomData;
 
-use surrealdb::types::{self, SurrealValue, Table, ToSql};
+use surrealdb::types::{self, Table, ToSql};
 
 use crate::{
-    Conditional, DurationLike, Filter, Model, ModelMerge, PatchOp, RecordId, Renderer, Setter,
-    TableOf, TableSpec, ValueLike, Writable, render::Checked,
+    Conditional, DurationLike, Filter, Model, RecordId, Renderer, TableOf, TableSpec, ValueLike,
+    Writable, render::Checked,
 };
 
 use super::{
     Cardinality, Explained, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
-    data::{DataClause, Unsettables},
-    impl_statement,
-    index_hint::IndexHint,
-    returning::return_methods,
+    data::DataClause, impl_statement, index_hint::IndexHint, returning::return_methods,
 };
 
 /// Creates a new UPDATE statement.
@@ -51,6 +48,46 @@ use super::{
 /// assert_eq!(
 ///     statement.to_debug_sql(),
 ///     "UPDATE user:alice SET score += 5 RETURN VALUE score;"
+/// );
+/// ```
+///
+/// `SET` takes several assignments: `increment_by` writes `+=`, `append` adds to an array and
+/// `at` assigns one element. `PATCH` takes JSON Patch operations, and one that fails, such as a
+/// failed `test`, fails the statement.
+///
+/// ```
+/// use umbriel::{*, statements::update};
+/// # #[model(node, table = "weapon")]
+/// # pub struct Weapon {
+/// #     pub id: RecordId<Self>,
+/// #     pub name: String,
+/// #     pub damage: u32,
+/// #     pub owners: Vec<String>,
+/// # }
+///
+/// let WeaponSchema { name, damage, owners, .. } = Weapon::schema();
+/// let laser = Weapon::id("laser");
+///
+/// let statement = update::<Weapon>(&laser)
+///     .set([name.equal_to("Laser"), damage.increment_by(100u32)]);
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "UPDATE weapon:laser SET name = 'Laser', damage += 100;"
+/// );
+///
+/// let statement = update::<Weapon>(&laser)
+///     .set([owners.append("Alice"), owners.at(0).equal_to("Bob")]);
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "UPDATE weapon:laser SET owners += 'Alice', owners[0] = 'Bob';"
+/// );
+///
+/// let statement = update::<Weapon>(&laser)
+///     .patch([name.patch_test("Laser"), name.patch_replace("Blaster")]);
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "UPDATE weapon:laser PATCH [{ op: 'test', path: '/name', value: 'Laser' }, \
+///      { op: 'replace', path: '/name', value: 'Blaster' }];"
 /// );
 /// ```
 pub fn update<T: Writable>(targettables: impl Into<TargettablesForUpdate>) -> UpdateStatement<T> {
@@ -237,113 +274,9 @@ impl UpdateBody {
 /// `UPSERT` share.
 macro_rules! update_clauses {
     ($statement:ident) => {
+        $crate::statements::data::data_clause_methods!($crate::Model, $statement, "record");
+
         impl<T: Model, R: ReturnMode, C: Cardinality> $statement<T, R, C> {
-            /// Caution! Replaces the whole record with the model (`CONTENT`). `CONTENT` bypasses
-            /// `READONLY` fields; use [`replace`](Self::replace) to respect them. The model's
-            /// record id must be in a table target's table, or equal a record target; otherwise
-            /// the statement fails when it is rendered.
-            pub fn content(mut self, content: T) -> Self {
-                self.body.data = Some(DataClause::content(content));
-                self
-            }
-
-            /// Merges the non-`Keep` fields of a generated `<Model>Merge` into the record
-            /// (`MERGE`). Nested objects combine at every level; arrays are replaced whole.
-            ///
-            /// An empty merge, with every field `Keep`, still writes `MERGE {}`: the statement is
-            /// a real update, so events fire and its `WHERE`, `ONLY`, return mode and `EXPLAIN`
-            /// apply as written.
-            pub fn merge(self, merge: impl ModelMerge<Model = T>) -> Self {
-                self.merge_object(merge.into_object())
-            }
-
-            /// `MERGE` with an object already built from a `<Model>Merge`.
-            pub(crate) fn merge_object(mut self, object: $crate::MergeObject) -> Self {
-                self.body.data = Some(DataClause::Merge(ValueLike::new(object)));
-                self
-            }
-
-            /// Caution! Replaces the whole record with the given object, removing every field it
-            /// does not contain (`REPLACE`). Unlike `CONTENT`, it respects `READONLY` fields.
-            pub fn replace(mut self, replacement: impl SurrealValue) -> Self {
-                self.body.data = Some(DataClause::Replace(ValueLike::value(replacement)));
-                self
-            }
-
-            /// When specifying fields to update using the SET clause,
-            /// it is possible to increment and decrement numeric values,
-            /// and add or remove values from arrays.
-            /// To increment a numeric value, or to add an item to an array,
-            /// use the `append` or incremenet (i.e +=) operator. To decrement a numeric value,
-            /// or to remove an value from an array, use the `decrement` or `remove` (i.e -=)
-            /// operator. Repeated calls add to the assignments.
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use umbriel::{*, statements::update};
-            /// # #[model(node, table = "weapon")]
-            /// # pub struct Weapon {
-            /// #     pub id: RecordId<Self>,
-            /// #     pub name: String,
-            /// #     pub damage: u32,
-            /// #     pub owners: Vec<String>,
-            /// # }
-            ///
-            /// let WeaponSchema { name, damage, owners, .. } = Weapon::schema();
-            /// let laser = Weapon::id("laser");
-            ///
-            /// // Several assignments; `increment_by` writes `+=`.
-            /// let statement = update::<Weapon>(&laser)
-            ///     .set([name.equal_to("Laser"), damage.increment_by(100u32)]);
-            /// assert_eq!(
-            ///     statement.to_debug_sql(),
-            ///     "UPDATE weapon:laser SET name = 'Laser', damage += 100;"
-            /// );
-            ///
-            /// // `append` adds to an array; `at` assigns one element.
-            /// let statement = update::<Weapon>(&laser)
-            ///     .set([owners.append("Alice"), owners.at(0).equal_to("Bob")]);
-            /// assert_eq!(
-            ///     statement.to_debug_sql(),
-            ///     "UPDATE weapon:laser SET owners += 'Alice', owners[0] = 'Bob';"
-            /// );
-            /// ```
-            pub fn set(mut self, settables: impl Into<Vec<Setter>>) -> Self {
-                self.body.data = Some(DataClause::set(self.body.data.take(), settables.into()));
-                self
-            }
-
-            /// Removes fields from the record (`UNSET`). Repeated calls add to the fields.
-            pub fn unset(mut self, fields: impl Into<Unsettables>) -> Self {
-                self.body.data = Some(DataClause::unset(self.body.data.take(), fields.into().0));
-                self
-            }
-
-            /// Applies JSON Patch operations to the record (`PATCH`). Repeated calls add to the
-            /// operations; if one fails, such as a failed `test`, the statement fails.
-            ///
-            /// # Example
-            ///
-            /// ```
-            /// use umbriel::{*, statements::update};
-            /// # #[model(node, table = "user")]
-            /// # pub struct User { pub id: RecordId<Self>, pub name: String }
-            ///
-            /// let name = User::schema().name;
-            /// let statement = update::<User>(User::id("alice"))
-            ///     .patch([name.patch_test("Alice"), name.patch_replace("Bob")]);
-            /// assert_eq!(
-            ///     statement.to_debug_sql(),
-            ///     "UPDATE user:alice PATCH [{ op: 'test', path: '/name', value: 'Alice' }, \
-            ///      { op: 'replace', path: '/name', value: 'Bob' }];"
-            /// );
-            /// ```
-            pub fn patch(mut self, patch_op: impl Into<Vec<PatchOp>>) -> Self {
-                self.body.data = Some(DataClause::patch(self.body.data.take(), patch_op.into()));
-                self
-            }
-
             /// Adds a condition to the `WHERE` clause of the query.
             pub fn where_(mut self, condition: impl Conditional) -> Self {
                 self.body.where_ = Some(Filter::new(condition));
@@ -368,12 +301,6 @@ macro_rules! update_clauses {
                 self
             }
 
-            /// Sets the timeout duration for the query, bound as a query parameter.
-            pub fn timeout(mut self, duration: impl Into<DurationLike>) -> Self {
-                self.body.timeout = Some(duration.into());
-                self
-            }
-
             /// `EXPLAIN`: returns the query plan instead of running the statement, so nothing is
             /// written.
             pub fn explain(self) -> Explained {
@@ -384,14 +311,6 @@ macro_rules! update_clauses {
             /// runs the statement to count them, so the records **are written**.
             pub fn explain_full(self) -> Explained {
                 Explained::new(self, true)
-            }
-
-            fn with_mode<M: ReturnMode>(self, mode: M) -> $statement<T, M, C> {
-                $statement {
-                    body: self.body,
-                    mode,
-                    cardinality: PhantomData,
-                }
             }
         }
     };
@@ -408,6 +327,15 @@ pub struct UpdateStatement<T, R = ReturnAfter<T>, C = Many> {
 }
 
 update_clauses!(UpdateStatement);
+
+impl<T: Model, R: ReturnMode, C: Cardinality> UpdateStatement<T, R, C> {
+    /// `MERGE` with an object already built from a `<Model>Merge`, for the model's own
+    /// partial updates.
+    pub(crate) fn merge_object(mut self, object: crate::MergeObject) -> Self {
+        self.body.data = Some(DataClause::Merge(ValueLike::new(object)));
+        self
+    }
+}
 
 return_methods!([T: Model] UpdateStatement<T> { none, null, before, after, diff, value, fields, links });
 
