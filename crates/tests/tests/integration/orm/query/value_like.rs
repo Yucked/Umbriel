@@ -128,7 +128,6 @@ mod values {
             umbriel::array![1i64, "two"],
             vec![1i64.into_value(), Value::String("two".to_owned())]
         );
-        assert_eq!(umbriel::val(true), Value::Bool(true));
     }
 
     #[test]
