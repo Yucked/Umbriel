@@ -11,7 +11,7 @@ use surrealdb::engine::any::{Any, connect};
 use surrealdb::Surreal;
 use surrealdb::opt::auth::{Database, Namespace, Root};
 
-use crate::migrations::Comparison;
+use crate::migrations::{Comparison, MigrationError, MigrationResult};
 
 /// The environment variable holding the comparison user's password, so it stays out of the
 /// process list and shell history.
@@ -149,10 +149,11 @@ impl DatabaseConnection {
     /// started with the credentials as its root user; a server is signed in to as a database
     /// user.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// If connecting, signing in or selecting the namespace and database fails.
-    pub async fn setup(&mut self) -> &mut Self {
+    /// [`MigrationError::DbError`] when connecting, signing in or selecting the namespace and
+    /// database fails.
+    pub async fn setup(&mut self) -> MigrationResult<()> {
         let root = Root {
             username: self.user.clone(),
             password: self.pass.clone(),
@@ -168,11 +169,10 @@ impl DatabaseConnection {
             config = config.user(root.clone());
         }
 
-        let db_instance = connect((self.url.to_string(), config))
-            .await
-            .expect("Failed to connect");
+        let db_instance = connect((self.url.to_string(), config)).await?;
 
-        match self.url {
+        // The session keeps the sign-in; the token itself isn't needed.
+        let _token = match self.url {
             UrlDb::Memory => db_instance.signin(root).await,
             UrlDb::Others(_) => {
                 db_instance
@@ -184,59 +184,67 @@ impl DatabaseConnection {
                     })
                     .await
             }
-        }
-        .expect("Failed to signin");
+        }?;
         db_instance
             .use_ns(self.ns.as_str())
             .use_db(self.db.as_str())
-            .await
-            .expect("Failed to use the namespace and database");
+            .await?;
 
         db_instance.wait_for(WaitFor::Connection).await;
         self.db_connection = Some(db_instance);
-
-        self
+        Ok(())
     }
 
     /// The connection, once [`setup`](Self::setup) has run.
-    pub fn db(&self) -> Option<&Surreal<Any>> {
-        self.db_connection.as_ref()
+    ///
+    /// # Errors
+    ///
+    /// [`MigrationError::NotConnected`] before it has.
+    pub fn db(&self) -> MigrationResult<&Surreal<Any>> {
+        self.db_connection
+            .as_ref()
+            .ok_or(MigrationError::NotConnected)
     }
 
     /// The comparison the generator uses: the one given to [`connected`](Self::connected), or a connection to the
     /// URL signed in as `--comparison-user` (password from `UMBRIEL_COMPARISON_PASS`) in
     /// `--comparison-ns`. The connection is made once and reused.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// If `--comparison-ns`, `--comparison-user` or `UMBRIEL_COMPARISON_PASS` is missing, or
-    /// connecting or signing in fails.
-    pub async fn comparison(&mut self) -> Comparison<Any> {
+    /// [`MigrationError::MissingArgument`] when `--comparison-ns`, `--comparison-user` or
+    /// `UMBRIEL_COMPARISON_PASS` is missing; [`MigrationError::DbError`] when connecting or
+    /// signing in fails.
+    pub async fn comparison(&mut self) -> MigrationResult<Comparison<Any>> {
         if let Some(comparison) = &self.comparison {
-            return comparison.clone();
+            return Ok(comparison.clone());
         }
-        let namespace = self.comparison_ns.clone().expect(
-            "--comparison-ns names the namespace the generator creates its comparison databases in",
-        );
+        let namespace = self
+            .comparison_ns
+            .clone()
+            .ok_or(MigrationError::MissingArgument {
+                argument: "--comparison-ns",
+            })?;
         let username = self
             .comparison_user
             .clone()
-            .expect("--comparison-user names the namespace user the generator signs in as");
-        let password = std::env::var(COMPARISON_PASSWORD_VARIABLE).unwrap_or_else(|_| {
-            panic!("{COMPARISON_PASSWORD_VARIABLE} holds the comparison user's password")
-        });
-        let db = connect(self.url.to_string())
-            .await
-            .expect("Failed to connect for the comparison");
+            .ok_or(MigrationError::MissingArgument {
+                argument: "--comparison-user",
+            })?;
+        let password = std::env::var(COMPARISON_PASSWORD_VARIABLE).map_err(|_| {
+            MigrationError::MissingArgument {
+                argument: COMPARISON_PASSWORD_VARIABLE,
+            }
+        })?;
+        let db = connect(self.url.to_string()).await?;
         db.signin(Namespace {
             namespace: namespace.clone(),
             username,
             password,
         })
-        .await
-        .expect("Failed to sign in to the comparison namespace");
+        .await?;
         let comparison = Comparison::new(db, namespace);
         self.comparison = Some(comparison.clone());
-        comparison
+        Ok(comparison)
     }
 }
