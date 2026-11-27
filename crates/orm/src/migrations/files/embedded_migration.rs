@@ -141,7 +141,7 @@ impl EmbeddedMigrationsTwoWay {
         for file in &files {
             let other = counterpart(&file.name)?;
             if file.name.is_up() {
-                pairs.push(MigrationFileTwoWayPair::new(file.clone(), other.clone()));
+                pairs.push(MigrationFileTwoWayPair::new(file.clone(), other.clone())?);
             }
         }
         Ok(pairs)
