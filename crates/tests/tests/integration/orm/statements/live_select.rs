@@ -281,10 +281,10 @@ mod lifecycle {
         assert!(quiet(&mut watcher).await, "one write, one notification");
     }
 
-    /// L13: in SurrealDB 3.3.4, invalidating the session doesn't end its live queries: the
-    /// stream neither ends nor delivers, and the query stays registered until it is killed.
+    /// L13: invalidating the session ends its live queries on the server, but SurrealDB 3.3.4
+    /// sends no `Killed` notification, so the stream neither ends nor delivers.
     #[tokio::test]
-    async fn invalidating_the_session_ends_the_stream() {
+    async fn invalidating_the_session_ends_the_query() {
         let (db, guard) = db().await;
         ran(&db, "DEFINE TABLE note;").await;
         let session = connect(Endpoint::Main).await;
@@ -301,7 +301,7 @@ mod lifecycle {
             .expect("subscribed");
         session.invalidate().await.expect("invalidated");
         assert!(quiet(&mut stream).await, "the stream neither ends nor delivers");
-        assert_eq!(lives(&db, "note").await, 1, "the query stays registered");
+        assert_eq!(lives(&db, "note").await, 0, "the query is gone");
     }
 
     /// L14: the HTTP engine has no live queries.
