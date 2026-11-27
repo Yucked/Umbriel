@@ -43,6 +43,11 @@ fn alter_user_sets_every_clause() {
             .drop_comment(),
         "ALTER USER alice ON ROOT PASSWORD 'example' DROP COMMENT;",
     );
+    let verifier = super::define_user::SCRAM_VERIFIER;
+    assert_sql(
+        &alter_user("alice").on_database().passscram(verifier),
+        &format!("ALTER USER alice ON DATABASE PASSSCRAM '{verifier}';"),
+    );
 }
 
 /// `ALTER USER` changes the stored user, and `IF EXISTS` on a missing one does nothing (A11).
