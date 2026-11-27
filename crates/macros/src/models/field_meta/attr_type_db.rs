@@ -10,7 +10,7 @@ create_tokenstream_wrapper!(=> FieldTypeDbToken);
 
 impl From<&Kind> for FieldTypeDbToken {
     fn from(kind: &Kind) -> Self {
-        Self(kind_tokens(kind, &get_crate_name(false)))
+        Self(kind_tokens(kind, &get_crate_name()))
     }
 }
 
@@ -22,7 +22,7 @@ pub struct DbFieldTypeAstMeta {
     /// `table()`) are absent here and present in the tokens.
     pub field_type_db_original: Kind,
     pub field_type_db_token: FieldTypeDbToken,
-    pub static_assertion_token: StaticAssertionToken,
+    pub static_assertion_token: TokenStream,
 }
 
 impl DbFieldTypeAstMeta {
@@ -31,7 +31,7 @@ impl DbFieldTypeAstMeta {
         Self {
             field_type_db_token: (&kind).into(),
             field_type_db_original: kind,
-            static_assertion_token: static_assertion_token.into(),
+            static_assertion_token,
         }
     }
 }
@@ -47,7 +47,7 @@ impl FieldTypeDb {
 
     /// Asserts that `field_type` can hold a value of this type.
     pub fn generate_static_assertion(&self, field_type: &CustomType) -> TokenStream {
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let assertion = match &self.0 {
             Kind::Any => quote!(assert_type_is_any),
             Kind::Null => quote!(assert_type_is_null),
