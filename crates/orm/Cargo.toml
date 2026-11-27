@@ -45,7 +45,7 @@ migrations = [
   "dep:clap",
   "dep:log",
   "dep:pretty_env_logger",
-  "dep:tokio",
+  "tokio/time",
 ]
 
 [dependencies]
@@ -58,11 +58,16 @@ futures = { workspace = true }
 paste = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+# Spawns the `KILL` of a dropped `LiveStream` on native targets; `migrations` adds `time` to bound
+# the generator's cleanup of its comparison databases. Already in the tree through `surrealdb`.
+tokio = { workspace = true, features = ["rt"] }
 
 sha2 = { workspace = true, optional = true }
 inquire = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 pretty_env_logger = { workspace = true, optional = true }
-# Bounds the generator's cleanup of its comparison databases.
-tokio = { workspace = true, optional = true, features = ["time"] }
+
+# Spawns the `KILL` of a dropped `LiveStream` on wasm, as the SDK spawns its own tasks there.
+[target.'cfg(target_family = "wasm")'.dependencies]
+wasm-bindgen-futures = { workspace = true }
