@@ -66,6 +66,11 @@ fn credentials_name_the_method_and_carry_its_parameters() {
 async fn typed_credentials_sign_up_and_in() {
     let (db, guard) = db().await;
     Account::define().run(&db).await.expect("defined");
+    // A record user reads nothing of a table without permissions, its own record included.
+    Raw::new("DEFINE TABLE person PERMISSIONS FOR select WHERE id = $auth.id;")
+        .run(&db)
+        .await
+        .expect("defined");
 
     let session = guest(Endpoint::Main).await;
     session
