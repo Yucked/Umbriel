@@ -1,5 +1,5 @@
 use super::ident::{FieldAttribute, FieldIdentNormalizedDeserialized};
-use crate::models::{ExtractorResult, StructGenerics, CaseString, struct_casing};
+use crate::models::{CaseString, ExtractorResult, StructGenerics, struct_casing};
 
 use darling::{FromDeriveInput, ast::Data, util};
 use proc_macro2::TokenStream;
