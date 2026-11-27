@@ -201,16 +201,12 @@ impl MigrationRunner {
                             filename: file_cursor.clone(),
                         })?;
 
+                let latest_name = MigrationFilename::try_from(latest_migration.name.clone())?;
                 let migrations_files_to_rollback = all_migrations_from_dir
                     .clone()
                     .into_iter()
                     .filter(|m| {
-                        let is_latest = m.up.name
-                            == latest_migration
-                                .name
-                                .clone()
-                                .try_into()
-                                .expect("Invalid migration name");
+                        let is_latest = m.up.name == latest_name;
                         let is_before_db_latest_migration =
                             m.up.name.timestamp() < latest_migration.timestamp;
 
@@ -254,7 +250,7 @@ impl MigrationRunner {
     pub async fn get_pending_migrations(
         all_migrations: Vec<impl Into<MigrationFile>>,
         db: &Surreal<impl Connection>,
-    ) -> MigrationResult<Vec<PendingMigrationFile>> {
+    ) -> MigrationResult<Vec<MigrationFile>> {
         let latest_migration = Self::get_latest_migration(db).await?;
         Ok(Self::pending_after(
             all_migrations,
@@ -266,13 +262,10 @@ impl MigrationRunner {
     fn pending_after(
         all_migrations: Vec<impl Into<MigrationFile>>,
         latest_migration: Option<&Migration>,
-    ) -> Vec<PendingMigrationFile> {
+    ) -> Vec<MigrationFile> {
         let mut pending_migrations = all_migrations
             .into_iter()
-            .map(|m| {
-                let m: MigrationFile = m.into();
-                PendingMigrationFile::from(m)
-            })
+            .map(Into::<MigrationFile>::into)
             .filter(|m| {
                 latest_migration.is_none_or(|latest_migration| {
                     m.name_forward().timestamp() > latest_migration.timestamp
@@ -329,10 +322,10 @@ impl MigrationRunner {
         for mig_path in pending_migrations_paths {
             let mig_path_str = mig_path.to_string_lossy();
             log::info!("Deleting file: {mig_path_str}");
-            std::fs::remove_file(&mig_path).map_err(|e| {
-                MigrationError::IoError(format!(
-                    "Failed to delete migration file: {mig_path_str}. Error: {e}"
-                ))
+            std::fs::remove_file(&mig_path).map_err(|source| MigrationError::Io {
+                action: "deleting the migration file",
+                path: mig_path.clone(),
+                source,
             })?;
             log::info!("Deleted file: {mig_path_str}");
         }
@@ -426,7 +419,7 @@ impl MigrationRunner {
     /// and fails with [`MigrationError::HistoryChanged`].
     async fn run_up_pending_migrations(
         db: &Surreal<impl Connection>,
-        filtered_pending_migrations: Vec<PendingMigrationFile>,
+        filtered_pending_migrations: Vec<MigrationFile>,
         mut latest: Option<surrealdb::types::RecordId>,
     ) -> MigrationResult<()> {
         if filtered_pending_migrations.is_empty() {
@@ -437,7 +430,7 @@ impl MigrationRunner {
         let count = filtered_pending_migrations.len();
         log::info!("Running {count} migration(s)");
         for mf in filtered_pending_migrations {
-            let (name, content, record) = match mf.into() {
+            let (name, content, record) = match mf {
                 MigrationFile::OneWay(m) => {
                     let record = Migration::create_raw(m.name(), &m.content().as_checksum()?, None);
                     (m.name().clone(), m.content().to_string(), record)
@@ -547,21 +540,23 @@ impl MigrationRunner {
             }
             Status::Applied => {
                 let db_migs = Migration::get_all_desc(db).await?;
-                Self::_get_db_migrations_meta_from_mig_files(migrations_local_dir, db_migs, mode)?
+                Self::applied_local_migrations(migrations_local_dir, db_migs, mode)?
             }
         };
         Ok(migrations)
     }
 
-    fn _get_db_migrations_meta_from_mig_files(
+    /// The local migrations the history records. A recorded name that isn't a migration file
+    /// name is an error, as is, in strict mode, a recorded migration missing locally.
+    fn applied_local_migrations(
         local_migrations: Vec<MigrationFilename>,
         db_migs: Vec<Migration>,
         mode: Mode,
     ) -> MigrationResult<Vec<MigrationFilename>> {
-        let db_migs: BTreeSet<MigrationFilename> = db_migs
+        let db_migs = db_migs
             .into_iter()
-            .map(|dbm| dbm.name.try_into().expect("Invalid migration file name."))
-            .collect();
+            .map(|dbm| MigrationFilename::try_from(dbm.name))
+            .collect::<MigrationResult<BTreeSet<_>>>()?;
 
         let filtered_local_migrations = local_migrations
             .into_iter()
