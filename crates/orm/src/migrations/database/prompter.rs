@@ -1,5 +1,4 @@
 use inquire::error::InquireError;
-use typed_builder::TypedBuilder;
 
 use crate::migrations::*;
 
@@ -49,13 +48,26 @@ pub enum RenameOrDelete {
 }
 
 /// Answers every question with preset answers, for tests and non-interactive runs.
-#[derive(Debug, Clone, Copy, TypedBuilder)]
+#[derive(Debug, Clone, Copy)]
 pub struct MockPrompter {
     /// Whether a migration is written when the schemas do not differ.
     pub allow_empty_migrations_gen: bool,
 
     /// What happens to a single field replaced by another without `old_name`.
     pub rename_or_delete_single_field_change: RenameOrDelete,
+}
+
+impl MockPrompter {
+    /// Answers with `allow_empty_migrations_gen` and `rename_or_delete_single_field_change`.
+    pub fn new(
+        allow_empty_migrations_gen: bool,
+        rename_or_delete_single_field_change: RenameOrDelete,
+    ) -> Self {
+        Self {
+            allow_empty_migrations_gen,
+            rename_or_delete_single_field_change,
+        }
+    }
 }
 
 impl Default for MockPrompter {
