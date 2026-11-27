@@ -18,30 +18,25 @@ pub use prune::Prune;
 pub use reset::Reset;
 
 use surrealdb::{Surreal, engine::any::Any};
-use typed_builder::TypedBuilder;
 pub use up::{FastForwardDelta, Up, UpdateStrategy};
 
 use crate::DbResources;
 use clap::{ArgAction, Parser};
 
 pub use self::config::{COMPARISON_PASSWORD_VARIABLE, DatabaseConnection, Experimental};
-use crate::migrations::{
-    Comparison, MigrationConfig, MockPrompter, Mode, Prompter, RealPrompter, RenameOrDelete,
-};
+use crate::migrations::{Comparison, MigrationConfig, MockPrompter, Mode, Prompter, RealPrompter};
 
 /// Umbriel CLI
-#[derive(Parser, Debug, Clone, TypedBuilder)]
+#[derive(Parser, Debug, Clone)]
 #[clap(name = "SurrealOrm", about = "Umbriel CLI")]
 #[command(version)]
 pub struct Migrator {
     /// Subcommand: generate, up, down, list
     #[command(subcommand)]
-    #[builder(default, setter(strip_option))]
     subcmd: Option<SubCommand>,
 
     /// Optional custom migrations directory
     #[arg(global = true, short, long)]
-    #[builder(default, setter(strip_option))]
     pub dir: Option<PathBuf>,
 
     /// Sets the level of verbosity e.g -v, -vv, -vvv, -vvvv
@@ -58,6 +53,19 @@ pub struct Migrator {
 }
 
 impl Migrator {
+    /// A command line over a connection made in code, for running commands without parsing
+    /// arguments: no subcommand yet ([`set_cmd`](Self::set_cmd) sets one), migrations in `dir`,
+    /// checked in `mode`, and no logging.
+    pub fn connected(connection: DatabaseConnection, dir: PathBuf, mode: Mode) -> Self {
+        Self {
+            subcmd: None,
+            dir: Some(dir),
+            verbose: 0,
+            mode,
+            db_connection: connection,
+        }
+    }
+
     /// How closely migration files are checked against the history.
     pub fn mode(&self) -> Mode {
         self.mode
@@ -80,11 +88,11 @@ impl Migrator {
 
     /// The migration configuration from the directory and mode arguments.
     pub fn file_manager(&self) -> MigrationConfig {
-        let fm_init = MigrationConfig::builder()
-            .custom_path(self.dir.clone())
-            .mode(self.mode);
-
-        fm_init.build()
+        let config = MigrationConfig::new().set_mode(self.mode);
+        match &self.dir {
+            Some(dir) => config.set_custom_path(dir.clone()),
+            None => config,
+        }
     }
 
     /// Run migration cli
@@ -113,14 +121,7 @@ impl Migrator {
     pub async fn run_test_main(codebase_resources: impl DbResources) {
         let mut cli = Self::parse();
         cli.setup_logging();
-        cli.run_fn(
-            codebase_resources,
-            MockPrompter::builder()
-                .allow_empty_migrations_gen(true)
-                .rename_or_delete_single_field_change(RenameOrDelete::Rename)
-                .build(),
-        )
-        .await;
+        cli.run_fn(codebase_resources, MockPrompter::default()).await;
     }
 
     /// Runs the configured subcommand, `up` when none is set, answering prompts with `prompter`.
