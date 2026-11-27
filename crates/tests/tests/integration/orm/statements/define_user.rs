@@ -43,6 +43,42 @@ fn roles_and_durations() {
     );
 }
 
+/// A synthetic SCRAM-SHA-256 verifier of the shape SurrealDB 3.3.4 accepts: 4096 iterations, a
+/// salt, and 32-byte stored and server keys.
+pub(super) const SCRAM_VERIFIER: &str = "SCRAM-SHA-256$4096:MDEyMzQ1Njc4OWFiY2RlZg==\
+    $nQpbZ77WudtqufPwikHXGRt6g2QJ4zns8bZLw273DRM=:jn2amWP1q1h+jgjy0YTO14S6/F02SV7taipOeB7ef20=";
+
+/// `PASSSCRAM` renders beside the password, the server accepts a valid verifier, and refuses
+/// one that isn't (S27).
+#[tokio::test]
+async fn a_scram_verifier_is_defined() {
+    assert_sql(
+        &define_user("frank")
+            .on_database()
+            .password("example-password")
+            .passscram(SCRAM_VERIFIER),
+        &format!(
+            "DEFINE USER frank ON DATABASE PASSWORD 'example-password' PASSSCRAM '{SCRAM_VERIFIER}';"
+        ),
+    );
+    let (db, _guard) = db().await;
+    run(
+        &db,
+        define_user("frank")
+            .on_database()
+            .password("example-password")
+            .passscram(SCRAM_VERIFIER),
+    )
+    .await;
+    let refused = define_user("grace")
+        .on_database()
+        .password("example-password")
+        .passscram("SCRAM-SHA-256$1:bad")
+        .run(&db)
+        .await;
+    assert!(refused.is_err(), "an invalid verifier is refused");
+}
+
 /// The durations are stored with the user (A11).
 #[tokio::test]
 async fn durations_are_stored() {
