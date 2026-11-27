@@ -102,14 +102,6 @@ pub enum MigrationError {
         error: String,
     },
 
-    /// A mode is not `strict` or `lax`: the given mode and the valid ones.
-    #[error("Invalid migration mode: {0}. It must be one of: {1}")]
-    InvalidMigrationMode(String, String),
-
-    /// A flag is not `two_way` or `one_way`: the given flag and the valid ones.
-    #[error("Invalid migration flag: {0}. It must be one of {1}")]
-    InvalidMigrationFlag(String, String),
-
     /// Whether migrations are one-way or two-way was not set.
     #[error("Migration flag not set")]
     MigrationFlagNotSet,
@@ -360,7 +352,6 @@ pub enum MigrationError {
     UnexpectedInfoShape(String),
 
     /// The history and the migration directory disagree in strict mode.
-    // TODO: Decide on how to handle suggestions in scenarios where there is a mismatch.
     #[error(
         "Invalid migration state. The number of registered migrations in the database ({db_migration_count}) does not match the number of migration files in the migration directory ({local_dir_migration_count}). \
         This could be because you have deleted some migration files from the migration directory or you have deleted some migration records from the database. \
@@ -418,10 +409,6 @@ There are {one_way_filecount} up only files and {two_way_filecount} up and down 
     /// A query failed.
     #[error(transparent)]
     ProblemWithQuery(#[from] crate::Error),
-
-    /// A regular expression is invalid.
-    #[error(transparent)]
-    InvalidRegex(#[from] regex::Error),
 
     /// A file system operation failed.
     #[error("Invalid migration file name: {0}")]
