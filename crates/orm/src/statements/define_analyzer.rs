@@ -216,12 +216,9 @@ impl DefineAnalyzerStatement {
 
 /// Writes `items` separated by `,`.
 pub(crate) fn push_list(out: &mut Renderer, items: &[impl Display]) {
-    for (index, item) in items.iter().enumerate() {
-        if index > 0 {
-            out.push_str(",");
-        }
+    out.push_joined_with(items, ",", |out, item| {
         out.push_display(item);
-    }
+    });
 }
 
 impl Statement for DefineAnalyzerStatement {

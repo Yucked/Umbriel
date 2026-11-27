@@ -73,13 +73,10 @@ impl Exposed {
             ));
             return;
         }
-        out.push_str(word);
-        for (index, name) in names.iter().enumerate() {
-            if index > 0 {
-                out.push_str(", ");
-            }
-            push_name(out, name);
-        }
+        out.push_str(word)
+            .push_joined_with(names, ", ", |out, name| {
+                push_name(out, name);
+            });
     }
 }
 

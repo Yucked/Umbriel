@@ -107,16 +107,13 @@ impl Render for Closure {
             return;
         }
         out.push_str("|");
-        for (index, (param, kind)) in self.params.iter().enumerate() {
-            if index > 0 {
-                out.push_str(", ");
-            }
+        out.push_joined_with(&self.params, ", ", |out, (param, kind)| {
             out.push(param);
             if let Some(kind) = kind {
                 out.push_str(": ");
                 push_param_kind(out, kind);
             }
-        }
+        });
         out.push_str("| ");
         match &self.returns {
             Some(kind) => {
