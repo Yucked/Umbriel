@@ -26,7 +26,7 @@ use super::{
     define_function::{FunctionArgument, push_arguments},
     define_module::ModuleName,
     define_table::{TableKind, TableRelation, push_changefeed},
-    for_permission::{PermissionValue, Permissions, PermissionsClause},
+    for_permission::{PermissionValue, PermissionsClause, impl_permissions},
     impl_definition,
 };
 
@@ -240,25 +240,15 @@ impl AlterTableStatement {
         self.schemafull = Some(false);
         self
     }
-
-    /// `PERMISSIONS NONE`.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions.none();
-        self
-    }
-
-    /// `PERMISSIONS FULL`.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions.full();
-        self
-    }
-
-    /// `PERMISSIONS FOR …`; further calls accumulate.
-    pub fn permissions(mut self, fors: impl Into<Permissions>) -> Self {
-        self.permissions.push(fors);
-        self
-    }
 }
+
+impl_permissions!(per_for: AlterTableStatement, AlterFieldStatement);
+impl_permissions!(
+    single: AlterParamStatement,
+    AlterFunctionStatement,
+    AlterBucketStatement,
+    AlterModuleStatement,
+);
 
 impl Statement for AlterTableStatement {
     fn render_body(&self, out: &mut Renderer) {
@@ -452,24 +442,6 @@ impl AlterFieldStatement {
     /// `DROP DEFAULT`.
     pub fn drop_default(mut self) -> Self {
         self.default.drop = true;
-        self
-    }
-
-    /// `PERMISSIONS NONE`.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions.none();
-        self
-    }
-
-    /// `PERMISSIONS FULL`.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions.full();
-        self
-    }
-
-    /// `PERMISSIONS FOR …`; further calls accumulate.
-    pub fn permissions(mut self, fors: impl Into<Permissions>) -> Self {
-        self.permissions.push(fors);
         self
     }
 }
@@ -734,24 +706,6 @@ impl AlterParamStatement {
         self.value = Some(value.into());
         self
     }
-
-    /// `PERMISSIONS NONE`.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions = Some(PermissionValue::None);
-        self
-    }
-
-    /// `PERMISSIONS FULL`.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions = Some(PermissionValue::Full);
-        self
-    }
-
-    /// `PERMISSIONS WHERE @condition`.
-    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
-        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
-        self
-    }
 }
 
 impl Statement for AlterParamStatement {
@@ -825,24 +779,6 @@ impl AlterFunctionStatement {
     /// signature the query fails when it is rendered.
     pub fn returns(mut self, kind: impl Into<Kind>) -> Self {
         self.returns = Some(kind.into());
-        self
-    }
-
-    /// `PERMISSIONS NONE`.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions = Some(PermissionValue::None);
-        self
-    }
-
-    /// `PERMISSIONS FULL`.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions = Some(PermissionValue::Full);
-        self
-    }
-
-    /// `PERMISSIONS WHERE @condition`.
-    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
-        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
         self
     }
 }
@@ -1002,7 +938,7 @@ pub fn alter_sequence(name: impl Into<Name<Ident>>) -> AlterSequenceStatement {
 pub struct AlterSequenceStatement {
     name: Name<Ident>,
     if_exists: bool,
-    timeout: Change<Duration>,
+    timeout: Change<crate::DurationLike>,
 }
 
 impl AlterSequenceStatement {
@@ -1012,8 +948,9 @@ impl AlterSequenceStatement {
         self
     }
 
-    /// `TIMEOUT @duration`: how long `sequence::nextval` waits to reserve a batch.
-    pub fn timeout(mut self, timeout: impl Into<Duration>) -> Self {
+    /// `TIMEOUT @duration`: how long `sequence::nextval` waits to reserve a batch. SurrealDB
+    /// 3.3.4 parses it as an expression, like every other `TIMEOUT`.
+    pub fn timeout(mut self, timeout: impl Into<crate::DurationLike>) -> Self {
         self.timeout.set = Some(timeout.into());
         self
     }
@@ -1034,7 +971,7 @@ impl Statement for AlterSequenceStatement {
                 out.push_error("ALTER cannot both set and drop TIMEOUT");
             }
             (Some(timeout), false) => {
-                out.push_str(" TIMEOUT ").push_syntax(timeout);
+                out.push_str(" TIMEOUT ").push(timeout);
             }
             (None, true) => {
                 out.push_str(" TIMEOUT NONE");
@@ -1101,24 +1038,6 @@ impl AlterBucketStatement {
     /// `DROP BACKEND`: the bucket uses the server's global bucket.
     pub fn drop_backend(mut self) -> Self {
         self.backend.drop = true;
-        self
-    }
-
-    /// `PERMISSIONS NONE`.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions = Some(PermissionValue::None);
-        self
-    }
-
-    /// `PERMISSIONS FULL`.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions = Some(PermissionValue::Full);
-        self
-    }
-
-    /// `PERMISSIONS WHERE @condition`.
-    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
-        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
         self
     }
 }
@@ -1282,26 +1201,6 @@ pub struct AlterModuleStatement {
     comment: Change<String>,
 }
 
-impl AlterModuleStatement {
-    /// `PERMISSIONS NONE`.
-    pub fn permissions_none(mut self) -> Self {
-        self.permissions = Some(PermissionValue::None);
-        self
-    }
-
-    /// `PERMISSIONS FULL`.
-    pub fn permissions_full(mut self) -> Self {
-        self.permissions = Some(PermissionValue::Full);
-        self
-    }
-
-    /// `PERMISSIONS WHERE @condition`.
-    pub fn permissions_where(mut self, condition: impl Conditional) -> Self {
-        self.permissions = Some(PermissionValue::Where(Filter::new(condition)));
-        self
-    }
-}
-
 impl Statement for AlterModuleStatement {
     fn render_body(&self, out: &mut Renderer) {
         push_head(out, "MODULE", self.if_exists);
@@ -1315,3 +1214,149 @@ impl Statement for AlterModuleStatement {
 
 impl_alter_common!(AlterModuleStatement);
 impl_definition!(AlterModuleStatement);
+
+/// Alters a system user: `ALTER USER [IF EXISTS] @name ON ROOT | NAMESPACE | DATABASE
+/// [PASSWORD @string | PASSHASH @string] [ROLES @role, …] [DURATION FOR TOKEN …, FOR SESSION …]
+/// [COMMENT @string | DROP COMMENT]`.
+///
+/// Unlike `DEFINE USER`, SurrealDB 3.3.4 takes the durations of `ALTER USER` as duration literals
+/// only (`parse_alter_user`), so they're [`Duration`]s, with `None` for `NONE`.
+///
+/// ```rust
+/// use umbriel::{*, statements::{UserRole, alter_user}};
+///
+/// let statement = alter_user("alice")
+///     .on_database()
+///     .if_exists()
+///     .role(UserRole::Editor)
+///     .duration_for_token(Some(std::time::Duration::from_secs(15 * 60).into()))
+///     .duration_for_session(None);
+/// assert_eq!(
+///     statement.to_debug_sql(),
+///     "ALTER USER IF EXISTS alice ON DATABASE ROLES EDITOR \
+///      DURATION FOR TOKEN 15m, FOR SESSION NONE;"
+/// );
+/// ```
+pub fn alter_user(name: impl Into<Name<crate::User>>) -> AlterUserInit {
+    AlterUserInit(name.into())
+}
+
+/// An `ALTER USER` awaiting its level.
+#[must_use]
+pub struct AlterUserInit(Name<crate::User>);
+
+impl AlterUserInit {
+    fn on(self, level: crate::Level) -> AlterUserStatement {
+        AlterUserStatement {
+            name: self.0,
+            level,
+            if_exists: false,
+            credential: None,
+            roles: Vec::new(),
+            token_duration: None,
+            session_duration: None,
+            comment: Change::default(),
+        }
+    }
+
+    /// Alters a root user.
+    pub fn on_root(self) -> AlterUserStatement {
+        self.on(crate::Level::Root)
+    }
+
+    /// Alters a user of the current namespace.
+    pub fn on_namespace(self) -> AlterUserStatement {
+        self.on(crate::Level::Namespace)
+    }
+
+    /// Alters a user of the current database.
+    pub fn on_database(self) -> AlterUserStatement {
+        self.on(crate::Level::Database)
+    }
+}
+
+/// An `ALTER USER` statement.
+#[must_use]
+pub struct AlterUserStatement {
+    name: Name<crate::User>,
+    level: crate::Level,
+    if_exists: bool,
+    credential: Option<super::define_user::UserCredential>,
+    roles: Vec<super::UserRole>,
+    token_duration: Option<Option<Duration>>,
+    session_duration: Option<Option<Duration>>,
+    comment: Change<String>,
+}
+
+impl AlterUserStatement {
+    /// `PASSWORD`: replaces the credential with a plain-text password, which SurrealDB hashes.
+    pub fn password(mut self, password: impl Into<super::define_user::Password>) -> Self {
+        self.credential = Some(super::define_user::UserCredential::Password(
+            password.into(),
+        ));
+        self
+    }
+
+    /// `PASSHASH`: replaces the credential with an already-hashed password.
+    pub fn passhash(mut self, passhash: impl Into<super::define_user::Passhash>) -> Self {
+        self.credential = Some(super::define_user::UserCredential::Passhash(
+            passhash.into(),
+        ));
+        self
+    }
+
+    /// `ROLES`: replaces the roles with the ones given; repeated calls add to them.
+    pub fn role(mut self, role: super::UserRole) -> Self {
+        self.roles.push(role);
+        self
+    }
+
+    /// `DURATION FOR TOKEN`: a new token duration, or `None` for `NONE` (no expiry).
+    pub fn duration_for_token(mut self, duration: Option<Duration>) -> Self {
+        self.token_duration = Some(duration);
+        self
+    }
+
+    /// `DURATION FOR SESSION`: a new session duration, or `None` for `NONE` (no expiry).
+    pub fn duration_for_session(mut self, duration: Option<Duration>) -> Self {
+        self.session_duration = Some(duration);
+        self
+    }
+}
+
+impl Statement for AlterUserStatement {
+    fn render_body(&self, out: &mut Renderer) {
+        push_head(out, "USER", self.if_exists);
+        out.push(&self.name).push_str(" ON ").push(&self.level);
+        if let Some(credential) = &self.credential {
+            credential.render(out);
+        }
+        super::define_user::push_roles(out, &self.roles);
+        let durations = [
+            ("TOKEN", &self.token_duration),
+            ("SESSION", &self.session_duration),
+        ];
+        let mut set = durations
+            .iter()
+            .filter_map(|(name, duration)| duration.as_ref().map(|duration| (*name, duration)))
+            .peekable();
+        if set.peek().is_some() {
+            out.push_str(" DURATION ")
+                .push_joined_with(set, ", ", |out, (name, duration)| {
+                    out.push_str("FOR ").push_str(name).push_str(" ");
+                    match duration {
+                        Some(duration) => {
+                            out.push_display(duration);
+                        }
+                        None => {
+                            out.push_str("NONE");
+                        }
+                    }
+                });
+        }
+        render_comment(&self.comment, out);
+    }
+}
+
+impl_alter_common!(AlterUserStatement);
+impl_definition!(AlterUserStatement);
