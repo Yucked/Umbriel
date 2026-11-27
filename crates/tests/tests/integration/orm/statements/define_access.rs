@@ -219,6 +219,32 @@ mod behaviour {
         assert!(api.contains("FOR GRANT 1h"), "{api}");
     }
 
+    /// JWT access on the root and on the namespace is stored at that level, with its algorithm
+    /// and audience (A3). Both outlive the test's database, so they get names of their own and
+    /// are removed afterwards.
+    #[tokio::test]
+    async fn jwt_definitions_are_stored_on_root_and_namespace() {
+        let (db, guard) = db().await;
+        let name = format!("jwt_{}", guard.database());
+        let jwt = || {
+            umbriel::statements::jwt_access()
+                .algorithm(JwtAlgorithm::HS512)
+                .key("example-key")
+                .audience(["api.example.com"])
+        };
+        run(&db, define_access(name.clone()).on_root().jwt(jwt())).await;
+        run(&db, define_access(name.clone()).on_namespace().jwt(jwt())).await;
+        let on_root = stored_definition(&db, "INFO FOR ROOT;", "accesses", &name).await;
+        let on_namespace = stored_definition(&db, "INFO FOR NS;", "accesses", &name).await;
+        run(&db, remove_access(name.clone()).on_root()).await;
+        run(&db, remove_access(name.clone()).on_namespace()).await;
+        for stored in [on_root, on_namespace] {
+            assert!(stored.contains("TYPE JWT"), "{stored}");
+            assert!(stored.contains("ALGORITHM HS512"), "{stored}");
+            assert!(stored.contains("api.example.com"), "{stored}");
+        }
+    }
+
     /// Sign-up issues a token and sign-in with the right credentials succeeds. A wrong password,
     /// an unknown access method and a `THROW` in `AUTHENTICATE` refuse the sign-in (A4, A8).
     /// SurrealDB 3.3.4 reports a `SIGNIN` that finds no record as "No record was returned",
