@@ -11,9 +11,9 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use umbriel::{
-    DbResources, Field, JwtAlgorithm, LinkOne, Model, Node, Operatable, Param, Raw, RecordId,
-    Render, Table, TableResources, chain, cond, create_param_name_fn, create_table_resources,
-    model,
+    DbResources, Field, JwtAlgorithm, LinkOne, Model, Node, OnDatabase, Operatable, Param, Raw,
+    RecordId, Render, Table, TableResources, chain, cond, create_param_name_fn,
+    create_table_resources, model,
     statements::{
         AnalyzerFilter, DefineAccessStatement, FunctionArgument, SnowballLanguage, Tokenizer,
         UserRole, define_access, define_analyzer, define_event, define_function, define_index,
@@ -44,7 +44,7 @@ create_param_name_fn!(__some_test_param3);
 
 /// JWT access verified with a public key and issuing no tokens: nothing in it is secret, so it
 /// round-trips through generated migrations.
-pub fn partner_api() -> DefineAccessStatement {
+pub fn partner_api() -> DefineAccessStatement<OnDatabase> {
     define_access("partner_api").on_database().jwt(
         jwt_access()
             .algorithm(JwtAlgorithm::RS256)
@@ -171,7 +171,7 @@ pub mod invalid_cases {
     )]
     #[orm(schemafull)]
     #[surreal(rename_all = "camelCase")]
-    #[derive(TableResources, Debug, Clone, Default)]
+    #[derive(Debug, Clone, Default)]
     pub struct UserRenamingFromCurrentlyUsedFieldNameDisallowed {
         pub id: RecordId<Self>,
         #[orm(old_name = "firstName")]
@@ -189,7 +189,7 @@ pub mod invalid_cases {
     #[model(node, table = "user_renaming_with_same_old_field_name_disallowed")]
     #[orm(schemafull)]
     #[surreal(rename_all = "camelCase")]
-    #[derive(TableResources, Debug, Clone, Default)]
+    #[derive(Debug, Clone, Default)]
     pub struct UserRenamingWithSameOldFieldNameDisallowed {
         pub id: RecordId<Self>,
         #[orm(old_name = "firstName")]
@@ -204,12 +204,15 @@ pub mod invalid_cases {
     impl DbResources for ResourcesVRenamingWithSameOldFieldNameDisallowed {
         create_table_resources!(UserRenamingWithSameOldFieldNameDisallowed);
     }
+
+    impl TableResources for UserRenamingFromCurrentlyUsedFieldNameDisallowed {}
+    impl TableResources for UserRenamingWithSameOldFieldNameDisallowed {}
 }
 
 #[model(node, table = "new_stuff")]
 #[orm(schemafull)]
 #[surreal(rename_all = "camelCase")]
-#[derive(TableResources, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct NewStuff {
     pub id: RecordId<Self>,
     pub first_name: String,
@@ -220,7 +223,7 @@ pub struct NewStuff {
 #[model(node, table = "planet")]
 #[orm(schemafull)]
 #[surreal(rename_all = "camelCase")]
-#[derive(TableResources, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Planet {
     pub id: RecordId<Self>,
     pub first_name: String,
@@ -235,7 +238,7 @@ pub struct Planet {
 #[model(node, table = "planet")]
 #[orm(schemafull, relax_table)]
 #[surreal(rename_all = "camelCase")]
-#[derive(TableResources, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct PlanetV2 {
     pub id: RecordId<Self>,
     pub new_name: String,
@@ -248,7 +251,7 @@ pub struct PlanetV2 {
 #[model(node, table = "student")]
 #[orm(schemafull)]
 #[surreal(rename_all = "camelCase")]
-#[derive(TableResources, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Student {
     pub id: RecordId<Self>,
     pub university: String,
@@ -262,7 +265,7 @@ pub mod snake_cases {
 
     #[model(node, table = "animal_snake_case")]
     #[orm(schemafull)]
-    #[derive(TableResources, Debug, Clone, Default)]
+    #[derive(Debug, Clone, Default)]
     pub struct AnimalSnakeCase {
         pub id: RecordId<Self>,
         pub species: String,
@@ -275,7 +278,7 @@ pub mod snake_cases {
     /// The second version of `AnimalSnakeCase`, renaming `attributes` explicitly.
     #[model(node, table = "animal_snake_case")]
     #[orm(schemafull, relax_table)]
-    #[derive(TableResources, Debug, Clone, Default)]
+    #[derive(Debug, Clone, Default)]
     pub struct AnimalSnakeCaseV2 {
         pub id: RecordId<Self>,
         pub species: String,
@@ -286,7 +289,7 @@ pub mod snake_cases {
 
     #[model(edge, table = "eats_snake_case")]
     #[orm(schemafull)]
-    #[derive(TableResources, Debug, Clone, Default)]
+    #[derive(Debug, Clone, Default)]
     pub struct EatsSnakeCase<In: Node, Out: Node> {
         pub id: RecordId<Self>,
         #[orm(link_one = "In")]
@@ -298,6 +301,10 @@ pub mod snake_cases {
     }
 
     pub type AnimalSnakeCaseEatsCrop = EatsSnakeCase<AnimalSnakeCase, Crop>;
+
+    impl TableResources for AnimalSnakeCase {}
+    impl TableResources for AnimalSnakeCaseV2 {}
+    impl<In: Node, Out: Node> TableResources for EatsSnakeCase<In, Out> {}
 }
 
 pub use snake_cases::{AnimalSnakeCase, AnimalSnakeCaseEatsCrop};
@@ -321,14 +328,15 @@ impl TableResources for Animal {
             .on_table(Self::table())
             .when(
                 cond(Field::new("species").equal("Homo Erectus"))
-                    .and(Field::new("velocity").gt(545)),
+                    .and(Field::new("velocity").greater_than(545)),
             )
             .then(select(umbriel::All).from(Table::new("crop")));
 
         let event2 = define_event("event2")
             .on_table(Self::table())
             .when(
-                cond(Field::new("species").equal("Homo Sapien")).and(Field::new("velocity").lt(10)),
+                cond(Field::new("species").equal("Homo Sapien"))
+                    .and(Field::new("velocity").less_than(10)),
             )
             .then(select(umbriel::All).from(Table::new("eats")));
         vec![raw(event1), raw(event2)]
@@ -362,7 +370,7 @@ impl TableResources for AnimalV2 {
             .on_table(Self::table())
             .when(
                 cond(Field::new("species").equal("Homo Habillis"))
-                    .and(Field::new("velocity").gt(545)),
+                    .and(Field::new("velocity").greater_than(545)),
             )
             .then(select(umbriel::All).from(Table::new("crop")));
         vec![raw(event1)]
@@ -403,7 +411,7 @@ impl TableResources for AnimalV3 {
 #[model(edge, table = "eats")]
 #[orm(schemafull)]
 #[surreal(rename_all = "camelCase")]
-#[derive(TableResources, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Eats<In: Node, Out: Node> {
     pub id: RecordId<Self>,
     #[orm(link_one = "In")]
@@ -419,7 +427,7 @@ pub type AnimalEatsCrop = Eats<Animal, Crop>;
 #[model(edge, table = "eats_v2")]
 #[orm(schemafull)]
 #[surreal(rename_all = "camelCase")]
-#[derive(TableResources, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EatsV2<In: Node, Out: Node> {
     pub id: RecordId<Self>,
     #[surreal(rename = "in")]
@@ -437,11 +445,19 @@ pub type AnimalEatsCropV2 = EatsV2<AnimalV2, Crop>;
 #[model(node, table = "crop")]
 #[orm(schemafull)]
 #[surreal(rename_all = "camelCase")]
-#[derive(TableResources, Debug, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Crop {
     pub id: RecordId<Self>,
     pub color: String,
 }
+
+impl TableResources for NewStuff {}
+impl TableResources for Planet {}
+impl TableResources for PlanetV2 {}
+impl TableResources for Student {}
+impl<In: Node, Out: Node> TableResources for Eats<In, Out> {}
+impl<In: Node, Out: Node> TableResources for EatsV2<In, Out> {}
+impl TableResources for Crop {}
 
 /// No definitions at all.
 #[derive(Debug, Clone)]
@@ -472,11 +488,10 @@ impl DbResources for PlaceholderResources {
 /// Record access: SurrealDB generates and redacts its token-signing key, so it cannot be
 /// written to a migration.
 pub fn customer_access(session: Duration) -> Raw {
-    raw(define_access("customer").on_database().record(
-        record_access()
-            .signin(select(umbriel::All).from(Table::new("customer")))
-            .duration_for_session(session),
-    ))
+    raw(define_access("customer")
+        .on_database()
+        .record(record_access().signin(select(umbriel::All).from(Table::new("customer"))))
+        .duration_for_session(session))
 }
 
 /// A database user with a password hash, which SurrealDB redacts.
@@ -574,8 +589,8 @@ impl DbResources for NoteSearch {
     }
 
     fn tables(&self) -> Vec<Raw> {
-        let mut tables = <Note as TableResources>::fields_definitions();
-        tables.insert(0, <Note as TableResources>::table_definition());
+        let mut tables = vec![Note::define_table()];
+        tables.extend(Note::define_fields());
         tables.push(body_index("normalized"));
         tables
     }
@@ -596,8 +611,8 @@ impl DbResources for NoteSearchV2 {
     }
 
     fn tables(&self) -> Vec<Raw> {
-        let mut tables = <Note as TableResources>::fields_definitions();
-        tables.insert(0, <Note as TableResources>::table_definition());
+        let mut tables = vec![Note::define_table()];
+        tables.extend(Note::define_fields());
         tables.push(body_index("normalized_v2"));
         tables
     }
