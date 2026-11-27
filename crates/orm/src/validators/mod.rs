@@ -76,14 +76,20 @@ macro_rules! impl_marker {
 
 kind_check!(
     /// Types holding a SurrealDB `number`.
-    IsNumber, "`{Self}` cannot hold a SurrealDB `number`",assert_type_is_number, assert_value_is_number
+    IsNumber,
+    "`{Self}` cannot hold a SurrealDB `number`",
+    assert_type_is_number,
+    assert_value_is_number
 );
 impl_marker!(IsNumber: i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64,
     types::Number, types::Decimal);
 
 kind_check!(
     /// Types holding a SurrealDB `int`.
-    IsInt, "`{Self}` cannot hold a SurrealDB `int`",assert_type_is_int, assert_value_is_int
+    IsInt,
+    "`{Self}` cannot hold a SurrealDB `int`",
+    assert_type_is_int,
+    assert_value_is_int
 );
 impl_marker!(IsInt: i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
 
@@ -92,61 +98,91 @@ pub use IsInt as Int;
 
 kind_check!(
     /// Types holding a SurrealDB `float`.
-    IsFloat, "`{Self}` cannot hold a SurrealDB `float`",assert_type_is_float, assert_value_is_float
+    IsFloat,
+    "`{Self}` cannot hold a SurrealDB `float`",
+    assert_type_is_float,
+    assert_value_is_float
 );
 impl_marker!(IsFloat: f32, f64);
 
 kind_check!(
     /// Types holding a SurrealDB `decimal`.
-    IsDecimal, "`{Self}` cannot hold a SurrealDB `decimal`",assert_type_is_decimal, assert_value_is_decimal
+    IsDecimal,
+    "`{Self}` cannot hold a SurrealDB `decimal`",
+    assert_type_is_decimal,
+    assert_value_is_decimal
 );
 impl_marker!(IsDecimal: f32, f64, types::Decimal);
 
 kind_check!(
     /// Types holding a SurrealDB `string`.
-    IsString, "`{Self}` cannot hold a SurrealDB `string`",assert_type_is_string, assert_value_is_string
+    IsString,
+    "`{Self}` cannot hold a SurrealDB `string`",
+    assert_type_is_string,
+    assert_value_is_string
 );
 impl<T: Into<String>> IsString for T {}
 
 kind_check!(
     /// Types holding a SurrealDB `bool`.
-    IsBool, "`{Self}` cannot hold a SurrealDB `bool`",assert_type_is_bool, assert_value_is_bool
+    IsBool,
+    "`{Self}` cannot hold a SurrealDB `bool`",
+    assert_type_is_bool,
+    assert_value_is_bool
 );
 impl_marker!(IsBool: bool, &bool);
 
 kind_check!(
     /// Types holding a SurrealDB `duration`.
-    IsDuration, "`{Self}` cannot hold a SurrealDB `duration`",assert_type_is_duration, assert_value_is_duration
+    IsDuration,
+    "`{Self}` cannot hold a SurrealDB `duration`",
+    assert_type_is_duration,
+    assert_value_is_duration
 );
 impl_marker!(IsDuration: types::Duration, std::time::Duration);
 
 kind_check!(
     /// Types holding a SurrealDB `uuid`.
-    IsUuid, "`{Self}` cannot hold a SurrealDB `uuid`",assert_type_is_uuid, assert_value_is_uuid
+    IsUuid,
+    "`{Self}` cannot hold a SurrealDB `uuid`",
+    assert_type_is_uuid,
+    assert_value_is_uuid
 );
 impl_marker!(IsUuid: types::Uuid, uuid::Uuid);
 
 kind_check!(
     /// Types holding a SurrealDB `datetime`.
-    IsDatetime, "`{Self}` cannot hold a SurrealDB `datetime`",assert_type_is_datetime, assert_value_is_datetime
+    IsDatetime,
+    "`{Self}` cannot hold a SurrealDB `datetime`",
+    assert_type_is_datetime,
+    assert_value_is_datetime
 );
 impl_marker!(IsDatetime: types::Datetime, chrono::DateTime<chrono::Utc>);
 
 kind_check!(
     /// Types holding a SurrealDB `bytes`.
-    IsBytes, "`{Self}` cannot hold SurrealDB `bytes`",assert_type_is_bytes, assert_value_is_bytes
+    IsBytes,
+    "`{Self}` cannot hold SurrealDB `bytes`",
+    assert_type_is_bytes,
+    assert_value_is_bytes
 );
 impl_marker!(IsBytes: types::Bytes);
 
 kind_check!(
     /// Types holding a SurrealDB `range`.
-    IsRange, "`{Self}` cannot hold a SurrealDB `range`",assert_type_is_range, assert_value_is_range
+    IsRange,
+    "`{Self}` cannot hold a SurrealDB `range`",
+    assert_type_is_range,
+    assert_value_is_range
 );
 impl_marker!(IsRange: types::Range);
 
 kind_check!(
     /// Types holding a SurrealDB `geometry`.
-    IsGeometry, "`{Self}` cannot hold a SurrealDB `geometry`",assert_type_is_geometry, assert_value_is_geometry
+    IsGeometry,
+    "`{Self}` cannot hold a SurrealDB `geometry`",
+    assert_type_is_geometry,
+    assert_value_is_geometry
 );
 impl_marker!(IsGeometry: types::Geometry, geo::Geometry<f64>, geo::Point<f64>,
     geo::LineString<f64>, geo::Polygon<f64>, geo::MultiPoint<f64>, geo::MultiLineString<f64>,
@@ -154,7 +190,10 @@ impl_marker!(IsGeometry: types::Geometry, geo::Geometry<f64>, geo::Point<f64>,
 
 kind_check!(
     /// Types holding a SurrealDB `record`.
-    IsRecordId, "`{Self}` cannot hold a SurrealDB `record`",assert_type_is_record_id, assert_value_is_record_id
+    IsRecordId,
+    "`{Self}` cannot hold a SurrealDB `record`",
+    assert_type_is_record_id,
+    assert_value_is_record_id
 );
 impl_marker!(IsRecordId: types::RecordId);
 impl<T> IsRecordId for RecordId<T> {}
@@ -163,27 +202,39 @@ impl<N: Node> IsRecordId for LinkSelf<N> {}
 
 kind_check!(
     /// Types holding any SurrealDB value.
-    IsAny, "`{Self}` does not implement `SurrealValue`",assert_type_is_any, assert_value_is_any
+    IsAny,
+    "`{Self}` does not implement `SurrealValue`",
+    assert_type_is_any,
+    assert_value_is_any
 );
 impl<T: SurrealValue> IsAny for T {}
 
 kind_check!(
     /// Types holding a SurrealDB `option`.
-    IsOption, "`{Self}` cannot hold a SurrealDB `option`; use `Option<T>`",assert_type_is_option, assert_value_is_option
+    IsOption,
+    "`{Self}` cannot hold a SurrealDB `option`; use `Option<T>`",
+    assert_type_is_option,
+    assert_value_is_option
 );
 impl<T> IsOption for Option<T> {}
 impl<T> IsOption for &Option<T> {}
 
 kind_check!(
     /// Types holding `NULL` or another value.
-    IsNull, "`{Self}` cannot hold `NULL`",assert_type_is_null, assert_value_is_null
+    IsNull,
+    "`{Self}` cannot hold `NULL`",
+    assert_type_is_null,
+    assert_value_is_null
 );
 impl<T> IsNull for Option<T> {}
 impl<T> IsNull for crate::Nullable<T> {}
 
 kind_check!(
     /// Types holding a SurrealDB `array`.
-    IsArray, "`{Self}` cannot hold a SurrealDB `array`",assert_type_is_array, assert_value_is_array
+    IsArray,
+    "`{Self}` cannot hold a SurrealDB `array`",
+    assert_type_is_array,
+    assert_value_is_array
 );
 impl<T> IsArray for Vec<T> {}
 impl<T> IsArray for &Vec<T> {}
@@ -195,7 +246,10 @@ impl<N: Node> IsArray for LinkMany<N> {}
 
 kind_check!(
     /// Types holding a SurrealDB `set`.
-    IsSet, "`{Self}` cannot hold a SurrealDB `set`",assert_type_is_set, assert_value_is_set
+    IsSet,
+    "`{Self}` cannot hold a SurrealDB `set`",
+    assert_type_is_set,
+    assert_value_is_set
 );
 impl<T> IsSet for HashSet<T> {}
 impl<T> IsSet for &HashSet<T> {}
@@ -205,33 +259,48 @@ impl IsSet for types::Set {}
 
 kind_check!(
     /// `Vec` types.
-    IsVec, "`{Self}` is not a `Vec`",assert_type_is_vec, assert_value_is_vec
+    IsVec,
+    "`{Self}` is not a `Vec`",
+    assert_type_is_vec,
+    assert_value_is_vec
 );
 impl<T> IsVec for Vec<T> {}
 impl<T> IsVec for &Vec<T> {}
 
 kind_check!(
     /// `HashSet` types.
-    IsHashSet, "`{Self}` is not a `HashSet`",assert_type_is_hashset, assert_value_is_hashset
+    IsHashSet,
+    "`{Self}` is not a `HashSet`",
+    assert_type_is_hashset,
+    assert_value_is_hashset
 );
 impl<T> IsHashSet for HashSet<T> {}
 impl<T> IsHashSet for &HashSet<T> {}
 
 kind_check!(
     /// Embedded objects declared with `#[umbriel::model(object)]`.
-    IsObject, "`{Self}` is not an embedded object; declare it with `#[umbriel::model(object)]`",assert_type_is_object, assert_value_is_object
+    IsObject,
+    "`{Self}` is not an embedded object; declare it with `#[umbriel::model(object)]`",
+    assert_type_is_object,
+    assert_value_is_object
 );
 impl<T: Object> IsObject for T {}
 
 kind_check!(
     /// Nodes declared with `#[umbriel::model(node)]`.
-    IsNode, "`{Self}` is not a node; declare it with `#[umbriel::model(node)]`",assert_type_is_node, assert_value_is_node
+    IsNode,
+    "`{Self}` is not a node; declare it with `#[umbriel::model(node)]`",
+    assert_type_is_node,
+    assert_value_is_node
 );
 impl<T: Node> IsNode for T {}
 
 kind_check!(
     /// Record links of any kind.
-    IsLink, "`{Self}` is not a record link",assert_type_is_link, assert_value_is_link
+    IsLink,
+    "`{Self}` is not a record link",
+    assert_type_is_link,
+    assert_value_is_link
 );
 impl<N: Node> IsLink for LinkOne<N> {}
 impl<N: Node> IsLink for LinkSelf<N> {}
@@ -239,24 +308,30 @@ impl<N: Node> IsLink for LinkMany<N> {}
 
 kind_check!(
     /// One-to-one record links.
-    IsLinkOne, "`{Self}` is not a `LinkOne`",assert_type_is_link_one, assert_value_is_link_one
+    IsLinkOne,
+    "`{Self}` is not a `LinkOne`",
+    assert_type_is_link_one,
+    assert_value_is_link_one
 );
 impl<N: Node> IsLinkOne for LinkOne<N> {}
 
 kind_check!(
     /// Self-referential record links.
-    IsLinkSelf, "`{Self}` is not a `LinkSelf`",assert_type_is_link_self, assert_value_is_link_self
+    IsLinkSelf,
+    "`{Self}` is not a `LinkSelf`",
+    assert_type_is_link_self,
+    assert_value_is_link_self
 );
 impl<N: Node> IsLinkSelf for LinkSelf<N> {}
 
 kind_check!(
     /// One-to-many record links.
-    IsLinkMany, "`{Self}` is not a `LinkMany`",assert_type_is_link_many, assert_value_is_link_many
+    IsLinkMany,
+    "`{Self}` is not a `LinkMany`",
+    assert_type_is_link_many,
+    assert_value_is_link_many
 );
 impl<N: Node> IsLinkMany for LinkMany<N> {}
-
-/// Validate that type is iterable at compile time
-pub fn assert_type_is_iterable<T: IntoIterator>() {}
 
 /// Compiles only when both arrays have the same length.
 pub fn assert_same_length_arrays<T, const N: usize>(_array1: [T; N], _array2: [T; N]) {}
