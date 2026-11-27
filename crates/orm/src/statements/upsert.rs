@@ -2,11 +2,10 @@
 
 use std::marker::PhantomData;
 
-use crate::{Conditional, Filter, Model, Renderer, ValueLike, Writable};
+use crate::{Conditional, Filter, Model, Renderer, Writable};
 
 use super::{
     Cardinality, Explained, Many, One, ReturnAfter, ReturnMode, Returning, Statement,
-    data::DataClause,
     impl_statement,
     returning::return_methods,
     update::{TargettablesForUpdate, UpdateBody, update_clauses},
