@@ -32,7 +32,7 @@ impl Codegen<'_> {
         )
     }
 
-    pub fn field_defintion_db(&self) -> ExtractorResult<Vec<DefineFieldStatementToken>> {
+    pub fn field_defintion_db(&self) -> ExtractorResult<Vec<TokenStream>> {
         let field_receiver = self.field_receiver();
         let model_attributes = self.table_derive_attributes();
         // A view's records are computed by its `AS SELECT` query, so it defines no fields.
@@ -40,14 +40,12 @@ impl Codegen<'_> {
             return Ok(vec![]);
         }
 
-        let crate_name = get_crate_name(false);
+        let crate_name = get_crate_name();
         let VariablesModelMacro { _____table, .. } = VariablesModelMacro::new();
         let casing = model_attributes.casing()?;
         let db_field_name = field_receiver.db_field_name(&casing)?;
         // Definitions write their values inline; `inline` keeps the builder's errors.
-        let raw = |definition: TokenStream| -> DefineFieldStatementToken {
-            quote!(#crate_name::Raw::inline(&#definition)).into()
-        };
+        let raw = |definition: TokenStream| quote!(#crate_name::Raw::inline(&#definition));
 
         // `DEFINE FIELD id … TYPE` constrains the record key, which `RecordId<T>` leaves open, so
         // `id` has a type only when given a key type (`ty = "int"`). Every other stored field has
@@ -69,7 +67,7 @@ impl Codegen<'_> {
 
         let mut define_field_methods = vec![];
         let mut define_array_field_item_methods = vec![];
-        let mut all_field_defintions: Vec<DefineFieldStatementToken> = vec![];
+        let mut all_field_defintions = vec![];
 
         if let Some(assert) = field_receiver.assert.as_ref() {
             define_field_methods.push(quote!(.assert(#assert)));
@@ -145,21 +143,21 @@ impl Codegen<'_> {
     fn static_assertion_field_value(
         &self,
         model_attrs: &ModelAttributes,
-    ) -> ExtractorResult<StaticAssertionToken> {
+    ) -> ExtractorResult<TokenStream> {
         let field_receiver = self.field_receiver();
         // An untyped `id`'s default is a key of any type, not the record id it is inferred as.
         if self.is_untyped_id()? {
-            return Ok(StaticAssertionToken::default());
+            return Ok(TokenStream::new());
         }
         let Some(field_type) = field_receiver.field_type_db_original(model_attrs)? else {
-            return Ok(StaticAssertionToken::default());
+            return Ok(TokenStream::new());
         };
 
         let assertions = [&field_receiver.value, &field_receiver.default_always]
             .into_iter()
             .flatten()
             .map(|default| default.get_default_value_static_assertion(field_type.inner()));
-        Ok(quote!(#( #assertions )*).into())
+        Ok(quote!(#( #assertions )*))
     }
 
     fn validate_field_attributes(&self) -> ExtractorResult<()> {
