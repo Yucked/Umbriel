@@ -1,6 +1,6 @@
 use std::{fmt::Display, fs, path::PathBuf};
 
-use crate::migrations::{Checksum, MigrationError, MigrationResult};
+use crate::migrations::{MigrationError, MigrationResult};
 
 /// A migration file's SurrealQL. The default is no content.
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -13,12 +13,11 @@ impl Display for FileContent {
 }
 
 impl FileContent {
-    /// The content's checksum.
-    pub fn as_checksum(&self) -> MigrationResult<Checksum> {
-        Checksum::generate_from_content(self)
-    }
-
     /// Reads the file at `file_path`.
+    ///
+    /// # Errors
+    ///
+    /// [`MigrationError::Io`] with the path and the cause when it can't be read.
     pub fn from_file(file_path: impl Into<PathBuf>) -> MigrationResult<Self> {
         let file_path = file_path.into();
         let content = fs::read_to_string(&file_path).map_err(|source| MigrationError::Io {

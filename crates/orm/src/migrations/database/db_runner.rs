@@ -432,14 +432,15 @@ impl MigrationRunner {
         for mf in filtered_pending_migrations {
             let (name, content, record) = match mf {
                 MigrationFile::OneWay(m) => {
-                    let record = Migration::create_raw(m.name(), &m.content().as_checksum()?, None);
+                    let checksum = Checksum::generate_from_content(m.content());
+                    let record = Migration::create_raw(m.name(), &checksum, None);
                     (m.name().clone(), m.content().to_string(), record)
                 }
                 MigrationFile::TwoWay(m) => {
                     let record = Migration::create_raw(
                         &m.up().name,
-                        &m.up().content.as_checksum()?,
-                        Some(&m.down().content.as_checksum()?),
+                        &Checksum::generate_from_content(&m.up().content),
+                        Some(&Checksum::generate_from_content(&m.down().content)),
                     );
                     (m.up().name.clone(), m.up().content.to_string(), record)
                 }
