@@ -135,7 +135,7 @@ async fn methods_run() {
     let nested = || ArrayLike::from(vec![vec![1, 2], vec![3, 4]]);
     let nestedv = || vec![vec![1, 2], vec![3, 4]];
     let sum = || closure(["a", "b"], |[a, b]| a.add(b));
-    let big = || closure(["v"], |[v]| v.gt(1));
+    let big = || closure(["v"], |[v]| v.greater_than(1));
     same_all!(
         &db,
         [

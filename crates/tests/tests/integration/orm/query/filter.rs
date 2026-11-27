@@ -8,15 +8,15 @@ fn conditions_group_in_the_order_they_are_chained() {
     let age = Field::new("age");
     let name = Field::new("name");
     let title = Field::new("title");
-    assert_eq!(cond(age.gt(18)).to_debug_sql(), "age > 18");
+    assert_eq!(cond(age.greater_than(18)).to_debug_sql(), "age > 18");
     assert_eq!(
-        cond(age.gt(18))
+        cond(age.greater_than(18))
             .and(name.contains("Alice"))
             .or(title.equal("Professor"))
             .to_debug_sql(),
         "((age > 18) AND (name CONTAINS 'Alice')) OR (title = 'Professor')"
     );
-    let either = cond(age.gt(18))
+    let either = cond(age.greater_than(18))
         .or(title.equal("Professor"))
         .parenthesized();
     assert_eq!(
@@ -38,7 +38,7 @@ fn the_cond_macro_builds_the_same_filters() {
     assert_eq!(umbriel::cond!(age > 18).to_debug_sql(), "age > 18");
     assert_eq!(
         umbriel::cond!((age > 18) AND (name = "Alice") OR (title == "Professor")).to_debug_sql(),
-        cond(age.gt(18))
+        cond(age.greater_than(18))
             .and(name.equal("Alice"))
             .or(title.exactly_equal("Professor"))
             .to_debug_sql()

@@ -68,8 +68,8 @@ mod rendering {
     fn repeated_assertions_are_joined() {
         let statement = define_field(amount())
             .on_table("sale")
-            .assert(value().gte(0))
-            .assert(value().lte(100));
+            .assert(value().greater_than_or_equal(0))
+            .assert(value().less_than_or_equal(100));
         assert_sql(
             &statement,
             "DEFINE FIELD amount ON TABLE sale ASSERT ($value >= 0) AND ($value <= 100);",
@@ -268,8 +268,8 @@ mod behaviour {
             define_field(amount())
                 .on_table("sale")
                 .type_(Kind::Int)
-                .assert(value().gte(0))
-                .assert(value().lte(100)),
+                .assert(value().greater_than_or_equal(0))
+                .assert(value().less_than_or_equal(100)),
         )
         .await;
         assert!(succeeds(&db, "CREATE sale:1 SET amount = 50;").await);
@@ -518,7 +518,7 @@ mod definitions {
                 .type_(Kind::String)
                 .default("alice@example.com")
                 .assert(cond(value().is_not(NONE)).and(value().contains("@")))
-                .permissions(for_permission(Select).where_(age.gte(18)))
+                .permissions(for_permission(Select).where_(age.greater_than_or_equal(18)))
                 .permissions(for_permission([Create, Update]).where_(name.is("Alice"))),
             "DEFINE FIELD email ON TABLE user TYPE string DEFAULT 'alice@example.com' \
              ASSERT ($value IS NOT NONE) AND ($value CONTAINS '@')\n\
@@ -533,7 +533,7 @@ mod definitions {
         assert_sql(
             &define_field(Field::new("is_adult"))
                 .on_table(Table::from("user"))
-                .computed(age.gte(18))
+                .computed(age.greater_than_or_equal(18))
                 .type_(Kind::Bool)
                 .permissions_none(),
             "DEFINE FIELD is_adult ON TABLE user COMPUTED age >= 18 TYPE bool PERMISSIONS NONE;",
@@ -554,7 +554,7 @@ mod definitions {
         let computed = |field: Field| {
             define_field(field)
                 .on_table(Table::from("person"))
-                .computed(age.gte(18))
+                .computed(age.greater_than_or_equal(18))
         };
         assert!(computed(Field::new("is_adult")).to_query().is_ok());
         assert!(computed(Field::new("is-adult")).to_query().is_ok());
@@ -685,7 +685,7 @@ mod definitions {
             &db,
             define_field(Field::new("is_adult"))
                 .on_table(Table::from("person"))
-                .computed(Field::new("age").gte(18))
+                .computed(Field::new("age").greater_than_or_equal(18))
                 .type_(Kind::Bool),
         )
         .await;

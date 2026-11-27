@@ -32,7 +32,7 @@ fn targets_clauses_and_options() {
     assert_sql(
         &update_only::<Organization>(Organization::id("acme"))
             .set(org.age.equal_to(30u8))
-            .where_(org.age.lt(30))
+            .where_(org.age.less_than(30))
             .timeout(Duration::from_secs(1))
             .return_diff(),
         "UPDATE ONLY organization:acme SET age = 30 WHERE age < 30 RETURN DIFF TIMEOUT 1s;",
@@ -40,7 +40,7 @@ fn targets_clauses_and_options() {
     assert_sql(
         &update::<Organization>(Organization::table())
             .set(org.age.increment_by(1u8))
-            .where_(cond(org.age.gte(18)).and(org.name.is_not(NONE))),
+            .where_(cond(org.age.greater_than_or_equal(18)).and(org.name.is_not(NONE))),
         "UPDATE organization SET age += 1 WHERE (age >= 18) AND (name IS NOT NONE);",
     );
     // A model instance targets its own record.
@@ -148,7 +148,7 @@ fn unset_merge_explain_and_element_assignments() {
     assert_sql(
         &update_only::<Organization>(&acme)
             .merge(OrganizationMerge::default())
-            .where_(org.age.gt(1))
+            .where_(org.age.greater_than(1))
             .return_none(),
         "UPDATE ONLY organization:acme MERGE {} WHERE age > 1 RETURN NONE;",
     );
@@ -421,7 +421,7 @@ async fn conditions_choose_the_updated_records() {
 
     let updated = update::<Organization>(Organization::table())
         .set(org.age.increment_by(1u8))
-        .where_(org.age.gt(20))
+        .where_(org.age.greater_than(20))
         .execute(&db)
         .await
         .expect("updated");

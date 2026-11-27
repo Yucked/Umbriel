@@ -54,7 +54,7 @@ async fn array_map_filter_fold_run() {
                 "[2, 4, 6]"
             ),
             (
-                array::filter!(numbers.clone(), closure(["n"], |[n]| n.gt(1))),
+                array::filter!(numbers.clone(), closure(["n"], |[n]| n.greater_than(1))),
                 "[2, 3]"
             ),
             (
@@ -73,14 +73,17 @@ async fn array_map_filter_fold_run() {
                 "6",
             ),
             (
-                array::find!(numbers.clone(), closure(["n"], |[n]| n.gt(1))),
+                array::find!(numbers.clone(), closure(["n"], |[n]| n.greater_than(1))),
                 "2"
             ),
             (
-                array::all!(numbers.clone(), closure(["n"], |[n]| n.gt(0))),
+                array::all!(numbers.clone(), closure(["n"], |[n]| n.greater_than(0))),
                 "true"
             ),
-            (array::any!(numbers, closure(["n"], |[n]| n.gt(2))), "true"),
+            (
+                array::any!(numbers, closure(["n"], |[n]| n.greater_than(2))),
+                "true"
+            ),
             (
                 set::map!(BTreeSet::from([1, 2]), closure(["n"], |[n]| n.add(1))),
                 "<set> [2, 3]",

@@ -30,7 +30,7 @@ async fn a_subquery_reads_its_parent_record() {
     let parent_age = Field::from(&*umbriel::parent()).with_field("age");
     let older = select_value(Field::new("name"))
         .from(person.clone())
-        .where_(Field::new("age").gt(parent_age));
+        .where_(Field::new("age").greater_than(parent_age));
     let rows: Vec<BTreeMap<String, Value>> =
         select(arr![Field::new("name"), older.__as__("older")])
             .from(person)
@@ -77,7 +77,7 @@ async fn an_inline_select_stays_an_array() {
     let (db, _guard) = people().await;
     let one = select_value(Field::new("name"))
         .from(Table::from("person"))
-        .where_(Field::new("age").gt(25));
+        .where_(Field::new("age").greater_than(25));
     let mut results = umbriel::statements::return_(one)
         .run(&db)
         .await

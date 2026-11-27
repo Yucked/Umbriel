@@ -51,7 +51,7 @@ mod rendering {
         assert_sql(
             &select(All)
                 .from(Organization::table())
-                .where_(age.gte(18))
+                .where_(age.greater_than_or_equal(18))
                 .order_by(order(&age).desc())
                 .limit(10)
                 .start(5)
@@ -70,7 +70,7 @@ mod rendering {
         assert_sql(
             &select(All)
                 .from(Organization::id("acme"))
-                .where_(Field::new("age").gte(18))
+                .where_(Field::new("age").greater_than_or_equal(18))
                 .fetch(Field::new("users"))
                 .timeout(Duration::from_secs(5))
                 .for_update()
@@ -891,7 +891,7 @@ mod clauses_and_results {
                 .omit(Field::new("password"))
                 .from(&user)
                 .with_index(Field::new("user_age"))
-                .where_(age.gte(18))
+                .where_(age.greater_than_or_equal(18))
                 .order_by(order(&age).numeric().desc())
                 .order_by(order(Field::new("name")).collate().asc())
                 .limit(10)
@@ -985,7 +985,7 @@ mod clauses_and_results {
     fn values_are_bound_and_rendering_is_stable() {
         let statement = select(All)
             .from(Table::from("user"))
-            .where_(cond(Field::new("name").equal("Alice")).or(Field::new("age").gt(30)))
+            .where_(cond(Field::new("name").equal("Alice")).or(Field::new("age").greater_than(30)))
             .limit(5);
         let query = statement.to_query().expect("valid");
         assert_eq!(
@@ -1017,7 +1017,7 @@ mod clauses_and_results {
         let age = Field::new("age");
         let names: Vec<String> = select_value(Field::new("name"))
             .from(&user)
-            .where_(age.gte(20))
+            .where_(age.greater_than_or_equal(20))
             .order_by(order(&age).desc())
             .limit(2)
             .start(1)

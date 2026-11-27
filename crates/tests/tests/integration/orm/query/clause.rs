@@ -28,7 +28,9 @@ fn graph_steps() {
     let likes = Table::new("likes");
     let reads = Table::new("reads");
     let path = Student::with(Student::id("alice"))
-        .writes__(any_other_edges(&[likes, reads]).where_(Field::new("count").lte(50)))
+        .writes__(
+            any_other_edges(&[likes, reads]).where_(Field::new("count").less_than_or_equal(50)),
+        )
         .book(E);
     let path = Field::from(path).to_debug_sql();
     assert_eq!(

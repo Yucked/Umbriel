@@ -218,21 +218,23 @@ mod record_operations {
         weapons(&db).await;
         let WeaponSchema { strength, .. } = Weapon::schema();
 
-        let query = Weapon::count_where(strength.gte(50));
+        let query = Weapon::count_where(strength.greater_than_or_equal(50));
         assert_eq!(
             query.to_debug_sql(),
             "SELECT VALUE count FROM (SELECT count(strength >= 50) FROM weapon GROUP ALL);"
         );
         assert_eq!(query.execute(&db).await.expect("count"), 50);
 
-        let query = Weapon::count_where(cond(strength.gte(50)).and(strength.lt(73)));
+        let query = Weapon::count_where(
+            cond(strength.greater_than_or_equal(50)).and(strength.less_than(73)),
+        );
         assert_eq!(
             query.to_debug_sql(),
             "SELECT VALUE count FROM (SELECT count((strength >= 50) AND (strength < 73)) FROM weapon GROUP ALL);"
         );
         assert_eq!(query.execute(&db).await.expect("count"), 23);
 
-        let none = Weapon::count_where(strength.gt(1000));
+        let none = Weapon::count_where(strength.greater_than(1000));
         assert_eq!(none.execute(&db).await.expect("count"), 0);
     }
 

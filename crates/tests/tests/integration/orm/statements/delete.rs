@@ -12,7 +12,7 @@ fn targets_clauses_and_options() {
     );
     assert_sql(
         &delete::<Organization>(Organization::table())
-            .where_(org.age.lt(18))
+            .where_(org.age.less_than(18))
             .timeout(Duration::from_secs(2))
             .return_before(),
         "DELETE organization WHERE age < 18 RETURN BEFORE TIMEOUT 2s;",
@@ -128,7 +128,7 @@ async fn deletes_by_id_or_condition() {
 
     run(
         &db,
-        delete::<Organization>(Organization::table()).where_(org.age.gt(45)),
+        delete::<Organization>(Organization::table()).where_(org.age.greater_than(45)),
     )
     .await;
     let left: Vec<String> = read(&db, "SELECT VALUE name FROM organization;").await;

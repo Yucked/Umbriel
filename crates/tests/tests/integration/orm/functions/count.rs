@@ -7,7 +7,10 @@ use umbriel_tests::*;
 /// The form no server test calls.
 #[test]
 fn rendering() {
-    calls!((count!(Field::new("age").gt(18)), "count(age > 18)"));
+    calls!((
+        count!(Field::new("age").greater_than(18)),
+        "count(age > 18)"
+    ));
 }
 
 #[tokio::test]

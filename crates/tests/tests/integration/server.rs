@@ -262,7 +262,7 @@ mod scenarios {
 
         person("bob", "Bob", 40).create(db).await.expect("created");
         let ServerPersonSchema { age, .. } = ServerPerson::schema();
-        let older = ServerPerson::find_where(age.gt(35))
+        let older = ServerPerson::find_where(age.greater_than(35))
             .execute(db)
             .await
             .expect("read");

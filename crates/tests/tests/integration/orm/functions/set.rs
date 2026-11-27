@@ -30,10 +30,13 @@ async fn results() {
                 "<set> [1, 2, 4]"
             ),
             (
-                set::filter!(numbers(), closure(["n"], |[n]| n.gt(1))),
+                set::filter!(numbers(), closure(["n"], |[n]| n.greater_than(1))),
                 "<set> [2, 3]"
             ),
-            (set::find!(numbers(), closure(["n"], |[n]| n.gt(1))), "2"),
+            (
+                set::find!(numbers(), closure(["n"], |[n]| n.greater_than(1))),
+                "2"
+            ),
             (set::first!(numbers()), "1"),
             (
                 set::fold!(numbers(), 0, closure(["a", "b"], |[a, b]| a.add(b))),
@@ -102,7 +105,7 @@ async fn methods_run() {
     let s = || SetLike::from(numbers());
     let other = || BTreeSet::from([3, 4]);
     let sum = || closure(["a", "b"], |[a, b]| a.add(b));
-    let big = || closure(["v"], |[v]| v.gt(1));
+    let big = || closure(["v"], |[v]| v.greater_than(1));
     let double = || closure(["v"], |[v]| v.multiply(2));
     same_all!(
         &db,

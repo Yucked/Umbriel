@@ -73,9 +73,9 @@ fn chain_with_return_is_a_block() {
 fn if_else_and_for_render_inside_chains() {
     let age = Field::new("age");
     let query = chain! {
-        if age.gte(18) {
+        if age.greater_than_or_equal(18) {
             select(All).from(Table::from("adult"));
-        } else if age.gte(13) {
+        } else if age.greater_than_or_equal(13) {
             select(All).from(Table::from("teen"));
         } else {
             select(All).from(Table::from("child"));
@@ -113,7 +113,7 @@ async fn loops_and_branches_run_in_the_database() {
             create::<SpaceShip>(SpaceShip::table()).set(name.equal_to(&ship));
         };
         let count = 3;
-        if count.gt(2) {
+        if count.greater_than(2) {
             create::<SpaceShip>(SpaceShip::table()).set(name.equal_to("Mercury"));
         } else {
             create::<SpaceShip>(SpaceShip::table()).set(name.equal_to("Vostok"));

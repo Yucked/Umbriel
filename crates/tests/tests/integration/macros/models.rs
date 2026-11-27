@@ -175,7 +175,7 @@ DEFINE FIELD data ON TABLE planet TYPE int;"
         };
 
         let inline = age("ageInlineExpr")
-            .assert(cond(value().is_not(NONE)).and(value().gte(18)))
+            .assert(cond(value().is_not(NONE)).and(value().greater_than_or_equal(18)))
             .default(18)
             .permissions(for_permission([Create, Delete]).where_(schema.firstName.is("Alice")));
         assert_eq!(
@@ -789,7 +789,7 @@ mod compiles_views_and_unions {
     #[test]
     fn compiles() {
         let _ = SaleCopy::select();
-        let _ = SaleCopy::find_where(Field::new("amount").gte(1));
+        let _ = SaleCopy::find_where(Field::new("amount").greater_than_or_equal(1));
         let _ = SaleCopy::count_all();
         let _ = SaleCopy::select_value(SaleCopy::schema().amount);
         let _ = TableOf::<SaleCopy>::default().select();

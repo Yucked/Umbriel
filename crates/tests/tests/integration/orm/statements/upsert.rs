@@ -30,7 +30,7 @@ fn every_clause_renders_in_order() {
     assert_sql(
         &upsert_only::<Organization>(Organization::id("acme"))
             .set(org.age.increment_by(1u8))
-            .where_(org.age.lt(30))
+            .where_(org.age.less_than(30))
             .timeout(Duration::from_secs(1))
             .return_diff(),
         "UPSERT ONLY organization:acme SET age += 1 WHERE age < 30 RETURN DIFF TIMEOUT 1s;",
@@ -150,7 +150,7 @@ async fn where_gates_only_the_update_path() {
     // An existing record that does not match is neither written nor returned.
     let unmatched = upsert::<Organization>(Organization::id("acme"))
         .set(org.age.equal_to(99u8))
-        .where_(org.age.gt(50))
+        .where_(org.age.greater_than(50))
         .execute(&db)
         .await
         .expect("ran");
@@ -162,7 +162,7 @@ async fn where_gates_only_the_update_path() {
     // path.
     let created = upsert::<Organization>(Organization::table())
         .set([org.name.equal_to("Globex"), org.age.equal_to(1u8)])
-        .where_(org.age.gt(50))
+        .where_(org.age.greater_than(50))
         .return_value(Organization::schema().name)
         .execute(&db)
         .await

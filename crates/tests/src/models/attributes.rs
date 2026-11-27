@@ -28,7 +28,7 @@ pub fn student_permissions() -> Permissions {
     let schema = StudentWithGranularAttributes::schema();
     vec![
         for_permission([Select, Update]).where_(schema.firstName.is("Bob")),
-        for_permission([Create, Delete]).where_(schema.ageInlineExpr.lte(57)),
+        for_permission([Create, Delete]).where_(schema.ageInlineExpr.less_than_or_equal(57)),
     ]
     .into()
 }
@@ -42,7 +42,7 @@ pub fn get_age_default_value() -> u8 {
 }
 
 pub fn get_age_assertion() -> Filter {
-    cond(value().is_not(NONE)).and(value().gte(18))
+    cond(value().is_not(NONE)).and(value().greater_than_or_equal(18))
 }
 
 pub enum AgeGroup {
@@ -89,7 +89,7 @@ pub struct StudentWithGranularAttributes {
     #[orm(
         ty = "int",
         value = 18,
-        assert = cond(value().is_not(NONE)).and(value().gte(18)),
+        assert = cond(value().is_not(NONE)).and(value().greater_than_or_equal(18)),
         permissions = for_permission([CrudType::Create, CrudType::Delete]).where_(StudentWithGranularAttributes::schema().firstName.is("Alice"))
     )]
     pub age_inline_expr: u8,
@@ -186,7 +186,7 @@ pub fn define_first_name(field: impl Into<Field>, table: Table) -> DefineFieldSt
         .default("Alice")
         .assert(cond(value().is_not(NONE)).and(value().contains("A")))
         .permissions([
-            for_permission(Select).where_(schema.ageDefineInline.gte(18)),
+            for_permission(Select).where_(schema.ageDefineInline.greater_than_or_equal(18)),
             for_permission([Create, Update]).where_(schema.firstName.is("Bob")),
         ])
 }
@@ -199,7 +199,7 @@ pub fn define_last_name() -> DefineFieldStatement {
         .default("Bob")
         .assert(cond(value().is_not(NONE)).and(value().contains("B")))
         .permissions([
-            for_permission(Select).where_(schema.ageDefineInline.gte(18)),
+            for_permission(Select).where_(schema.ageDefineInline.greater_than_or_equal(18)),
             for_permission([Create, Update]).where_(schema.lastName.is("Bob")),
         ])
 }
@@ -210,7 +210,7 @@ pub fn define_age(field: impl Into<Field>) -> DefineFieldStatement {
         .on_table(Student::table())
         .type_(Kind::Int)
         .default(18)
-        .assert(cond(value().is_not(NONE)).and(value().gte(18)))
+        .assert(cond(value().is_not(NONE)).and(value().greater_than_or_equal(18)))
         .permissions(for_permission(Select).where_(schema.age.greater_than_or_equal(18)))
         .permissions(for_permission([Create, Update]).where_(schema.firstName.is("Bob")))
         .permissions([
@@ -287,7 +287,7 @@ pub struct Student {
     #[orm(
         ty = "int",
         value = 18,
-        assert = cond(value().is_not(NONE)).and(value().gte(18)),
+        assert = cond(value().is_not(NONE)).and(value().greater_than_or_equal(18)),
         permissions = age_permissions
     )]
     pub age: u8,

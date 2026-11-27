@@ -200,7 +200,7 @@ mod fields {
         );
         assert_eq!(
             Field::new("age")
-                .gt(18)
+                .greater_than(18)
                 .__as__(AliasName::new("adult"))
                 .to_debug_sql(),
             "age > 18 AS adult"
@@ -283,7 +283,7 @@ mod graph {
                         // SurrealDB requires the SPLIT field to be selected.
                         .select([Field::new("weight"), Field::new("tags")])
                         .only()
-                        .where_(Field::new("weight").gt(1))
+                        .where_(Field::new("weight").greater_than(1))
                         .split(Field::new("tags"))
                         .order_by(order(Field::new("weight")).desc())
                         .limit(2)
@@ -304,7 +304,7 @@ mod graph {
             (
                 person
                     .clone()
-                    .outgoing(Lookup::any().where_(Field::new("weight").gt(1))),
+                    .outgoing(Lookup::any().where_(Field::new("weight").greater_than(1))),
                 "$person->(? WHERE weight > 1)",
             ),
             (
@@ -479,7 +479,7 @@ mod graph {
         let path = from("a").outgoing(
             Lookup::tables(["rated"])
                 .select([Field::new("weight")])
-                .where_(Field::new("weight").gt(1))
+                .where_(Field::new("weight").greater_than(1))
                 .order_by(order(Field::new("weight")).desc())
                 .limit(1),
         );

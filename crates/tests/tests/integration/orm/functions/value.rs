@@ -15,7 +15,10 @@ async fn results() {
         &db,
         [
             (value::chain!(2, closure(["n"], |[n]| n.multiply(3))), "6"),
-            (value::expect!(5, closure(["n"], |[n]| n.gt(1))), "5"),
+            (
+                value::expect!(5, closure(["n"], |[n]| n.greater_than(1))),
+                "5"
+            ),
             (
                 value::patch!(before.clone(), value::diff!(before.clone(), after)),
                 "{ name: 'Bob' }",
@@ -47,7 +50,7 @@ async fn runtime_type_failures() {
     let (db, _guard) = db().await;
     let error = call_failure(
         &db,
-        &value::expect!(0, closure(["n"], |[n]| n.gt(1)), "too low"),
+        &value::expect!(0, closure(["n"], |[n]| n.greater_than(1)), "too low"),
     )
     .await;
     assert!(error.contains("too low"), "{error}");
@@ -60,7 +63,7 @@ async fn methods_run() {
     let before = || BTreeMap::from([("name".to_owned(), "Alice")]);
     let after = || BTreeMap::from([("name".to_owned(), "Bob")]);
     let triple = || closure(["n"], |[n]| n.multiply(3));
-    let positive = || closure(["n"], |[n]| n.gt(0));
+    let positive = || closure(["n"], |[n]| n.greater_than(0));
     same_all!(
         &db,
         [
