@@ -19,8 +19,10 @@ macro_rules! impl_arithmetic {
 
 // A `LET` statement stands for its parameter; an operation on the left is parenthesized so it
 // binds before the new operator.
-impl_arithmetic!(LetStatement => Add::add(Add), Mul::mul(Mul), Div::div(Div));
-impl_arithmetic!(&LetStatement => Add::add(Add), Sub::sub(Sub), Mul::mul(Mul), Div::div(Div));
-impl_arithmetic!(Field => Add::add(Add), Sub::sub(Sub), Mul::mul(Mul), Div::div(Div));
-impl_arithmetic!(&Field => Add::add(Add));
-impl_arithmetic!(Operation => Add::add(Add), Sub::sub(Sub), Mul::mul(Mul), Div::div(Div));
+macro_rules! impl_all_arithmetic {
+    ($($lhs:ty),* $(,)?) => {
+        $(impl_arithmetic!($lhs => Add::add(Add), Sub::sub(Sub), Mul::mul(Mul), Div::div(Div));)*
+    };
+}
+
+impl_all_arithmetic!(LetStatement, &LetStatement, Field, &Field, Operation);
