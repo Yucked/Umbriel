@@ -838,6 +838,8 @@ mod streams {
     #[tokio::test]
     async fn a_failure_in_a_transaction_cancels_the_rest() {
         let (db, _guard) = db().await;
+        // Counting a table that doesn't exist is an error, and the rollback removes `n`.
+        assert!(succeeds(&db, "DEFINE TABLE n;").await);
         let items = collect(
             Raw::new("BEGIN; CREATE n:1; THROW 'refused'; CREATE n:2; COMMIT;")
                 .to_query()
@@ -906,6 +908,8 @@ mod streams {
     #[tokio::test]
     async fn cancelling_commits_nothing() {
         let (db, _guard) = db().await;
+        // Counting a table that doesn't exist is an error, and the rollback removes `n`.
+        assert!(succeeds(&db, "DEFINE TABLE n;").await);
         let items = collect(
             Raw::new("BEGIN; CREATE n:1; SELECT * FROM n; CANCEL;")
                 .to_query()
