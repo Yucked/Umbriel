@@ -6,33 +6,24 @@ use pretty_assertions::assert_eq;
 use umbriel::migrations::*;
 use umbriel_tests::migrations::{helpers::*, *};
 
-fn down(strategy: RollbackStrategyStruct, prune: bool) -> Down {
-    Down::builder().strategy(strategy).prune(prune).build()
+fn previous(prune: bool) -> Down {
+    Down::new(RollbackStrategy::Previous, prune)
 }
 
-fn previous(prune: bool) -> Down {
-    down(
-        RollbackStrategyStruct::builder().previous(true).build(),
+/// The strategy `down` takes when no argument is given.
+fn by_default(prune: bool) -> Down {
+    Down::new(
+        RollbackStrategy::from(&RollbackStrategyStruct::default()),
         prune,
     )
-}
-
-fn by_default(prune: bool) -> Down {
-    down(RollbackStrategyStruct::default(), prune)
 }
 
 fn by_number(number: u32, prune: bool) -> Down {
-    down(
-        RollbackStrategyStruct::builder().number(number).build(),
-        prune,
-    )
+    Down::new(RollbackStrategy::Number(number), prune)
 }
 
 fn till(filename: MigrationFilename, prune: bool) -> Down {
-    down(
-        RollbackStrategyStruct::builder().till(filename).build(),
-        prune,
-    )
+    Down::new(RollbackStrategy::Till(filename), prune)
 }
 
 /// Asserts the first `files` of the twelve migrations are on disk and the first `applied` are

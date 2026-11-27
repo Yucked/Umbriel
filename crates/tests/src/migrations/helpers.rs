@@ -34,10 +34,9 @@ pub fn migration_dir() -> (TempDir, PathBuf) {
 
 /// Strict mode and the migration directory `dir`.
 pub fn config(dir: &Path) -> MigrationConfig {
-    MigrationConfig::builder()
-        .mode(Mode::Strict)
-        .custom_path(Some(dir.to_path_buf()))
-        .build()
+    MigrationConfig::new()
+        .set_mode(Mode::Strict)
+        .set_custom_path(dir)
 }
 
 /// Generates a migration named `generated` from `resources` into `dir`, comparing in a
@@ -68,18 +67,12 @@ pub async fn generate(
 
 /// A prompter that refuses migrations without changes and renames a replaced field.
 pub fn disallow_empty() -> MockPrompter {
-    MockPrompter::builder()
-        .allow_empty_migrations_gen(false)
-        .rename_or_delete_single_field_change(RenameOrDelete::Rename)
-        .build()
+    MockPrompter::new(false, RenameOrDelete::Rename)
 }
 
 /// A prompter that allows migrations without changes and renames a replaced field.
 pub fn allow_empty() -> MockPrompter {
-    MockPrompter::builder()
-        .allow_empty_migrations_gen(true)
-        .rename_or_delete_single_field_change(RenameOrDelete::Rename)
-        .build()
+    MockPrompter::new(true, RenameOrDelete::Rename)
 }
 
 /// The schema `resources` define with the history table of `flag`, which a database migrated to
@@ -330,17 +323,12 @@ impl Project {
         resources: impl DbResources,
         prompter: MockPrompter,
     ) {
-        let connection = DatabaseConnection::builder()
-            .url(UrlDb::Others(Endpoint::Main.url()))
-            .db_connection(self.db.clone())
-            .comparison(self.comparison.clone())
-            .build();
-        let mut migrator = Migrator::builder()
-            .dir(self.dir.clone())
-            .verbose(0)
-            .mode(self.mode)
-            .db_connection(connection)
-            .build();
+        let connection = DatabaseConnection::connected(
+            UrlDb::Others(Endpoint::Main.url()),
+            self.db.clone(),
+            self.comparison.clone(),
+        );
+        let mut migrator = Migrator::connected(connection, self.dir.clone(), self.mode);
         migrator.set_cmd(command.into());
         migrator.run_test(Some(resources), prompter).await;
     }
@@ -444,19 +432,11 @@ pub const TWELVE: [&str; 12] = [
 pub async fn generate_twelve(project: &Project) {
     use umbriel::migrations::{Generate, Init};
 
-    let generate = |number: usize| {
-        Generate::builder()
-            .name(format!("migration {number}-gen after init").into())
-            .run(false)
-            .build()
-    };
+    let generate =
+        |number: usize| Generate::new(format!("migration {number}-gen after init").into(), false);
     project
         .run(
-            Init::builder()
-                .name("migration 1-init".into())
-                .reversible(project.reversible())
-                .run(false)
-                .build(),
+            Init::new("migration 1-init".into(), project.reversible(), false),
             Resources,
             allow_empty(),
         )

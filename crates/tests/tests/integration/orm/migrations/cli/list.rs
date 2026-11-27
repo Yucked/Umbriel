@@ -11,9 +11,7 @@ async fn five_of_twelve(flag: MigrationFlag, mode: Mode) -> Project {
     generate_twelve(&project).await;
     project
         .run(
-            Up::builder()
-                .fast_forward(FastForwardDelta::builder().number(5).build())
-                .build(),
+            Up::new(UpdateStrategy::Number(5)),
             Resources,
             allow_empty(),
         )
@@ -61,7 +59,7 @@ async fn listing_changes_nothing() {
         for status in [Status::All, Status::Pending, Status::Applied] {
             project
                 .run(
-                    List::builder().status(status).build(),
+                    List::new(status),
                     Resources,
                     allow_empty(),
                 )

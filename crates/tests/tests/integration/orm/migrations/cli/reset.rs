@@ -16,11 +16,7 @@ const CASES: [(MigrationFlag, Mode, bool); 4] = [
 ];
 
 fn reset(project: &Project, run: bool) -> Reset {
-    Reset::builder()
-        .name("migration reset".into())
-        .reversible(project.reversible())
-        .run(run)
-        .build()
+    Reset::new("migration reset".into(), project.reversible(), run)
 }
 
 /// Resets `project` from `ResourcesV3` and asserts the one migration left: applied with `--run`,
@@ -61,11 +57,7 @@ async fn a_reset_after_an_applied_init_replaces_it() {
         let project = Project::new(flag, mode).await;
         project
             .run(
-                Init::builder()
-                    .name("migration init".into())
-                    .reversible(project.reversible())
-                    .run(true)
-                    .build(),
+                Init::new("migration init".into(), project.reversible(), true),
                 Resources,
                 MockPrompter::default(),
             )
@@ -103,9 +95,7 @@ async fn a_reset_replaces_partly_applied_migrations() {
         generate_twelve(&project).await;
         project
             .run(
-                Up::builder()
-                    .fast_forward(FastForwardDelta::builder().number(7).build())
-                    .build(),
+                Up::new(UpdateStrategy::Number(7)),
                 Resources,
                 allow_empty(),
             )
@@ -121,11 +111,7 @@ async fn a_failed_reset_keeps_the_existing_migrations() {
     let project = Arc::new(Project::new(MigrationFlag::TwoWay, Mode::Strict).await);
     project
         .run(
-            Init::builder()
-                .name("migration init".into())
-                .reversible(true)
-                .run(false)
-                .build(),
+            Init::new("migration init".into(), true, false),
             Resources,
             MockPrompter::default(),
         )
@@ -137,11 +123,7 @@ async fn a_failed_reset_keeps_the_existing_migrations() {
         async move {
             project
                 .run(
-                    Reset::builder()
-                        .name("reset".into())
-                        .reversible(true)
-                        .run(false)
-                        .build(),
+                    Reset::new("reset".into(), true, false),
                     UserResources,
                     MockPrompter::default(),
                 )

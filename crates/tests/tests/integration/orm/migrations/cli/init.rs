@@ -9,11 +9,7 @@ use umbriel_tests::{
 };
 
 fn init(run: bool, reversible: bool) -> Init {
-    Init::builder()
-        .name("migration init".into())
-        .reversible(reversible)
-        .run(run)
-        .build()
+    Init::new("migration init".into(), reversible, run)
 }
 
 /// What the first migration of `Resources` defines, as the server renders it.
@@ -142,11 +138,7 @@ async fn a_second_init_is_refused() {
         .await;
     project
         .run(
-            Init::builder()
-                .name("another name".into())
-                .reversible(false)
-                .run(false)
-                .build(),
+            Init::new("another name".into(), false, false),
             Resources,
             allow_empty(),
         )
@@ -171,11 +163,7 @@ async fn init_applies_a_bucket() {
     let project = Project::new(MigrationFlag::OneWay, Mode::Strict).await;
     project
         .run(
-            Init::builder()
-                .name("avatars".into())
-                .reversible(false)
-                .run(true)
-                .build(),
+            Init::new("avatars".into(), false, true),
             Avatars,
             allow_empty(),
         )

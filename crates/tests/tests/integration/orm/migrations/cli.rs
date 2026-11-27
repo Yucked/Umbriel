@@ -30,11 +30,7 @@ async fn up_connects_as_a_database_user_and_applies_the_migrations() {
     let project = Project::new(MigrationFlag::TwoWay, Mode::Strict).await;
     project
         .run(
-            Init::builder()
-                .name("test migration 1".into())
-                .reversible(true)
-                .run(false)
-                .build(),
+            Init::new("test migration 1".into(), true, false),
             Resources,
             allow_empty(),
         )

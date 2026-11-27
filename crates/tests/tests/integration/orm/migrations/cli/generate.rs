@@ -9,15 +9,11 @@ use umbriel_tests::migrations::{helpers::*, *};
 const FLAGS: [MigrationFlag; 2] = [MigrationFlag::OneWay, MigrationFlag::TwoWay];
 
 fn init(project: &Project, run: bool) -> Init {
-    Init::builder()
-        .name("migration init".into())
-        .reversible(project.reversible())
-        .run(run)
-        .build()
+    Init::new("migration init".into(), project.reversible(), run)
 }
 
 fn generate(name: &'static str, run: bool) -> Generate {
-    Generate::builder().name(name.into()).run(run).build()
+    Generate::new(name.into(), run)
 }
 
 #[tokio::test]
@@ -90,10 +86,7 @@ async fn renames_and_deletions_are_generated_in_both_directions() {
         (MigrationFlag::OneWay, RenameOrDelete::Rename),
     ];
     for (flag, strategy) in cases {
-        let prompter = MockPrompter::builder()
-            .allow_empty_migrations_gen(true)
-            .rename_or_delete_single_field_change(strategy)
-            .build();
+        let prompter = MockPrompter::new(true, strategy);
         let project = Project::new(flag, Mode::Strict).await;
         project.run(init(&project, false), Before, prompter).await;
         project
@@ -182,12 +175,7 @@ async fn renames_and_deletions_are_generated_in_both_directions() {
 /// Without changes, no migration is written unless the prompter allows an empty one.
 #[tokio::test]
 async fn an_empty_migration_is_written_only_when_allowed() {
-    let refuse_empty = || {
-        MockPrompter::builder()
-            .allow_empty_migrations_gen(false)
-            .rename_or_delete_single_field_change(RenameOrDelete::Delete)
-            .build()
-    };
+    let refuse_empty = || MockPrompter::new(false, RenameOrDelete::Delete);
     for flag in FLAGS {
         let project = Project::new(flag, Mode::Strict).await;
         project

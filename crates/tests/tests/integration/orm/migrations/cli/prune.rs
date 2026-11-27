@@ -16,9 +16,7 @@ async fn prune_deletes_only_unapplied_migrations() {
         generate_twelve(&project).await;
         project
             .run(
-                Up::builder()
-                    .fast_forward(FastForwardDelta::builder().number(5).build())
-                    .build(),
+                Up::new(UpdateStrategy::Number(5)),
                 Resources,
                 allow_empty(),
             )

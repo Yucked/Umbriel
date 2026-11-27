@@ -8,16 +8,12 @@ use umbriel_tests::migrations::{helpers::*, *};
 
 const FLAGS: [MigrationFlag; 2] = [MigrationFlag::OneWay, MigrationFlag::TwoWay];
 
-fn up(delta: FastForwardDelta) -> Up {
-    Up::builder().fast_forward(delta).build()
-}
-
 fn by_number(number: u32) -> Up {
-    up(FastForwardDelta::builder().number(number).build())
+    Up::new(UpdateStrategy::Number(number))
 }
 
 fn till(filename: MigrationFilename) -> Up {
-    up(FastForwardDelta::builder().till(filename).build())
+    Up::new(UpdateStrategy::Till(filename))
 }
 
 /// Asserts the project has all twelve files and the first `count` applied, with their schema.
@@ -53,7 +49,7 @@ async fn up_applies_every_pending_migration() {
             assert_applied(&project, 12).await;
             project
                 .run(
-                    up(FastForwardDelta::builder().latest(true).build()),
+                    Up::new(UpdateStrategy::Latest),
                     Resources,
                     allow_empty(),
                 )
@@ -118,7 +114,7 @@ async fn up_targets_combine() {
         assert_applied(&project, 9).await;
         project
             .run(
-                up(FastForwardDelta::builder().latest(true).build()),
+                Up::new(UpdateStrategy::Latest),
                 Resources,
                 allow_empty(),
             )
