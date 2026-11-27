@@ -5,13 +5,14 @@ use std::collections::BTreeMap;
 
 use surrealdb::opt::auth::Record;
 use umbriel::{
-    Error, Operatable, Param, Raw, Render, Runnable,
+    Operatable, Param, Raw, Render, Runnable,
     statements::{define_access, define_param, record_access},
 };
 use umbriel_tests::*;
 
 /// A record user may read a `PERMISSIONS FULL` param, and reading a `PERMISSIONS NONE` one is
-/// refused as `NotAllowed` (S23, left by #13 for #15's record-access setup).
+/// refused (S23, left by #13 for #15's record-access setup). SurrealDB 3.3.4 refuses it as a
+/// statement error without the `NotAllowed` kind.
 #[tokio::test]
 async fn permissions_decide_what_a_record_user_reads() {
     let (db, guard) = db().await;
@@ -55,11 +56,10 @@ async fn permissions_decide_what_a_record_user_reads() {
     .await;
     let public: String = read(&user, "RETURN $public;").await;
     assert_eq!(public, "Hello");
-    match Raw::new("RETURN $secret;").run(&user).await {
-        Err(Error::NotAllowed { .. }) => {}
-        Err(other) => panic!("expected NotAllowed, got {other}"),
-        Ok(_) => panic!("PERMISSIONS NONE lets a record user read the param"),
-    }
+    assert!(
+        Raw::new("RETURN $secret;").run(&user).await.is_err(),
+        "PERMISSIONS NONE refuses the param"
+    );
 }
 
 #[test]
