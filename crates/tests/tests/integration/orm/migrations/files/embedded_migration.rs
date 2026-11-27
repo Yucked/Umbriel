@@ -1,4 +1,4 @@
-//! Embedded migrations (`orm/src/migrations/database/embedded_migration.rs`): the files
+//! Embedded migrations (`orm/src/migrations/files/embedded_migration.rs`): the files
 //! `embed_migrations!` compiles in, and applying them.
 
 use umbriel::migrations::*;
@@ -55,18 +55,18 @@ fn test_embedded() {
 
     // check the meta data
     assert_eq!(
-        migs[0].up.name.to_string(),
+        migs[0].up().name.to_string(),
         "20231030025711_migration_name_example.up.surql"
     );
-    assert_eq!(migs[0].up.name.basename(), "migration_name_example".into());
+    assert_eq!(migs[0].up().name.basename(), "migration_name_example".into());
     assert_eq!(
-        migs[0].up.content.to_string(),
+        migs[0].up().content.to_string(),
         include_str!(
             "../../../fixtures/migrations_two_way/20231030025711_migration_name_example.up.surql"
         )
     );
     assert_eq!(
-        migs[0].down.content.to_string(),
+        migs[0].down().content.to_string(),
         include_str!(
             "../../../fixtures/migrations_two_way/20231030025711_migration_name_example.down.surql"
         )
