@@ -6326,6 +6326,7 @@ dependencies = [
  "tokio",
  "umbriel-macros",
  "uuid",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
