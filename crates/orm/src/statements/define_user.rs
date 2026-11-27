@@ -2,9 +2,13 @@ use std::fmt::{self, Display};
 
 use surrealdb::types::Value;
 
-use crate::{Name, Renderer, User};
+use crate::{Level, Name, Renderer, User};
 
-use super::{DefineOptions, Statement, impl_define_options, impl_definition};
+use super::{
+    DefineOptions, Statement,
+    define_access::{Durations, Expiry},
+    impl_define_options, impl_definition,
+};
 
 /// A user's plain-text password, hashed by SurrealDB.
 pub struct Password(pub(crate) String);
@@ -53,25 +57,55 @@ impl Display for Password {
 ///     .role(UserRole::Viewer);
 ///
 /// let alice = User::new("alice");
-/// let statement = define_user(alice).on_root().password("example-password").role(UserRole::Owner);
+/// let statement = define_user(alice)
+///     .on_root()
+///     .password("example-password")
+///     .role(UserRole::Owner)
+///     .duration_for_session(std::time::Duration::from_secs(60 * 60));
 ///
 /// assert_eq!(
 ///     statement.to_debug_sql(),
-///     "DEFINE USER alice ON ROOT PASSWORD 'example-password' ROLES OWNER;"
+///     "DEFINE USER alice ON ROOT PASSWORD 'example-password' ROLES OWNER DURATION FOR SESSION 1h;"
 /// );
 /// ```
-pub fn define_user(name: impl Into<Name<User>>) -> DefineUserStatement {
-    DefineUserStatement {
-        name: name.into(),
-        options: DefineOptions::default(),
-        user_type: None,
-        credential: None,
-        role: None,
+pub fn define_user(name: impl Into<Name<User>>) -> DefineUserInit {
+    DefineUserInit(name.into())
+}
+
+/// A `DEFINE USER` awaiting its level.
+#[must_use]
+pub struct DefineUserInit(Name<User>);
+
+impl DefineUserInit {
+    fn on(self, level: Level) -> DefineUserStatement {
+        DefineUserStatement {
+            name: self.0,
+            options: DefineOptions::default(),
+            level,
+            credential: None,
+            roles: Vec::new(),
+            durations: Durations::default(),
+        }
+    }
+
+    /// Defines the user on the root.
+    pub fn on_root(self) -> DefineUserStatement {
+        self.on(Level::Root)
+    }
+
+    /// Defines the user on the current namespace.
+    pub fn on_namespace(self) -> DefineUserStatement {
+        self.on(Level::Namespace)
+    }
+
+    /// Defines the user on the current database.
+    pub fn on_database(self) -> DefineUserStatement {
+        self.on(Level::Database)
     }
 }
 
-/// User Role
-#[derive(Clone, Copy)]
+/// A system user's role.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserRole {
     /// Owner
     Owner,
@@ -91,29 +125,8 @@ impl Display for UserRole {
     }
 }
 
-/// The level a user is defined on.
-#[derive(Clone, Copy)]
-pub enum UserType {
-    /// The root level
-    Root,
-    /// The current namespace
-    Namespace,
-    /// The current database
-    Database,
-}
-
-impl Display for UserType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            UserType::Root => "ROOT",
-            UserType::Namespace => "NAMESPACE",
-            UserType::Database => "DATABASE",
-        })
-    }
-}
-
 /// An already-hashed password.
-pub struct Passhash(String);
+pub struct Passhash(pub(crate) String);
 
 impl From<String> for Passhash {
     fn from(value: String) -> Self {
@@ -141,49 +154,69 @@ pub enum UserCredential {
     Passhash(Passhash),
 }
 
-/// Define a new database user.
+impl UserCredential {
+    /// Writes ` PASSWORD '…'` or ` PASSHASH '…'`. SurrealQL takes the credential as a string
+    /// literal, so it's inlined.
+    pub(crate) fn render(&self, out: &mut Renderer) {
+        let (keyword, text) = match self {
+            UserCredential::Password(password) => (" PASSWORD ", &password.0),
+            UserCredential::Passhash(hash) => (" PASSHASH ", &hash.0),
+        };
+        out.push_str(keyword)
+            .push_value(&Value::String(text.clone()));
+    }
+}
+
+/// Writes ` ROLES a, b`, or nothing for no roles.
+pub(crate) fn push_roles(out: &mut Renderer, roles: &[UserRole]) {
+    if roles.is_empty() {
+        return;
+    }
+    out.push_str(" ROLES ")
+        .push_joined_with(roles, ", ", |out, role| {
+            out.push_display(role);
+        });
+}
+
+/// A `DEFINE USER` statement.
+#[must_use]
 pub struct DefineUserStatement {
     name: Name<User>,
     options: DefineOptions,
-    user_type: Option<UserType>,
+    level: Level,
     credential: Option<UserCredential>,
-    role: Option<UserRole>,
+    roles: Vec<UserRole>,
+    durations: Durations,
 }
 
 impl DefineUserStatement {
-    /// Set user on root
-    pub fn on_root(mut self) -> Self {
-        self.user_type = Some(UserType::Root);
-        self
-    }
-
-    /// Set user on namespace
-    pub fn on_namespace(mut self) -> Self {
-        self.user_type = Some(UserType::Namespace);
-        self
-    }
-
-    /// Set user on database
-    pub fn on_database(mut self) -> Self {
-        self.user_type = Some(UserType::Database);
-        self
-    }
-
-    /// Set the password
+    /// `PASSWORD`: a plain-text password, which SurrealDB hashes.
     pub fn password(mut self, password: impl Into<Password>) -> Self {
         self.credential = Some(UserCredential::Password(password.into()));
         self
     }
 
-    /// Set the passhash credential
+    /// `PASSHASH`: an already-hashed password.
     pub fn passhash(mut self, passhash: impl Into<Passhash>) -> Self {
         self.credential = Some(UserCredential::Passhash(passhash.into()));
         self
     }
 
-    /// Set the user role
+    /// `ROLES`: adds a role; repeated calls add roles.
     pub fn role(mut self, role: UserRole) -> Self {
-        self.role = Some(role);
+        self.roles.push(role);
+        self
+    }
+
+    /// `DURATION FOR TOKEN`: how long the user's tokens are valid, or [`Expiry::Never`].
+    pub fn duration_for_token(mut self, expiry: impl Into<Expiry>) -> Self {
+        self.durations.token = Some(expiry.into());
+        self
+    }
+
+    /// `DURATION FOR SESSION`: how long the user's sessions last, or [`Expiry::Never`].
+    pub fn duration_for_session(mut self, expiry: impl Into<Expiry>) -> Self {
+        self.durations.session = Some(expiry.into());
         self
     }
 }
@@ -192,29 +225,15 @@ impl Statement for DefineUserStatement {
     fn render_body(&self, out: &mut Renderer) {
         out.push_str("DEFINE USER");
         self.options.render_kind(out);
-        out.push_str(" ").push(&self.name);
-
-        if let Some(user_type) = &self.user_type {
-            out.push_str(" ON ").push_display(user_type);
+        out.push_str(" ")
+            .push(&self.name)
+            .push_str(" ON ")
+            .push(&self.level);
+        if let Some(credential) = &self.credential {
+            credential.render(out);
         }
-
-        // SurrealQL takes the credential as a string literal; the definition inlines it.
-        match &self.credential {
-            Some(UserCredential::Password(password)) => {
-                out.push_str(" PASSWORD ")
-                    .push_value(&Value::String(password.0.clone()));
-            }
-            Some(UserCredential::Passhash(hash)) => {
-                out.push_str(" PASSHASH ")
-                    .push_value(&Value::String(hash.0.clone()));
-            }
-            None => {}
-        }
-
-        if let Some(role) = &self.role {
-            out.push_str(" ROLES ").push_display(role);
-        }
-
+        push_roles(out, &self.roles);
+        out.push(&self.durations);
         self.options.render_comment(out);
     }
 }
