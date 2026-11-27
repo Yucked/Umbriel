@@ -40,15 +40,12 @@ quote = "1.0.47"
 darling = "0.24.1"
 proc-macro2 = "1.0.107"
 proc-macro-crate = "3.5.0"
-nom = "8.0.0"
 # The casing the SDK's `SurrealValue` derive applies to `rename_all`; the macros must match it.
 heck = "0.5.0"
-strum = "0.28.0"
-strum_macros = "0.28.0"
-regex = "1.13.1"
 paste = "1.0.15"
+# The version `surrealdb` already brings in; `StreamExt` needs `std` and `async-await`.
+futures = { version = "0.3.34", default-features = false, features = ["std", "async-await"] }
 chrono = { version = "0.4.45", features = ["serde"] }
-serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 thiserror = "2.0.21"
 uuid = "1.28.0"
