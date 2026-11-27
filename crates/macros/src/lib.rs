@@ -14,14 +14,8 @@ mod surql;
 mod utilities;
 
 use models::ModelReceiver;
-use statement_parser::{helpers::reset_variable_names, query_chain::QueriesChainParser};
+use statement_parser::{helpers::reset_variable_names, query_chain};
 use utilities::{PickedMeta, TableDeriveAttributesPickable};
-
-/// Parses a `chain!`, `block!` or `transaction!` body, numbering its generated locals from zero.
-fn parse_chain(input: TokenStream) -> syn::Result<QueriesChainParser> {
-    reset_variable_names();
-    syn::parse(input)
-}
 
 /// Expands a darling-parsed derive input, reporting attribute errors at their spans.
 fn derive_with<T: FromDeriveInput + quote::ToTokens>(input: TokenStream) -> TokenStream {
@@ -134,10 +128,7 @@ pub fn query(raw_input: TokenStream) -> TokenStream {
 /// The examples are on `umbriel::chain`: this crate's doctests cannot use `umbriel`.
 #[proc_macro]
 pub fn chain(input: TokenStream) -> TokenStream {
-    match parse_chain(input) {
-        Ok(chain) => chain.to_tokenstream().into(),
-        Err(err) => err.to_compile_error().into(),
-    }
+    query_chain::chain(input)
 }
 
 /// A block is a series of queries that are executed as a single
@@ -152,17 +143,7 @@ pub fn chain(input: TokenStream) -> TokenStream {
 /// The example is on `umbriel::block`: this crate's doctests cannot use `umbriel`.
 #[proc_macro]
 pub fn block(input: TokenStream) -> TokenStream {
-    let chain = match parse_chain(input) {
-        Ok(chain) => chain,
-        Err(err) => return err.to_compile_error().into(),
-    };
-    let tokens = chain.to_tokenstream();
-    if !chain.is_likely_query_block() {
-        return syn::Error::new_spanned(tokens, "`block!` must return an expression")
-            .into_compile_error()
-            .into();
-    }
-    tokens.into()
+    query_chain::block(input)
 }
 
 /// A transaction is a series of queries that are executed as a single
@@ -179,21 +160,7 @@ pub fn block(input: TokenStream) -> TokenStream {
 /// The example is on `umbriel::transaction`: this crate's doctests cannot use `umbriel`.
 #[proc_macro]
 pub fn transaction(input: TokenStream) -> TokenStream {
-    let chain = match parse_chain(input) {
-        Ok(chain) => chain,
-        Err(err) => return err.to_compile_error().into(),
-    };
-    let tokens = chain.to_tokenstream();
-    if !chain.is_valid_transaction_statement() {
-        return syn::Error::new_spanned(
-            tokens,
-            "`transaction!` needs one `BEGIN TRANSACTION;` and must end with one \
-             `COMMIT TRANSACTION;` or `CANCEL TRANSACTION;`",
-        )
-        .into_compile_error()
-        .into();
-    }
-    tokens.into()
+    query_chain::transaction(input)
 }
 
 /// A macro to generate a function definition statement and the corresponding helper function.

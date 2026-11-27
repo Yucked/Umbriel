@@ -5,9 +5,59 @@ use syn::parse::{Parse, ParseStream};
 use crate::helpers::get_crate_name;
 
 use super::{
-    helpers::generate_variable_name, let_::LetStatementParser, query::QueryParser,
+    helpers::{generate_variable_name, reset_variable_names},
+    let_::LetStatementParser,
+    query::QueryParser,
     return_::ReturnStatementParser,
 };
+
+/// Parses a `chain!`, `block!` or `transaction!` body, numbering its generated locals from zero.
+fn parse(input: proc_macro::TokenStream) -> syn::Result<QueriesChainParser> {
+    reset_variable_names();
+    syn::parse(input)
+}
+
+/// `chain!`: the statements as a chain, a block or a transaction, as their form says.
+pub fn chain(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match parse(input) {
+        Ok(chain) => chain.to_tokenstream().into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// `block!`: the statements as a block, which must return an expression.
+pub fn block(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let chain = match parse(input) {
+        Ok(chain) => chain,
+        Err(err) => return err.to_compile_error().into(),
+    };
+    let tokens = chain.to_tokenstream();
+    if !chain.is_likely_query_block() {
+        return syn::Error::new_spanned(tokens, "`block!` must return an expression")
+            .into_compile_error()
+            .into();
+    }
+    tokens.into()
+}
+
+/// `transaction!`: the statements as a transaction, which must begin and end as one.
+pub fn transaction(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let chain = match parse(input) {
+        Ok(chain) => chain,
+        Err(err) => return err.to_compile_error().into(),
+    };
+    let tokens = chain.to_tokenstream();
+    if !chain.is_valid_transaction_statement() {
+        return syn::Error::new_spanned(
+            tokens,
+            "`transaction!` needs one `BEGIN TRANSACTION;` and must end with one \
+             `COMMIT TRANSACTION;` or `CANCEL TRANSACTION;`",
+        )
+        .into_compile_error()
+        .into();
+    }
+    tokens.into()
+}
 
 #[derive(Debug, Clone)]
 pub struct QueriesChainParser {
