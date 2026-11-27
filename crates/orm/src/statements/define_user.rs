@@ -83,6 +83,7 @@ impl DefineUserInit {
             options: DefineOptions::default(),
             level,
             credential: None,
+            scram: None,
             roles: Vec::new(),
             durations: Durations::default(),
         }
@@ -159,6 +160,16 @@ impl UserCredential {
     }
 }
 
+/// Writes ` PASSSCRAM '…'`, or nothing without a verifier. SurrealDB 3.3.4 takes it as a string
+/// literal, beside `PASSWORD` or `PASSHASH`, and refuses one that isn't a `SCRAM-SHA-256$…`
+/// verifier when it parses the statement.
+pub(crate) fn push_scram(out: &mut Renderer, scram: Option<&String>) {
+    if let Some(verifier) = scram {
+        out.push_str(" PASSSCRAM ")
+            .push_value(&Value::String(verifier.clone()));
+    }
+}
+
 /// Writes ` ROLES a, b`, or nothing for no roles.
 pub(crate) fn push_roles(out: &mut Renderer, roles: &[UserRole]) {
     if roles.is_empty() {
@@ -177,11 +188,18 @@ pub struct DefineUserStatement {
     options: DefineOptions,
     level: Level,
     credential: Option<UserCredential>,
+    scram: Option<String>,
     roles: Vec<UserRole>,
     durations: Durations,
 }
 
 impl DefineUserStatement {
+    /// `PASSSCRAM`: a SCRAM-SHA-256 verifier for SCRAM sign-in, beside the password or hash.
+    pub fn passscram(mut self, verifier: impl Into<String>) -> Self {
+        self.scram = Some(verifier.into());
+        self
+    }
+
     /// `PASSWORD`: a plain-text password, which SurrealDB hashes.
     pub fn password(mut self, password: impl Into<Password>) -> Self {
         self.credential = Some(UserCredential::Password(password.into()));
@@ -224,6 +242,7 @@ impl Statement for DefineUserStatement {
         if let Some(credential) = &self.credential {
             credential.render(out);
         }
+        push_scram(out, self.scram.as_ref());
         push_roles(out, &self.roles);
         out.push(&self.durations);
         self.options.render_comment(out);
