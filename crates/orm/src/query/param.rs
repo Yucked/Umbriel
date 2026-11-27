@@ -42,7 +42,7 @@ pub struct Param(Cow<'static, str>);
 
 impl Param {
     /// Creates a parameter reference. A name rejected by [`Param::check`] fails when the query is
-    /// rendered; use `Param::try_from` to reject it immediately.
+    /// rendered; parse it (`"name".parse::<Param>()`) to reject it immediately.
     pub fn new(name: impl Into<Cow<'static, str>>) -> Self {
         Self(name.into())
     }
@@ -113,10 +113,11 @@ impl Param {
     }
 }
 
-impl TryFrom<&str> for Param {
-    type Error = ParamNameError;
+impl std::str::FromStr for Param {
+    type Err = ParamNameError;
 
-    fn try_from(name: &str) -> Result<Self, Self::Error> {
+    /// Parses a caller-supplied name, rejecting it at once with [`Param::check`]'s rule.
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
         Self::check(name)?;
         Ok(Self(Cow::Owned(name.to_owned())))
     }
