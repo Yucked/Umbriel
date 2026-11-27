@@ -74,10 +74,7 @@ fn a_function_path_that_is_not_fn_fails_to_render() {
 async fn tokens(db: &Surreal<Any>, analyzer: &str, text: &str) -> Vec<String> {
     read(
         db,
-        &format!(
-            "RETURN {};",
-            search::analyze(analyzer, text).to_debug_sql()
-        ),
+        &format!("RETURN {};", search::analyze(analyzer, text).to_debug_sql()),
     )
     .await
 }

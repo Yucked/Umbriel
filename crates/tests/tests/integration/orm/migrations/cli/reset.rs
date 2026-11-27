@@ -94,11 +94,7 @@ async fn a_reset_replaces_partly_applied_migrations() {
         let project = Project::new(flag, mode).await;
         generate_twelve(&project).await;
         project
-            .run(
-                Up::new(UpdateStrategy::Number(7)),
-                Resources,
-                allow_empty(),
-            )
+            .run(Up::new(UpdateStrategy::Number(7)), Resources, allow_empty())
             .await;
         reset_and_assert(&project, run, first(7)).await;
     }

@@ -858,9 +858,7 @@ mod timeout {
     async fn a_bound_timeout_cuts_a_slow_select_short() {
         let (db, _guard) = db().await;
         let failed = select(All)
-            .from(umbriel::functions::sleep::sleep(Duration::from_millis(
-                500
-            )))
+            .from(umbriel::functions::sleep::sleep(Duration::from_millis(500)))
             .timeout(Duration::from_millis(10))
             .execute(&db)
             .await;
@@ -920,9 +918,7 @@ mod clauses_and_results {
             "SELECT count() AS total, country FROM user GROUP BY country;",
         );
         assert_sql(
-            &select(math::sum(Field::new("age")))
-                .from(&user)
-                .group_all(),
+            &select(math::sum(Field::new("age"))).from(&user).group_all(),
             "SELECT math::sum(age) FROM user GROUP ALL;",
         );
         assert_sql(

@@ -25,10 +25,7 @@ async fn results() {
             (set::at(numbers(), 0), "1"),
             (set::complement(numbers(), other.clone()), "<set> [1, 2]"),
             (set::contains(numbers(), 2), "true"),
-            (
-                set::difference(numbers(), other.clone()),
-                "<set> [1, 2, 4]"
-            ),
+            (set::difference(numbers(), other.clone()), "<set> [1, 2, 4]"),
             (
                 set::filter(numbers(), closure(["n"], |[n]| n.greater_than(1))),
                 "<set> [2, 3]"
@@ -114,15 +111,9 @@ async fn methods_run() {
             (s().all(None::<i64>), set::all!(numbers())),
             (s().any(Some(2)), set::any!(numbers(), 2)),
             (s().at(1), set::at(numbers(), 1)),
-            (
-                s().complement(other()),
-                set::complement(numbers(), other())
-            ),
+            (s().complement(other()), set::complement(numbers(), other())),
             (s().contains(2), set::contains(numbers(), 2)),
-            (
-                s().difference(other()),
-                set::difference(numbers(), other())
-            ),
+            (s().difference(other()), set::difference(numbers(), other())),
             (s().filter(big()), set::filter(numbers(), big())),
             (s().find(big()), set::find(numbers(), big())),
             (s().first(), set::first(numbers())),

@@ -47,10 +47,7 @@ async fn results() {
     );
     is_each!(
         &db,
-        [
-            (crypto::blake3("a"), "string"),
-            (crypto::joaat("a"), "int"),
-        ]
+        [(crypto::blake3("a"), "string"), (crypto::joaat("a"), "int"),]
     );
 }
 

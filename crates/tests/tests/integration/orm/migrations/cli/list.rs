@@ -10,11 +10,7 @@ async fn five_of_twelve(flag: MigrationFlag, mode: Mode) -> Project {
     let project = Project::new(flag, mode).await;
     generate_twelve(&project).await;
     project
-        .run(
-            Up::new(UpdateStrategy::Number(5)),
-            Resources,
-            allow_empty(),
-        )
+        .run(Up::new(UpdateStrategy::Number(5)), Resources, allow_empty())
         .await;
     project.assert_state(&TWELVE, first(5)).await;
     project
@@ -58,11 +54,7 @@ async fn listing_changes_nothing() {
         let project = five_of_twelve(flag, Mode::Strict).await;
         for status in [Status::All, Status::Pending, Status::Applied] {
             project
-                .run(
-                    List::new(status),
-                    Resources,
-                    allow_empty(),
-                )
+                .run(List::new(status), Resources, allow_empty())
                 .await;
         }
         project.assert_state(&TWELVE, first(5)).await;

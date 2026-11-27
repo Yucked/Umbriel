@@ -71,10 +71,7 @@ async fn run_returns_typed_results() {
     let owner: Option<umbriel::RecordId<User>> =
         type_::record!("user", "alice").run(&db).await.expect("ran");
     assert_eq!(owner, Some(User::id("alice")));
-    let nothing: Option<i64> = array::first(Vec::<i64>::new())
-        .run(&db)
-        .await
-        .expect("ran");
+    let nothing: Option<i64> = array::first(Vec::<i64>::new()).run(&db).await.expect("ran");
     assert_eq!(nothing, None, "`NONE` decodes as `None`");
 }
 

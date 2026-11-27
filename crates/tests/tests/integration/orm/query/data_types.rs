@@ -54,7 +54,7 @@ fn generated_bindings_are_ordered_through_nested_calls() {
 
     let mapped = array::map(
         vec![1, 2],
-        closure(["n"], |[n]| n.multiply(10).add(Field::new("offset")))
+        closure(["n"], |[n]| n.multiply(10).add(Field::new("offset"))),
     );
     let (sql, vars) = mapped.to_query().expect("renders").into_parts();
     assert_eq!(sql, "array::map($_p0, |$n| ($n * $_p1) + offset)");

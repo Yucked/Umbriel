@@ -48,11 +48,7 @@ async fn up_applies_every_pending_migration() {
             project.run(Up::default(), Resources, allow_empty()).await;
             assert_applied(&project, 12).await;
             project
-                .run(
-                    Up::new(UpdateStrategy::Latest),
-                    Resources,
-                    allow_empty(),
-                )
+                .run(Up::new(UpdateStrategy::Latest), Resources, allow_empty())
                 .await;
             assert_applied(&project, 12).await;
         }
@@ -113,11 +109,7 @@ async fn up_targets_combine() {
             .await;
         assert_applied(&project, 9).await;
         project
-            .run(
-                Up::new(UpdateStrategy::Latest),
-                Resources,
-                allow_empty(),
-            )
+            .run(Up::new(UpdateStrategy::Latest), Resources, allow_empty())
             .await;
         assert_applied(&project, 12).await;
     }

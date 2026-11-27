@@ -121,7 +121,8 @@ impl Migrator {
     pub async fn run_test_main(codebase_resources: impl DbResources) {
         let mut cli = Self::parse();
         cli.setup_logging();
-        cli.run_fn(codebase_resources, MockPrompter::default()).await;
+        cli.run_fn(codebase_resources, MockPrompter::default())
+            .await;
     }
 
     /// Runs the configured subcommand, `up` when none is set, answering prompts with `prompter`.

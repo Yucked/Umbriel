@@ -133,14 +133,8 @@ async fn methods_run() {
                 string::capitalize("alice smith")
             ),
             (s("a").concat(["b", "c"]), string::concat!("a", "b", "c")),
-            (
-                s("Alice").contains("lic"),
-                string::contains("Alice", "lic")
-            ),
-            (
-                s("Alice").ends_with("ce"),
-                string::ends_with("Alice", "ce")
-            ),
+            (s("Alice").contains("lic"), string::contains("Alice", "lic")),
+            (s("Alice").ends_with("ce"), string::ends_with("Alice", "ce")),
             (s(", ").join(["a", "b"]), string::join!(", ", "a", "b")),
             (s("Alice").len(), string::len("Alice")),
             (s("ABC").lowercase(), string::lowercase("ABC")),

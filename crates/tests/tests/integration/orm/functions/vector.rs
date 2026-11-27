@@ -9,10 +9,7 @@ async fn results() {
     let (db, _guard) = db().await;
     // The calls have different result kinds, so they are compared as rendered SurrealQL.
     let cases = [
-        (
-            vector::add(vec![1, 2], vec![3, 4]).to_debug_sql(),
-            "[4, 6]",
-        ),
+        (vector::add(vec![1, 2], vec![3, 4]).to_debug_sql(), "[4, 6]"),
         (
             vector::cross(vec![1, 0, 0], vec![0, 1, 0]).to_debug_sql(),
             "[0, 0, 1]",

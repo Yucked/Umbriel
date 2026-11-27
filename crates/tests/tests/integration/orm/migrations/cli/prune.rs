@@ -15,11 +15,7 @@ async fn prune_deletes_only_unapplied_migrations() {
         let project = Project::new(flag, Mode::Strict).await;
         generate_twelve(&project).await;
         project
-            .run(
-                Up::new(UpdateStrategy::Number(5)),
-                Resources,
-                allow_empty(),
-            )
+            .run(Up::new(UpdateStrategy::Number(5)), Resources, allow_empty())
             .await;
         project.run(Prune, Resources, allow_empty()).await;
         project.assert_state(first(5), first(5)).await;

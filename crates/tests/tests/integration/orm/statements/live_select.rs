@@ -37,7 +37,11 @@ async fn ran(db: &surrealdb::Surreal<surrealdb::engine::any::Any>, sql: &str) {
 
 /// How many live queries `table` holds, as `INFO FOR TABLE` lists them under `lives`.
 async fn lives(db: &surrealdb::Surreal<surrealdb::engine::any::Any>, table: &str) -> i64 {
-    read(db, &format!("RETURN object::len((INFO FOR TABLE {table}).lives);")).await
+    read(
+        db,
+        &format!("RETURN object::len((INFO FOR TABLE {table}).lives);"),
+    )
+    .await
 }
 
 mod rendering {
@@ -154,7 +158,11 @@ mod notifications {
 
         ran(&db, "CREATE doc:one SET name = 'a', count = 1, old = true;").await;
         // SurrealDB 3.3.4 doesn't parse `SET` and `UNSET` in one `UPDATE`; `NONE` removes `old`.
-        ran(&db, "UPDATE doc:one MERGE { count: 2, extra: 'x', old: NONE };").await;
+        ran(
+            &db,
+            "UPDATE doc:one MERGE { count: 2, extra: 'x', old: NONE };",
+        )
+        .await;
         ran(&db, "UPDATE doc:one SET name = 'b';").await;
         ran(&db, "DELETE doc:one;").await;
 
@@ -300,7 +308,10 @@ mod lifecycle {
             .await
             .expect("subscribed");
         session.invalidate().await.expect("invalidated");
-        assert!(quiet(&mut stream).await, "the stream neither ends nor delivers");
+        assert!(
+            quiet(&mut stream).await,
+            "the stream neither ends nor delivers"
+        );
         assert_eq!(lives(&db, "note").await, 0, "the query is gone");
     }
 

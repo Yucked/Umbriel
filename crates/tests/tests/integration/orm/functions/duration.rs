@@ -49,7 +49,7 @@ async fn runtime_type_failures() {
     let error = call_failure(
         &db,
         &duration::days(DurationLike::from(Field::from_expr(
-            umbriel::ValueLike::from("long")
+            umbriel::ValueLike::from("long"),
         ))),
     )
     .await;
