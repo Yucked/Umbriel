@@ -101,9 +101,8 @@ impl<O: 'static> LiveSelectStatement<O> {
         let query = self.to_query()?;
         let (query_id, stream) = register(db, &query).await?;
         Ok(LiveStream {
-            db: db.clone(),
+            subscription: Subscription::new(db.clone(), query_id),
             query,
-            query_id,
             stream,
             decode: self.decode,
             ended: false,
@@ -145,9 +144,12 @@ pub enum LiveEvent<O> {
 /// Invalidating the session also ends the live query on the server, but SurrealDB 3.3.4 sends
 /// no `Killed` notification for it, so the stream stays open and receives nothing: drop it.
 ///
-/// Dropping the stream ends the live query as best effort: it sends a `KILL` on the session that
-/// subscribed, from a task of its own, and nothing reports a failure. [`kill`](Self::kill) runs
-/// the `KILL` and returns its result. The SDK's stream sends a `KILL` on drop as well, but
+/// Dropping the stream ends the live query as best effort: unless a [`kill`](Self::kill)
+/// succeeded, it sends a `KILL` on the session that subscribed, from a task of its own, and
+/// nothing reports a failure. It does so after the stream ended too: an end or a transport
+/// failure stops the notifications without confirming that the server removed the query, and
+/// SurrealDB 3.3.4 accepts a `KILL` of an id it no longer holds. [`kill`](Self::kill) runs the
+/// `KILL` and returns its result. The SDK's stream sends a `KILL` on drop as well, but
 /// SurrealDB 3.3.4's SDK runs it in a new, empty session (`From<Arc<Inner>> for Surreal`), which
 /// the server refuses; it only logs the failure. On native targets the stream must be dropped
 /// inside a Tokio runtime, which the SDK's own drop needs too.
@@ -174,23 +176,25 @@ pub enum LiveEvent<O> {
 /// ```
 #[must_use = "streams do nothing unless you poll them"]
 pub struct LiveStream<O, C: Connection> {
-    db: Surreal<C>,
+    subscription: Subscription<C>,
     query: Query,
-    query_id: Uuid,
     stream: QueryStream<Notification<Value>>,
     decode: fn(Value) -> Result<O>,
+    /// The SDK stream ended or failed, so it is no longer polled. Whether a `KILL` is still owed
+    /// is the subscription's.
     ended: bool,
 }
 
 impl<O, C: Connection> LiveStream<O, C> {
     /// The live query's id, as `KILL` takes it. It changes with [`resubscribe`](Self::resubscribe).
     pub fn query_id(&self) -> Uuid {
-        self.query_id
+        self.subscription.query_id
     }
 
     /// Ends the live query with `KILL` and returns its result.
     ///
-    /// After a successful `KILL` the stream's drop sends none of its own. The SDK ends its stream
+    /// After a successful `KILL` the stream's drop sends none of its own; after a failed one it
+    /// still sends its best-effort `KILL`. The SDK ends its stream
     /// on SurrealDB's `Killed` notification. If that has already arrived when the `KILL` returns,
     /// the SDK's stream is dropped with nothing left to end. If not, the SDK sends a second
     /// `KILL` on drop, which fails as described on [`LiveStream`] and changes nothing. Umbriel
@@ -201,9 +205,8 @@ impl<O, C: Connection> LiveStream<O, C> {
     /// The `KILL`'s failure, such as [`Error::NotAllowed`] for a session that doesn't own the
     /// query. SurrealDB 3.3.4 accepts a `KILL` of an id it no longer holds.
     pub async fn kill(mut self) -> Result<()> {
-        kill(self.query_id).run(&self.db).await?;
+        self.subscription.end().await?;
         drain_ready(&mut self.stream);
-        self.ended = true;
         Ok(())
     }
 
@@ -216,8 +219,10 @@ impl<O, C: Connection> LiveStream<O, C> {
     ///   discarded.
     /// - If the future is dropped while the registration is in flight, the server may register a
     ///   query whose id never reaches the client, as with any dropped `LIVE` request. If it is
-    ///   dropped later, `self` already holds the new query, and the `KILL` of the old one may not
-    ///   have reached the server: the old query then stays registered until the session ends.
+    ///   dropped later, `self` already holds the new query, and the old one, owned by the future,
+    ///   is ended on drop as a dropped stream's is: a best-effort `KILL` on the same session.
+    /// - If the old query's `KILL` fails, its best-effort `KILL` is still sent when the future
+    ///   returns.
     ///
     /// Events between the loss of the old query and the new registration are lost, and while
     /// both are registered an event can arrive on either, so events around the switch can be
@@ -230,41 +235,70 @@ impl<O, C: Connection> LiveStream<O, C> {
     /// connection dropped. After a reconnect the server no longer holds the old query, and
     /// SurrealDB 3.3.4 accepts the `KILL` of an id it no longer holds, so resubscribing succeeds.
     pub async fn resubscribe(&mut self) -> Result<()> {
-        let (query_id, stream) = register(&self.db, &self.query).await?;
-        let old_id = std::mem::replace(&mut self.query_id, query_id);
+        let (query_id, stream) = register(&self.subscription.db, &self.query).await?;
+        let new = Subscription::new(self.subscription.db.clone(), query_id);
+        // From here the old query is owned by this future: dropping it sends the `KILL`.
+        let mut old = std::mem::replace(&mut self.subscription, new);
         let mut old_stream = std::mem::replace(&mut self.stream, stream);
         self.ended = false;
-        match kill(old_id).run(&self.db).await {
-            Ok(_) => {
+        match old.end().await {
+            Ok(()) => {
                 drain_ready(&mut old_stream);
                 Ok(())
             }
             Err(source) => Err(Error::StaleSubscription {
-                query_id: old_id,
+                query_id: old.query_id,
                 source: Box::new(source),
             }),
         }
     }
 }
 
-impl<O, C: Connection> Drop for LiveStream<O, C> {
-    /// Sends the live query's `KILL` on the session that subscribed, unless the stream already
-    /// ended: on `Killed`, a transport failure, or a successful [`kill`](Self::kill).
+/// A registered live query that is ended with a `KILL` on the session that registered it, when
+/// dropped, until a `KILL` succeeds. The SDK's stream can't be relied on for it (see
+/// [`LiveStream`]).
+struct Subscription<C: Connection> {
+    db: Surreal<C>,
+    query_id: Uuid,
+    /// No successful `KILL` yet, so the drop sends one.
+    armed: bool,
+}
+
+impl<C: Connection> Subscription<C> {
+    fn new(db: Surreal<C>, query_id: Uuid) -> Self {
+        Self {
+            db,
+            query_id,
+            armed: true,
+        }
+    }
+
+    /// Runs the `KILL` and disarms the drop on success.
+    async fn end(&mut self) -> Result<()> {
+        kill(self.query_id).run(&self.db).await?;
+        self.armed = false;
+        Ok(())
+    }
+}
+
+impl<C: Connection> Drop for Subscription<C> {
+    /// Sends the `KILL` from a task of its own unless one succeeded.
     fn drop(&mut self) {
-        if self.ended {
+        if !self.armed {
             return;
         }
         let db = self.db.clone();
         let query_id = self.query_id;
         spawn(async move {
-            // The stream is gone, so no caller is left to take the result; `kill` returns it.
+            // The owner is gone, so no caller is left to take the result; `kill` and
+            // `resubscribe` return theirs.
             let _ = kill(query_id).run(&db).await;
         });
     }
 }
 
 // Nothing in the stream relies on being pinned: the SDK stream it polls is `Unpin`, and the
-// handle and query are only borrowed. So it's `Unpin` whatever the connection type.
+// subscription and query are only borrowed. So it's `Unpin` whatever the connection type.
 impl<O, C: Connection> Unpin for LiveStream<O, C> {}
 
 impl<O, C: Connection> Stream for LiveStream<O, C> {
