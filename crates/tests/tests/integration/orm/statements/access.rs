@@ -142,6 +142,9 @@ async fn a_bearer_grant_lives_until_revoked_and_purged() {
         "a revoked key is not allowed"
     );
 
+    // SurrealDB 3.3.4 purges a grant only once a whole second has passed since its revocation
+    // (`now - revocation > grace`, in seconds), so this waits on the server's clock.
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     let purged = access("api")
         .purge_revoked()
         .execute(&db)
