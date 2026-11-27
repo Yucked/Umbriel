@@ -1,12 +1,11 @@
-// Statement syntax
-// DEFINE INDEX [ OVERWRITE | IF NOT EXISTS ] @name ON [ TABLE ] @table [ FIELDS | COLUMNS ] @fields
-// 	[ UNIQUE | COUNT [ WHERE @condition ] | FULLTEXT ANALYZER @analyzer [ BM25 [(@k1, @b)] ]
-// 	  [ HIGHLIGHTS ] | HNSW DIMENSION @d [ … ] | DISKANN DIMENSION @d [ … ] ]
-// 	[ COMMENT @string ] [ CONCURRENTLY ]
+//! `DEFINE INDEX`. Syntax: <https://surrealdb.com/docs/surrealql/statements/define/indexes>.
 
 use surrealdb::types::Table;
 
-use crate::{Conditional, Field, Filter, Ident, Name, Render, Renderer, TableIndex, ValueLike};
+use crate::{
+    Conditional, Field, Filter, Ident, Name, Render, Renderer, TableIndex, ValueLike,
+    keywords::keywords,
+};
 
 use super::{DefineOptions, Statement, impl_define_options, impl_definition};
 
@@ -361,40 +360,27 @@ impl Render for Distance {
     }
 }
 
-/// The element type a vector index stores vectors as (`TYPE`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum VectorType {
-    /// `F64`
-    F64,
-    /// `F32`, SurrealDB's default.
-    F32,
-    /// `F16`
-    F16,
-    /// `I64`
-    I64,
-    /// `I32`
-    I32,
-    /// `I16`
-    I16,
-    /// `I8`
-    I8,
-    /// `U8`
-    U8,
-}
-
-impl Render for VectorType {
-    fn render(&self, out: &mut Renderer) {
-        out.push_str(match self {
-            Self::F64 => "F64",
-            Self::F32 => "F32",
-            Self::F16 => "F16",
-            Self::I64 => "I64",
-            Self::I32 => "I32",
-            Self::I16 => "I16",
-            Self::I8 => "I8",
-            Self::U8 => "U8",
-        });
+keywords! {
+    /// The element type a vector index stores vectors as (`TYPE`).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[non_exhaustive]
+    pub enum VectorType: render {
+        /// `F64`
+        F64 => "F64",
+        /// `F32`, SurrealDB's default.
+        F32 => "F32",
+        /// `F16`
+        F16 => "F16",
+        /// `I64`
+        I64 => "I64",
+        /// `I32`
+        I32 => "I32",
+        /// `I16`
+        I16 => "I16",
+        /// `I8`
+        I8 => "I8",
+        /// `U8`
+        U8 => "U8",
     }
 }
 
