@@ -19,14 +19,12 @@ help: the trait `SurrealValue` is not implemented for `User`
             (A, B, C, D, E, F)
             (A, B, C, D, E, F, G)
           and $N others
-  = note: required for `<UserMerge as ModelMerge>::Model` to implement `Model`
-note: required by a bound in `umbriel::ModelMerge::Model`
- --> $WORKSPACE/crates/orm/src/query/merge.rs
+  = note: required for `User` to implement `Model`
+note: required by a bound in `umbriel::Node`
+ --> $WORKSPACE/crates/orm/src/traits/model.rs
   |
-  | pub trait ModelMerge: MergeFields + Default {
-  |     /// The model this merge updates.
-  |     type Model: Model;
-  |                 ^^^^^ required by this bound in `ModelMerge::Model`
+  | pub trait Node: Model + SchemaGetter {
+  |                 ^^^^^ required by this bound in `Node`
 
 error[E0277]: the trait bound `User: SurrealValue` is not satisfied
  --> tests/ui/fail/missing_surreal_value.rs:5:12
@@ -49,12 +47,14 @@ help: the trait `SurrealValue` is not implemented for `User`
             (A, B, C, D, E, F)
             (A, B, C, D, E, F, G)
           and $N others
-  = note: required for `User` to implement `Model`
-note: required by a bound in `umbriel::Node`
- --> $WORKSPACE/crates/orm/src/traits/model.rs
+  = note: required for `<UserMerge as ModelMerge>::Model` to implement `Model`
+note: required by a bound in `umbriel::ModelMerge::Model`
+ --> $WORKSPACE/crates/orm/src/query/merge.rs
   |
-  | pub trait Node: Model + SchemaGetter {
-  |                 ^^^^^ required by this bound in `Node`
+  | pub trait ModelMerge: MergeFields + Default {
+  |     /// The model this merge updates.
+  |     type Model: Model;
+  |                 ^^^^^ required by this bound in `ModelMerge::Model`
 
 error[E0277]: the trait bound `User: SurrealValue` is not satisfied
  --> tests/ui/fail/missing_surreal_value.rs:5:12
@@ -132,14 +132,12 @@ help: the trait `SurrealValue` is not implemented for `User`
             (A, B, C, D, E, F)
             (A, B, C, D, E, F, G)
           and $N others
-  = note: required for `<UserPatch as ModelPatch>::Model` to implement `Model`
-note: required by a bound in `umbriel::ModelPatch::Model`
- --> $WORKSPACE/crates/orm/src/query/patch.rs
+  = note: required for `User` to implement `Model`
+note: required by a bound in `Links`
+ --> $WORKSPACE/crates/orm/src/traits/model.rs
   |
-  | pub trait ModelPatch: Default {
-  |     /// The model this patch updates.
-  |     type Model: Model;
-  |                 ^^^^^ required by this bound in `ModelPatch::Model`
+  | pub trait Links: Model {
+  |                  ^^^^^ required by this bound in `Links`
 
 error[E0277]: the trait bound `User: SurrealValue` is not satisfied
  --> tests/ui/fail/missing_surreal_value.rs:5:12
@@ -162,12 +160,14 @@ help: the trait `SurrealValue` is not implemented for `User`
             (A, B, C, D, E, F)
             (A, B, C, D, E, F, G)
           and $N others
-  = note: required for `User` to implement `Model`
-note: required by a bound in `Links`
- --> $WORKSPACE/crates/orm/src/traits/model.rs
+  = note: required for `<UserPatch as ModelPatch>::Model` to implement `Model`
+note: required by a bound in `umbriel::ModelPatch::Model`
+ --> $WORKSPACE/crates/orm/src/query/patch.rs
   |
-  | pub trait Links: Model {
-  |                  ^^^^^ required by this bound in `Links`
+  | pub trait ModelPatch: Default {
+  |     /// The model this patch updates.
+  |     type Model: Model;
+  |                 ^^^^^ required by this bound in `ModelPatch::Model`
 
 error[E0277]: the trait bound `User: SurrealValue` is not satisfied
  --> tests/ui/fail/missing_surreal_value.rs:4:1
