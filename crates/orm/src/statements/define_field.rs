@@ -460,7 +460,7 @@ impl Statement for DefineFieldStatement {
         }
 
         self.options.render_comment(out);
-        out.push(&self.permissions);
+        self.permissions.render_for_field(out);
     }
 }
 
