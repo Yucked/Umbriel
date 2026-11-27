@@ -58,7 +58,10 @@ fn test_embedded() {
         migs[0].up().name.to_string(),
         "20231030025711_migration_name_example.up.surql"
     );
-    assert_eq!(migs[0].up().name.basename(), "migration_name_example".into());
+    assert_eq!(
+        migs[0].up().name.basename(),
+        "migration_name_example".into()
+    );
     assert_eq!(
         migs[0].up().content.to_string(),
         include_str!(

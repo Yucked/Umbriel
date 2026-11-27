@@ -6,8 +6,8 @@ mod settings;
 
 pub use db_runner::{MigrationRunner, RollbackOptions};
 pub use file_generator::{
-    COMPARISON_PREFIX, COMPARISON_REMOVAL_TIMEOUT, Comparison, ComparisonDatabase, MigratorDatabase,
-    codebase_schema_queries,
+    COMPARISON_PREFIX, COMPARISON_REMOVAL_TIMEOUT, Comparison, ComparisonDatabase,
+    MigratorDatabase, codebase_schema_queries,
 };
 pub use migration_model::{Migration, MigrationSchema, Timestamp};
 pub use prompter::*;

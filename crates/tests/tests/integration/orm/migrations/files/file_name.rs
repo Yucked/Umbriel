@@ -15,9 +15,18 @@ fn parses(name: &str) -> bool {
 fn the_timestamp_has_14_to_20_ascii_digits_that_fit_a_u64() {
     assert!(!parses("2023103002571_note.surql"), "13 digits");
     assert!(parses("20231030025711_note.surql"), "14 digits");
-    assert!(parses("20231030025711123_note.surql"), "17 digits, as generated");
-    assert!(parses("12345678901234567890_note.surql"), "20 digits within u64");
-    assert!(!parses("99999999999999999999_note.surql"), "20 digits over u64::MAX");
+    assert!(
+        parses("20231030025711123_note.surql"),
+        "17 digits, as generated"
+    );
+    assert!(
+        parses("12345678901234567890_note.surql"),
+        "20 digits within u64"
+    );
+    assert!(
+        !parses("99999999999999999999_note.surql"),
+        "20 digits over u64::MAX"
+    );
     assert!(!parses("123456789012345678901_note.surql"), "21 digits");
     assert!(
         !parses("٢٠٢٣١٠٣٠٠٢٥٧١١_note.surql"),
@@ -32,7 +41,10 @@ fn the_rest_of_the_name_is_strict() {
     assert!(!parses("20231030025711_a b.surql"), "a space");
     assert!(!parses("20231030025711_note.sql"), "another extension");
     assert!(!parses("20231030025711_note.surql.bak"), "something after");
-    assert!(!parses("20231030025711_note.up.down.surql"), "two directions");
+    assert!(
+        !parses("20231030025711_note.up.down.surql"),
+        "two directions"
+    );
     assert!(parses("20231030025711_add-notes_v2.surql"), "`_` and `-`");
 }
 
@@ -83,17 +95,18 @@ fn the_loader_pairs_each_migration_once() {
 fn a_missing_half_is_an_io_error_with_its_source() {
     let (_temp, dir) = migration_dir();
     fs::create_dir(&dir).expect("created");
-    fs::write(dir.join("20231030025711_note.up.surql"), "DEFINE TABLE note;").expect("written");
+    fs::write(
+        dir.join("20231030025711_note.up.surql"),
+        "DEFINE TABLE note;",
+    )
+    .expect("written");
     let error = config(&dir)
         .get_two_way_migrations_sorted_asc(false)
         .expect_err("the down file is missing");
     let MigrationError::Io { path, source, .. } = &error else {
         panic!("expected Io, got {error:?}");
     };
-    assert!(
-        path.ends_with("20231030025711_note.down.surql"),
-        "{path:?}"
-    );
+    assert!(path.ends_with("20231030025711_note.down.surql"), "{path:?}");
     assert_eq!(source.kind(), ErrorKind::NotFound);
     assert!(error.source().is_some(), "the io::Error is the source");
 }

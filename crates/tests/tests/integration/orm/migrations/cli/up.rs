@@ -146,7 +146,10 @@ mod till_refuses {
             .await
             .expect_err("refused");
         assert!(
-            matches!(error, MigrationError::MigrationNotFoundFromPendingMigrations(_)),
+            matches!(
+                error,
+                MigrationError::MigrationNotFoundFromPendingMigrations(_)
+            ),
             "{error:?}"
         );
     }

@@ -1,11 +1,4 @@
-use std::{
-    collections::BTreeSet,
-    fmt::Display,
-    fs::File,
-    io::Write,
-    ops::Deref,
-    path::Path,
-};
+use std::{collections::BTreeSet, fmt::Display, fs::File, io::Write, ops::Deref, path::Path};
 
 use chrono::{DateTime, Utc};
 
@@ -235,7 +228,11 @@ impl MigrationFilename {
     ///
     /// [`MigrationError::Io`] when the file already exists (it is never overwritten) or cannot be
     /// written.
-    pub fn create_file(&self, query: &FileContent, config: &MigrationConfig) -> MigrationResult<()> {
+    pub fn create_file(
+        &self,
+        query: &FileContent,
+        config: &MigrationConfig,
+    ) -> MigrationResult<()> {
         let file_path = config
             .resolve_migration_directory(true)?
             .join(self.to_string());

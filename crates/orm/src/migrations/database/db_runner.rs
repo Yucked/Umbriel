@@ -210,7 +210,8 @@ impl MigrationRunner {
                         let is_before_db_latest_migration =
                             m.up().name.timestamp() < latest_migration.timestamp;
 
-                        let is_after_file_cursor = m.up().name.timestamp() > file_cursor.timestamp();
+                        let is_after_file_cursor =
+                            m.up().name.timestamp() > file_cursor.timestamp();
                         let is_file_cursor = &m.up().name == file_cursor;
 
                         (is_before_db_latest_migration || is_latest)

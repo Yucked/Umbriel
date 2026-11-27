@@ -49,6 +49,7 @@ pub use query::idiom::{Access, Database, Event, Ident, Name, Namespace, TableInd
 pub use query::interval::Interval;
 pub use query::links::{LinkMany, LinkOne, LinkPath, LinkSelf, Reference, Relate};
 pub use query::merge::{FlatMerge, Merge, MergeFields, MergeObject, ModelMerge};
+pub use query::operation::{Match, Operatable, Operation, Operator, negate, not, truthy};
 pub use query::ordinal::Ordinal;
 pub use query::param::{Param, ParamNameError};
 pub use query::params_standard::{
@@ -73,7 +74,6 @@ pub use traits::model::{
     Edge, FieldMetadata, Links, Model, Node, Object, SchemaGetter, SurrealCrud, SurrealCrudNode,
     SurrealRead, Writable,
 };
-pub use query::operation::{Match, Operatable, Operation, Operator, negate, not, truthy};
 pub use traits::patch_op::{PatchOp, PatchOpConversionError, Patchable};
 pub use traits::raw::Raw;
 pub use traits::setter::{

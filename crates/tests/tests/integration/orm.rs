@@ -28,16 +28,16 @@ mod compiles_root_exports {
         GENERATED_PARAM_PREFIX, GeometryLike, Graph, Ident, IdiomPart, Index, IndexName,
         IndexedResults, Interval, IntoNodeClause, JwtAlgorithm, Last, Level, LinkMany, LinkOne,
         LinkPath, LinkSelf, Links, Lookup, Match, Merge, MergeFields, MergeObject, MlVersion,
-        MlVersionError, Model, ModelMerge, ModelPatch, Models, NONE, NULL, Name, Namespace,
-        Node, NodeAliasClause, NodeClause, Nullable, NumberLike, Object, ObjectClause, ObjectLike,
-        OnDatabase, OnLevel, OnNamespace, OnRoot, Operatable, Operation, Operator, Ordinal,
-        Param, ParamAccess, ParamAction, ParamAfter, ParamAuth, ParamBefore, ParamEvent,
-        ParamFile, ParamInput, ParamNameError, ParamParent, ParamReference, ParamRequest,
-        ParamSession, ParamTarget, ParamThis, ParamToken, ParamValue, Patch, PatchOp,
-        PatchOpConversionError, Patchable, Pickable, Projections, Query, QueryChain, Queryable,
-        Raw, RecordAccessDefinition, RecordId, RecordIdLike, RecordKey, RecordRange, Recurse,
-        Reference, Relate, Render, Renderer, Result, Retry, RowStream, Runnable, SchemaGetter,
-        SetLike, Setter, SetterArg, SetterArray, SetterAssignable, SetterNumeric, ShortestTarget,
+        MlVersionError, Model, ModelMerge, ModelPatch, Models, NONE, NULL, Name, Namespace, Node,
+        NodeAliasClause, NodeClause, Nullable, NumberLike, Object, ObjectClause, ObjectLike,
+        OnDatabase, OnLevel, OnNamespace, OnRoot, Operatable, Operation, Operator, Ordinal, Param,
+        ParamAccess, ParamAction, ParamAfter, ParamAuth, ParamBefore, ParamEvent, ParamFile,
+        ParamInput, ParamNameError, ParamParent, ParamReference, ParamRequest, ParamSession,
+        ParamTarget, ParamThis, ParamToken, ParamValue, Patch, PatchOp, PatchOpConversionError,
+        Patchable, Pickable, Projections, Query, QueryChain, Queryable, Raw,
+        RecordAccessDefinition, RecordId, RecordIdLike, RecordKey, RecordRange, Recurse, Reference,
+        Relate, Render, Renderer, Result, Retry, RowStream, Runnable, SchemaGetter, SetLike,
+        Setter, SetterArg, SetterArray, SetterAssignable, SetterNumeric, ShortestTarget,
         StatementContext, Stats, StoredFields, StrandLike, StreamEvent, Surreal, SurrealCrud,
         SurrealCrudNode, SurrealRead, Table, TableIndex, TableLike, TableOf, TableResources,
         TableSpec, Tables, Transaction, User, ValueLike, WithStats, Writable, WritableModels,
@@ -51,8 +51,8 @@ mod compiles_root_exports {
     };
     use umbriel::{
         arr, array, assert_fields, assert_not, check_unique_idents, create_param_name_fn,
-        create_table_resources, function, object, object_partial, search_highlight,
-        search_offsets, search_score,
+        create_table_resources, function, object, object_partial, search_highlight, search_offsets,
+        search_score,
     };
 }
 

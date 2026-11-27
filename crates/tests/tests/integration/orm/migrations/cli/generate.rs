@@ -253,7 +253,10 @@ async fn two_fields_renamed_from_the_same_old_field_are_refused() {
     let error =
         generate_after_init(invalid_cases::ResourcesVRenamingWithSameOldFieldNameDisallowed).await;
     assert!(
-        matches!(error, MigrationError::RenamingToSameOldFieldDisallowed { .. }),
+        matches!(
+            error,
+            MigrationError::RenamingToSameOldFieldDisallowed { .. }
+        ),
         "{error:?}"
     );
 }
@@ -264,7 +267,10 @@ async fn renaming_from_a_field_still_in_use_is_refused() {
         generate_after_init(invalid_cases::ResourcesVRenamingFromCurrentlyUsedFieldNameDisallowed)
             .await;
     assert!(
-        matches!(error, MigrationError::CannotRenameFromOldFieldInUSeInTable { .. }),
+        matches!(
+            error,
+            MigrationError::CannotRenameFromOldFieldInUSeInTable { .. }
+        ),
         "{error:?}"
     );
 }
