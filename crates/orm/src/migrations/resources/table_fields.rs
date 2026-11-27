@@ -2,7 +2,10 @@
 //! (`#[orm(old_name = …)]`), or a single field replaced by another, where the prompter decides
 //! between renaming and deleting.
 
-use std::{collections::BTreeSet, fmt::Display};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fmt::Display,
+};
 
 use super::diff::Change;
 use crate::{
@@ -52,6 +55,7 @@ pub(crate) fn field_changes(
 ) -> MigrationResult<()> {
     let left_names = names(left, table);
     let right_names = names(right, table);
+    let renames = Renames::new(models);
     let mut fields = left_names
         .union(&right_names)
         .copied()
@@ -62,7 +66,7 @@ pub(crate) fn field_changes(
     let mut added = right_names.difference(&left_names);
     if let (Some(&old), None, Some(&new), None) =
         (removed.next(), removed.next(), added.next(), added.next())
-        && renamed(models, |meta| meta.name.to_debug_sql() == new).is_none()
+        && renames.to(new).is_none()
     {
         let meta = FieldChangeMeta {
             table: Table::new(table),
@@ -89,26 +93,15 @@ pub(crate) fn field_changes(
     }
 
     for field in fields {
-        let renamed_to = renamed(models, |meta| meta.name.to_debug_sql() == field);
-        let renamed_from = renamed(models, |meta| {
-            meta.old_name
-                .as_ref()
-                .is_some_and(|old| old.to_debug_sql() == field)
-        });
-
-        match (renamed_from, renamed_to) {
-            (Some(_), Some(_)) => {
+        match (renames.renames_from(field), renames.to(field)) {
+            (true, Some(_)) => {
                 return Err(MigrationError::RenamingToSameOldFieldDisallowed {
                     field: Field::raw(field.to_owned()),
                     table: Table::new(table),
                 });
             }
-            (None, Some(meta)) => {
-                let old = meta
-                    .old_name
-                    .as_ref()
-                    .map(Render::to_debug_sql)
-                    .unwrap_or_default();
+            (false, Some(old)) => {
+                let old = old.to_owned();
                 if right_names.contains(old.as_str()) {
                     return Err(MigrationError::CannotRenameFromOldFieldInUSeInTable {
                         new_field: field.to_owned(),
@@ -138,8 +131,8 @@ pub(crate) fn field_changes(
                 });
             }
             // The rename is planned from the new field's side.
-            (Some(_), None) => {}
-            (None, None) => compare(table, field, left, right, changes),
+            (true, None) => {}
+            (false, None) => compare(table, field, left, right, changes),
         }
     }
     Ok(())
@@ -156,19 +149,44 @@ fn compare(table: &str, field: &str, left: &Schema, right: &Schema, changes: &mu
     }
 }
 
-/// The field of the codebase that is renamed (has an `old_name`) and matches `matches`.
-fn renamed(
-    models: &[FieldMetadata],
-    matches: impl Fn(&FieldMetadata) -> bool,
-) -> Option<&FieldMetadata> {
-    models
-        .iter()
-        .filter(|meta| {
-            meta.old_name
-                .as_ref()
-                .is_some_and(|old| !old.to_debug_sql().is_empty())
-        })
-        .find(|&meta| matches(meta))
+/// The codebase's renamed fields (those with a non-empty `old_name`), each name rendered once,
+/// looked up by the new name and by the old one. When several fields share a name, the first in
+/// `models` wins, as the earlier linear search did.
+struct Renames {
+    /// Each new name and its old name.
+    by_new: HashMap<String, String>,
+    /// The old names.
+    old_names: HashSet<String>,
+}
+
+impl Renames {
+    fn new(models: &[FieldMetadata]) -> Self {
+        let mut by_new = HashMap::with_capacity(models.len());
+        let mut old_names = HashSet::with_capacity(models.len());
+        for meta in models {
+            let Some(old) = meta.old_name.as_ref().map(Render::to_debug_sql) else {
+                continue;
+            };
+            if old.is_empty() {
+                continue;
+            }
+            by_new
+                .entry(meta.name.to_debug_sql())
+                .or_insert_with(|| old.clone());
+            old_names.insert(old);
+        }
+        Self { by_new, old_names }
+    }
+
+    /// The old name of the field renamed to `new`.
+    fn to(&self, new: &str) -> Option<&str> {
+        self.by_new.get(new).map(String::as_str)
+    }
+
+    /// Whether a field is renamed from `old`.
+    fn renames_from(&self, old: &str) -> bool {
+        self.old_names.contains(old)
+    }
 }
 
 fn names<'a>(schema: &'a Schema, table: &'a str) -> BTreeSet<&'a str> {
