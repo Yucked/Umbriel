@@ -1,4 +1,4 @@
-use super::up::{Up, UpdateStrategy};
+use super::up::Up;
 use crate::DbResources;
 use crate::migrations::*;
 use clap::Args;
@@ -53,15 +53,18 @@ impl Init {
         }
 
         let comparison = cli.comparison().await?;
+        cli.setup_db().await?;
+        let history = cli.db()?;
+        let name = &self.name;
         if self.reversible {
             file_manager
                 .two_way()
-                .generate_migrations(&comparison, &self.name, codebase_resources, prompter)
+                .generate_migrations(&comparison, history, name, codebase_resources, prompter)
                 .await?;
         } else {
             file_manager
                 .one_way()
-                .generate_migrations(&comparison, &self.name, codebase_resources, prompter)
+                .generate_migrations(&comparison, history, name, codebase_resources, prompter)
                 .await?;
         }
 

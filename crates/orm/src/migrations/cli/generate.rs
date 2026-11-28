@@ -1,4 +1,4 @@
-use super::up::{Up, UpdateStrategy};
+use super::up::Up;
 
 use crate::DbResources;
 use crate::migrations::*;
@@ -23,13 +23,14 @@ impl Generate {
     }
 
     /// Generates a migration from the difference between the migration directory and the
-    /// codebase's resources, and applies it if asked.
+    /// codebase's resources, after checking the directory against the history of the database
+    /// `up` applies to, and applies it if asked.
     ///
     /// # Errors
     ///
-    /// The failure of connecting the comparison, detecting the migration type (such as
-    /// [`MigrationError::MigrationDirectoryDoesNotExist`] before `init`), generating or
-    /// applying.
+    /// The failure of connecting, detecting the migration type (such as
+    /// [`MigrationError::MigrationDirectoryDoesNotExist`] before `init`), checking the history,
+    /// generating or applying.
     pub async fn run(
         &self,
         cli: &mut Migrator,
@@ -38,17 +39,20 @@ impl Generate {
     ) -> MigrationResult<()> {
         let file_manager = cli.file_manager();
         let comparison = cli.comparison().await?;
+        cli.setup_db().await?;
+        let history = cli.db()?;
+        let name = &self.name;
         match file_manager.detect_migration_type()? {
             MigrationFlag::TwoWay => {
                 file_manager
                     .two_way()
-                    .generate_migrations(&comparison, &self.name, codebase_resources, prompter)
+                    .generate_migrations(&comparison, history, name, codebase_resources, prompter)
                     .await?;
             }
             MigrationFlag::OneWay => {
                 file_manager
                     .one_way()
-                    .generate_migrations(&comparison, &self.name, codebase_resources, prompter)
+                    .generate_migrations(&comparison, history, name, codebase_resources, prompter)
                     .await?;
             }
         }
