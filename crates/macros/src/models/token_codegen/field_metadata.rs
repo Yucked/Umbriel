@@ -13,11 +13,11 @@ impl Codegen<'_> {
         let field_name_serialized = field_receiver.db_field_name(&table_derive_attrs.casing()?)?;
 
         let old_field_name = match field_receiver.old_name.as_ref() {
-            Some(old_name) if !old_name.to_string().is_empty() => {
+            Some(old_name) => {
                 let old_name = old_name.to_string();
                 quote!(::std::option::Option::Some(#crate_name::Field::new(#old_name)))
             }
-            _ => quote!(::std::option::Option::None),
+            None => quote!(::std::option::Option::None),
         };
 
         if !field_definition.is_empty() {
