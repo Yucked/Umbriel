@@ -15,7 +15,7 @@ use surrealdb::{
 
 use crate::{
     Chainable, Executor, QueryChain, Runnable,
-    migrations::{MigrationError, MigrationResult},
+    migrations::{Migration, MigrationError, MigrationResult},
     statements::{DatabaseInfo, InfoOutput, Statements, Structures, TableInfo, info_for},
 };
 
@@ -262,6 +262,8 @@ impl Schema {
     /// migrations do not manage (machine-learning models, or a kind the server adds) fail with
     /// [`MigrationError::UnsupportedSchemaResource`] instead of being ignored. A database's own
     /// options, such as its changefeed, are not definitions inside it and are not inspected.
+    /// Nor is the runner's revision table (see [`MigrationRunner`](crate::migrations::MigrationRunner)):
+    /// it is the runner's bookkeeping, never a codebase's or a migration's.
     pub async fn inspect(db: &impl Executor) -> MigrationResult<Self> {
         let mut info = QueryChain::from(vec![
             Chainable::from(info_for().database().structure()),
@@ -272,7 +274,12 @@ impl Schema {
         let mut schema = database_schema(
             DatabaseInfo::<Structures>::from_info(take_value(&mut info, 0)?)?,
             DatabaseInfo::<Statements>::from_info(take_value(&mut info, 1)?)?,
-        )?;
+        )?
+        .without(&ResourceKey {
+            kind: ResourceKind::Table,
+            table: None,
+            name: Migration::revision_table().as_str().to_owned(),
+        });
 
         let tables = schema
             .definitions
