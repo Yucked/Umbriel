@@ -135,36 +135,38 @@ impl MigrationConfig {
         ))
     }
 
-    /// The migration directory's file names, sorted.
+    /// The migration directory's file names, sorted (see [`migration_filenames_in`]).
     pub fn get_migrations_filenames(
         &self,
         create_dir_if_not_exists: bool,
     ) -> MigrationResult<MigrationFilenames> {
         let migration_dir_path = self.resolve_migration_directory(create_dir_if_not_exists)?;
         log::info!("Migration dir path: {}", migration_dir_path.display());
+        Ok(migration_filenames_in(&migration_dir_path)?.into())
+    }
 
-        let read_error = |source| MigrationError::Io {
-            action: "reading the migration directory",
-            path: migration_dir_path.clone(),
-            source,
+    /// The directory's migrations of the configured type, or the type its files have when none
+    /// is configured, oldest first.
+    pub(crate) fn migration_files(
+        &self,
+        create_dir_if_not_exists: bool,
+    ) -> MigrationResult<Vec<MigrationFile>> {
+        let flag = match self.migration_flag {
+            Some(flag) => flag,
+            None => self.detect_migration_type()?,
         };
-        let migrations = fs::read_dir(&migration_dir_path).map_err(read_error)?;
-
-        let mut filenames = vec![];
-
-        for migration in migrations {
-            let migration = migration.map_err(read_error)?;
-            let filename: MigrationFilename = migration
-                .file_name()
-                .to_string_lossy()
-                .into_owned()
-                .try_into()?;
-
-            filenames.push(filename);
-        }
-
-        filenames.sort();
-        Ok(filenames.into())
+        Ok(match flag {
+            MigrationFlag::TwoWay => self
+                .get_two_way_migrations_sorted_asc(create_dir_if_not_exists)?
+                .into_iter()
+                .map(MigrationFile::from)
+                .collect(),
+            MigrationFlag::OneWay => self
+                .get_oneway_migrations_sorted_asc(create_dir_if_not_exists)?
+                .into_iter()
+                .map(MigrationFile::from)
+                .collect(),
+        })
     }
 
     /// The two-way migrations, oldest first.
@@ -198,6 +200,30 @@ impl MigrationConfig {
     }
 }
 
+/// The migration file names in `dir`, sorted. Files that don't end in `.surql`, such as a
+/// README, are not migrations and are left out; a `.surql` file whose name is not a migration
+/// file name is an error, so a mistyped migration is not silently skipped.
+pub(crate) fn migration_filenames_in(dir: &Path) -> MigrationResult<Vec<MigrationFilename>> {
+    let read_error = |source| MigrationError::Io {
+        action: "reading the migration directory",
+        path: dir.to_owned(),
+        source,
+    };
+    let mut filenames = vec![];
+    for entry in fs::read_dir(dir).map_err(read_error)? {
+        let name = entry
+            .map_err(read_error)?
+            .file_name()
+            .to_string_lossy()
+            .into_owned();
+        if name.ends_with(".surql") {
+            filenames.push(MigrationFilename::try_from(name)?);
+        }
+    }
+    filenames.sort();
+    Ok(filenames)
+}
+
 /// Generates, applies and lists one-way migrations.
 #[derive(Debug, Clone)]
 pub struct FileManagerUni(MigrationConfig);
@@ -213,7 +239,8 @@ impl FileManagerUni {
     }
 
     /// Writes a one-way migration from the difference between the directory and the codebase,
-    /// compared in `comparison`'s namespace (see [`Comparison`]).
+    /// compared in `comparison`'s namespace (see [`Comparison`]), after checking the directory
+    /// against the history of `history`, the database `up` applies to.
     ///
     /// # Errors
     ///
@@ -221,12 +248,14 @@ impl FileManagerUni {
     pub async fn generate_migrations<C: Connection>(
         &self,
         comparison: &Comparison<C>,
+        history: &Surreal<C>,
         migration_basename: &Basename,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
     ) -> MigrationResult<()> {
         MigratorDatabase::generate_migrations(
             comparison,
+            history,
             migration_basename,
             &self.0,
             codebase_resources,
@@ -243,9 +272,8 @@ impl FileManagerUni {
         update_strategy: UpdateStrategy,
     ) -> MigrationResult<()> {
         let migrations = self.get_migrations()?;
-        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy).await?;
-
-        Ok(())
+        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy, self.0.mode())
+            .await
     }
 
     /// Applies pending embedded migrations, each in its own transaction (see
@@ -257,9 +285,8 @@ impl FileManagerUni {
         update_strategy: UpdateStrategy,
     ) -> MigrationResult<()> {
         let migrations = one_way_embedded_migrations.to_migrations_one_way()?;
-        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy).await?;
-
-        Ok(())
+        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy, self.0.mode())
+            .await
     }
 
     /// List all migrations
@@ -300,7 +327,8 @@ impl FileManagerBi {
     }
 
     /// Writes a two-way migration from the difference between the directory and the codebase,
-    /// compared in `comparison`'s namespace (see [`Comparison`]).
+    /// compared in `comparison`'s namespace (see [`Comparison`]), after checking the directory
+    /// against the history of `history`, the database `up` applies to.
     ///
     /// # Errors
     ///
@@ -308,12 +336,14 @@ impl FileManagerBi {
     pub async fn generate_migrations<C: Connection>(
         &self,
         comparison: &Comparison<C>,
+        history: &Surreal<C>,
         migration_basename: &Basename,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
     ) -> MigrationResult<()> {
         MigratorDatabase::generate_migrations(
             comparison,
+            history,
             migration_basename,
             &self.0,
             codebase_resources,
@@ -330,9 +360,8 @@ impl FileManagerBi {
         update_strategy: UpdateStrategy,
     ) -> MigrationResult<()> {
         let migrations = self.get_migrations()?;
-        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy).await?;
-
-        Ok(())
+        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy, self.0.mode())
+            .await
     }
 
     /// Applies pending embedded migrations, each in its own transaction (see
@@ -344,9 +373,8 @@ impl FileManagerBi {
         update_strategy: UpdateStrategy,
     ) -> MigrationResult<()> {
         let migrations = two_way_embedded_migrations.to_migrations_two_way()?;
-        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy).await?;
-
-        Ok(())
+        MigrationRunner::apply_pending_migrations(db, migrations, update_strategy, self.0.mode())
+            .await
     }
 
     /// Rolls back migrations as `rollback_options` says, each in its own transaction (see
