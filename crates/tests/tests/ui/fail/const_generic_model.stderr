@@ -1,0 +1,45 @@
+error: a model cannot have const generic parameters; use a type parameter or a constant instead
+ --> tests/ui/fail/const_generic_model.rs:5:17
+  |
+5 | pub struct Grid<const N: usize> {
+  |                 ^^^^^
+
+error[E0277]: `Grid<N>` is not an Umbriel model
+ --> tests/ui/fail/const_generic_model.rs:6:13
+  |
+6 |     pub id: RecordId<Self>,
+  |             ^^^^^^^^^^^^^^ not a model
+  |
+help: the trait `Model` is not implemented for `Grid<N>`
+ --> tests/ui/fail/const_generic_model.rs:5:1
+  |
+5 | pub struct Grid<const N: usize> {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = note: declare `Grid<N>` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+ --> $WORKSPACE/crates/orm/src/query/record_id.rs
+  |
+  | impl<T: Model> SurrealValue for RecordId<T> {
+  | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |         |
+  |         unsatisfied requirement introduced here: `Grid<N>: Model`
+  = note: required for `umbriel::RecordId<Grid<N>>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<Grid<N>>`
+ --> tests/ui/fail/const_generic_model.rs:6:9
+  |
+4 | #[model(node, table = "grid")]
+  | ------------------------------ value moved due to this method call
+5 | pub struct Grid<const N: usize> {
+6 |     pub id: RecordId<Self>,
+  |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+  |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+ --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+  |
+  |     fn into_value(self) -> Value;
+  |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+  |
+6 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+  |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
