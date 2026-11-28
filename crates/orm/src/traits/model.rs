@@ -243,18 +243,31 @@ pub trait SurrealRead: Model + Send {
 
 impl<T> SurrealRead for T where T: Model + Send {}
 
-/// A model whose records can be written: nodes and edges, but not views, whose records
-/// SurrealDB computes from their `AS SELECT` query.
+/// A model whose records can be deleted: every node and edge, including a `LIGHTWEIGHT` edge,
+/// whose relations SurrealDB deletes although it stores no records for them. Views have none.
 ///
-/// Every typed write builder (`update`, `upsert`, `delete`, `insert_any`, …) requires it, so a
-/// write to a view does not compile. `#[umbriel::model]` is its only supported implementor; a
-/// derive expands in the crate that declares the model, so the trait cannot be sealed.
+/// `delete`, `delete_only` and `TableOf::delete_where` require it. `#[umbriel::model]` is its
+/// only supported implementor.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be deleted from",
+    label = "not deletable",
+    note = "views are read-only: SurrealDB computes their records from the `AS SELECT` query"
+)]
+pub trait Deletable: Model {}
+
+/// A model whose records can be written: nodes and edges, but not views, whose records
+/// SurrealDB computes from their `AS SELECT` query, nor `LIGHTWEIGHT` edges, which store no
+/// records.
+///
+/// Every typed write builder (`update`, `upsert`, `insert_any`, …) requires it, so a write to a
+/// view does not compile. `#[umbriel::model]` is its only supported implementor; a derive
+/// expands in the crate that declares the model, so the trait cannot be sealed.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be written to",
     label = "not writable",
-    note = "views are read-only: SurrealDB computes their records from the `AS SELECT` query"
+    note = "views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data"
 )]
-pub trait Writable: Model {}
+pub trait Writable: Deletable {}
 
 /// Writes to a model's records, run through the SDK's typed methods. Views have none.
 pub trait SurrealCrud: SurrealRead + Writable {
@@ -458,6 +471,18 @@ pub trait Edge: Model + SchemaGetter {
     /// returns the table name of the edge
     fn get_table() -> Table;
 }
+
+/// An edge whose relations are stored as records, so they can hold data: every edge but a
+/// `LIGHTWEIGHT` one, which stores only the connection between its endpoints.
+///
+/// `insert_relation`, the `RELATE` data clauses (`CONTENT`, `SET`, …) and `RELATE OR UPDATE`
+/// require it: SurrealDB rejects them on a `LIGHTWEIGHT` table.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not an edge that stores its relations as records",
+    label = "not a stored edge",
+    note = "declare `{Self}` with `#[umbriel::model(edge)]`; a `LIGHTWEIGHT` edge holds only `id`, `in` and `out`, so relate it without data"
+)]
+pub trait StoredEdge: Edge {}
 
 /// Object is a trait signifying a nested object in the graph
 #[diagnostic::on_unimplemented(
