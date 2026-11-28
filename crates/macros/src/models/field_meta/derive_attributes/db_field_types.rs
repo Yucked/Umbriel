@@ -118,17 +118,15 @@ impl MyFieldReceiver {
         Ok(db_type)
     }
 
+    /// Whether this is an edge's `in` or `out`. An invalid casing or stored name reads as neither:
+    /// the codegen that needs them reports the error, with its span.
     pub fn is_in_or_out_edge_node_field(&self, model_attributes: &ModelAttributes) -> bool {
-        let is_in_or_out_edge_node = self
-            .db_field_name(
-                &model_attributes
-                    .casing()
-                    .expect("Failed to get the casing. Please, provide one."),
-            )
-            .expect("Failed to get the database field name")
-            .is_in_or_out_edge_node(&model_attributes.to_data_type());
-
-        model_attributes.to_data_type().is_edge() && is_in_or_out_edge_node
+        let data_type = model_attributes.to_data_type();
+        data_type.is_edge()
+            && model_attributes
+                .casing()
+                .and_then(|casing| self.db_field_name(&casing))
+                .is_ok_and(|name| name.is_in_or_out_edge_node(&data_type))
     }
 
     /// Whether this is the record id, whose `ty` is its key's type rather than the field's.
