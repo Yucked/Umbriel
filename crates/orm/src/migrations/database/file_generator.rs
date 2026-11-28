@@ -126,32 +126,18 @@ impl<C: Connection> ComparisonDatabase<C> {
         .await
     }
 
-    /// The schema the migration directory produces, or an empty one unless `replay_directory`,
-    /// and the codebase's, both without the generator's user.
+    /// The schema `replay` produces, replayed in order, and the codebase's, both without the
+    /// generator's user.
     async fn schemas(
         &self,
         file_manager: &MigrationConfig,
         codebase_resources: &impl DbResources,
-        replay_directory: bool,
+        replay: &[MigrationFile],
     ) -> MigrationResult<(Schema, Schema)> {
         let migration_flag = file_manager.migration_flag_checked()?;
-        if replay_directory {
-            // Each migration's up (or only) file in order, each in its own transaction.
-            let contents = match migration_flag {
-                MigrationFlag::TwoWay => file_manager
-                    .get_two_way_migrations_sorted_asc(true)?
-                    .into_iter()
-                    .map(|pair| pair.up().content.to_string())
-                    .collect::<Vec<_>>(),
-                MigrationFlag::OneWay => file_manager
-                    .get_oneway_migrations_sorted_asc(true)?
-                    .into_iter()
-                    .map(|file| file.content().to_string())
-                    .collect(),
-            };
-            for content in contents {
-                run_transaction(self.left.db(), content).await?;
-            }
+        // Each migration's up (or only) file, each in its own transaction.
+        for migration in replay {
+            run_transaction(self.left.db(), migration.up_content().to_string()).await?;
         }
         // The history table and the codebase's definitions, in one transaction.
         let mut transaction = begin_transaction().query(Migration::define_table());
@@ -350,20 +336,33 @@ impl<C: Connection> MigratorDatabase<C> {
     /// Writes a migration holding the difference between the schema the migration files
     /// produce and the codebase's schema, compared in `comparison`'s namespace.
     ///
+    /// Before it creates anything, it checks the directory against the history of `history`,
+    /// the database `up` applies to, as `up` would: in strict mode every applied file must exist
+    /// and match its checksums, and in both modes no pending file may sort before the newest
+    /// applied one, since `up` refuses to apply it there. The directory then replays in file
+    /// order, which is the order it was applied in. The check covers that one database; another
+    /// deployment's `up` checks its own history.
+    ///
     /// # Errors
     ///
-    /// Any error of creating the comparison databases, replaying the directory, applying the
-    /// codebase's definitions, planning or writing the migration, or
+    /// The errors of checking the history (such as [`MigrationError::ChecksumMismatch`],
+    /// [`MigrationError::AppliedFileMissing`] and [`MigrationError::OutOfOrder`]), and any error
+    /// of creating the comparison databases, replaying the directory, applying the codebase's
+    /// definitions, planning or writing the migration, or
     /// [`MigrationError::ComparisonNotRemoved`].
     pub async fn generate_migrations(
         comparison: &Comparison<C>,
+        history: &Surreal<C>,
         migration_basename: &Basename,
         file_manager: &MigrationConfig,
         codebase_resources: impl DbResources,
         prompter: impl Prompter,
     ) -> MigrationResult<()> {
+        file_manager.migration_flag_checked()?;
+        let migrations = file_manager.migration_files(true)?;
+        MigrationRunner::check_history(history, &migrations, file_manager.mode()).await?;
         let (left, right) =
-            Self::schemas(comparison, file_manager, &codebase_resources, true).await?;
+            Self::schemas(comparison, file_manager, &codebase_resources, &migrations).await?;
         generate_from_schemas(
             &left,
             &right,
@@ -389,7 +388,7 @@ impl<C: Connection> MigratorDatabase<C> {
         prompter: impl Prompter,
     ) -> MigrationResult<MigrationFile> {
         let (left, right) =
-            Self::schemas(comparison, file_manager, &codebase_resources, false).await?;
+            Self::schemas(comparison, file_manager, &codebase_resources, &[]).await?;
         let (migration, _) = plan_migration(
             &left,
             &right,
@@ -408,11 +407,11 @@ impl<C: Connection> MigratorDatabase<C> {
         comparison: &Comparison<C>,
         file_manager: &MigrationConfig,
         codebase_resources: &impl DbResources,
-        replay_directory: bool,
+        replay: &[MigrationFile],
     ) -> MigrationResult<(Schema, Schema)> {
         let databases = ComparisonDatabase::init(comparison).await?;
         let schemas = databases
-            .schemas(file_manager, codebase_resources, replay_directory)
+            .schemas(file_manager, codebase_resources, replay)
             .await;
         databases.finish(schemas).await
     }
@@ -470,7 +469,18 @@ fn plan_migration(
     let migration_flag = file_manager.migration_flag_checked()?;
 
     let diff = SchemaDiff::new(left, right, codebase_resources, prompter)?;
-    let mut up = diff.statements(&Direction::Up)?;
+    // Removing a table or field deletes its data, which no rollback restores: the migration
+    // lists them first, and nothing is written unless the user confirms.
+    let removals = diff.data_removals();
+    confirmed(prompter, false, "This migration deletes the data of", &removals)?;
+    let mut up = removals
+        .iter()
+        .map(|removal| QueryType::Comment(format!("Deletes data: {removal}")))
+        .collect::<Vec<_>>();
+    if !up.is_empty() {
+        up.push(QueryType::Blank);
+    }
+    up.extend(diff.statements(&Direction::Up)?);
     let down = if migration_flag == MigrationFlag::TwoWay {
         diff.statements(&Direction::Down)?
     } else {
