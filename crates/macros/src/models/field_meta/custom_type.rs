@@ -4,12 +4,38 @@ use darling::FromMeta;
 use quote::ToTokens;
 use surrealdb_types::GeometryKind;
 use syn::{
-    self, Expr, GenericArgument, Ident, PathArguments, Token, Type, parse_quote, spanned::Spanned,
+    self, Expr, GenericArgument, Ident, PathArguments, Token, Type, spanned::Spanned,
 };
 
 use crate::models::*;
 
 use super::{custom_type_self_replacement::ReplaceSelfVisitor, *};
+
+/// The name a type path gives a standard type: the last segment of a bare name (`String`) or of
+/// the standard-library path the prelude takes it from (`std::string::String`,
+/// `::core::primitive::u8`), so a qualified type infers as the bare one does (UMB-034). `None`
+/// for any other path, or one with generic arguments before its last segment.
+fn std_type_name(path: &syn::Path) -> Option<String> {
+    const PREFIXES: [&[&str]; 5] = [
+        &["std", "string"],
+        &["alloc", "string"],
+        &["std", "primitive"],
+        &["core", "primitive"],
+        &["alloc", "primitive"],
+    ];
+    let segments = path.segments.iter().collect::<Vec<_>>();
+    let (last, prefix) = segments.split_last()?;
+    if prefix.iter().any(|segment| !segment.arguments.is_none()) {
+        return None;
+    }
+    let prefix = prefix
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>();
+    let bare = prefix.is_empty() && path.leading_colon.is_none();
+    let standard = PREFIXES.iter().any(|known| *known == prefix.as_slice());
+    (bare || standard).then(|| last.ident.to_string())
+}
 
 #[derive(Debug, Clone)]
 pub struct CustomTypeNoSelf(CustomType);
@@ -245,53 +271,6 @@ impl CustomType {
         Ok(replacer.replace_self(self))
     }
 
-    fn _strip_bounds_from_generics(&self) -> Self {
-        let stripped_ty = match self.inner() {
-            Type::Path(type_path) => {
-                let mut new_type_path = type_path.clone();
-
-                // Iterate through the path segments
-                for segment in &mut new_type_path.path.segments {
-                    if let PathArguments::AngleBracketed(angle_bracketed) = &mut segment.arguments {
-                        // Collect only the generic identifiers, dropping bounds
-                        let modified_args = angle_bracketed
-                            .args
-                            .iter()
-                            .map(|arg| {
-                                match arg {
-                                    GenericArgument::Type(Type::Path(tp)) => {
-                                        // Keep only the type identifier
-                                        let ident = &tp
-                                            .path
-                                            .get_ident()
-                                            .expect("Problem getting type path as ident.");
-                                        parse_quote!(#ident)
-                                    }
-                                    GenericArgument::Lifetime(lifetime) => {
-                                        // Keep only the lifetime identifier
-                                        parse_quote!(#lifetime)
-                                    }
-                                    GenericArgument::Const(const_param) => {
-                                        // Keep only the const parameter
-                                        parse_quote!(#const_param)
-                                    }
-                                    _ => arg.clone(), // Other types of arguments are left as is
-                                }
-                            })
-                            .collect();
-
-                        // Replace the arguments with the modified ones
-                        angle_bracketed.args = modified_args;
-                    }
-                }
-
-                Type::Path(new_type_path)
-            }
-            _ => self.inner().clone(),
-        };
-        Self(stripped_ty)
-    }
-
     pub fn is_numeric(&self) -> bool {
         let ty = &self.inner();
         match ty {
@@ -325,56 +304,29 @@ impl CustomType {
     }
 
     pub fn raw_type_is_integer(&self) -> bool {
+        const INTEGERS: [&str; 12] = [
+            "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
+        ];
         match self.inner() {
-            syn::Type::Path(p) => {
-                let path = &p.path;
-                path.leading_colon.is_none() && path.segments.len() == 1 && {
-                    let ident = &path.segments[0].ident.to_string();
-                    [
-                        "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64",
-                        "i128", "isize",
-                    ]
-                    .iter()
-                    .any(|&x| x == ident)
-                }
-            }
+            syn::Type::Path(p) => std_type_name(&p.path).is_some_and(|name| INTEGERS.contains(&name.as_str())),
             _ => false,
         }
     }
 
     pub fn raw_type_is_string(&self) -> bool {
+        let is_string = |path: &syn::Path| {
+            std_type_name(path).is_some_and(|name| ["String", "str"].contains(&name.as_str()))
+        };
         match &self.inner() {
-            syn::Type::Path(p) => {
-                let path = &p.path;
-                path.leading_colon.is_none() && path.segments.len() == 1 && {
-                    let ident = &path.segments[0].ident.to_string();
-                    ["String", "str"].contains(&ident.as_str())
-                }
-            }
-            syn::Type::Reference(r) => {
-                if let syn::Type::Path(ref p) = *r.elem {
-                    let path = &p.path;
-                    path.leading_colon.is_none() && path.segments.len() == 1 && {
-                        let ident = &path.segments[0].ident.to_string();
-                        ["String", "str"].contains(&ident.as_str())
-                    }
-                } else {
-                    false
-                }
-            }
+            syn::Type::Path(p) => is_string(&p.path),
+            syn::Type::Reference(r) => matches!(&*r.elem, syn::Type::Path(p) if is_string(&p.path)),
             _ => false,
         }
     }
 
     pub fn raw_type_is_bool(&self) -> bool {
         match self.inner() {
-            syn::Type::Path(p) => {
-                let path = &p.path;
-                path.leading_colon.is_none() && path.segments.len() == 1 && {
-                    let ident = &path.segments[0].ident.to_string();
-                    ["bool"].iter().any(|&x| x == ident)
-                }
-            }
+            syn::Type::Path(p) => std_type_name(&p.path).is_some_and(|name| name == "bool"),
             _ => false,
         }
     }
@@ -387,6 +339,7 @@ impl CustomType {
                     .path
                     .segments
                     .last()
+                    // invariant: a type path parsed from source has at least one segment.
                     .expect("Must have at least one segment");
                 if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments {
                     if let Some(syn::GenericArgument::Type(syn::Type::Infer(_))) = args.args.first()
@@ -411,6 +364,7 @@ impl CustomType {
                     .path
                     .segments
                     .last()
+                    // invariant: a type path parsed from source has at least one segment.
                     .expect("Must have at least one segment");
                 if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments {
                     if let Some(syn::GenericArgument::Type(syn::Type::Infer(_))) = args.args.first()
@@ -443,6 +397,7 @@ impl CustomType {
                     .path
                     .segments
                     .last()
+                    // invariant: a type path parsed from source has at least one segment.
                     .expect("Must have at least one segment");
                 if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments {
                     if let Some(syn::GenericArgument::Type(syn::Type::Infer(_))) = args.args.first()
@@ -466,6 +421,7 @@ impl CustomType {
                     .path
                     .segments
                     .last()
+                    // invariant: a type path parsed from source has at least one segment.
                     .expect("Must have at least one segment");
                 if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments {
                     if let Some(syn::GenericArgument::Type(syn::Type::Infer(_))) = args.args.first()
@@ -491,6 +447,7 @@ impl CustomType {
                     .path
                     .segments
                     .last()
+                    // invariant: a type path parsed from source has at least one segment.
                     .expect("Must have at least one segment");
                 if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments {
                     if let Some(syn::GenericArgument::Type(syn::Type::Infer(_))) = args.args.first()
@@ -516,6 +473,7 @@ impl CustomType {
                     .path
                     .segments
                     .last()
+                    // invariant: a type path parsed from source has at least one segment.
                     .expect("Must have at least one segment");
                 last_segment.ident.to_string().to_lowercase()
                     == RustType::DateTime.to_string().to_lowercase()
@@ -532,6 +490,7 @@ impl CustomType {
                     .path
                     .segments
                     .last()
+                    // invariant: a type path parsed from source has at least one segment.
                     .expect("Must have at least one segment");
                 last_segment.ident == "Duration"
             }
@@ -561,6 +520,7 @@ impl CustomType {
                     .path
                     .segments
                     .last()
+                    // invariant: a type path parsed from source has at least one segment.
                     .expect("Must have at least one segment");
                 let kind = last_seg.ident.to_string().to_lowercase();
 
@@ -590,6 +550,7 @@ impl CustomType {
                     .path
                     .segments
                     .last()
+                    // invariant: a type path parsed from source has at least one segment.
                     .expect("Must have at least one segment");
 
                 if !potential_type_idents
