@@ -71,8 +71,8 @@ pub use traits::access::RecordAccessDefinition;
 pub use traits::db_resources::DbResources;
 pub use traits::general::{AllGetter, Conditional, Queryable};
 pub use traits::model::{
-    Edge, FieldMetadata, Links, Model, Node, Object, SchemaGetter, SurrealCrud, SurrealCrudNode,
-    SurrealRead, Writable,
+    Deletable, Edge, FieldMetadata, Links, Model, Node, Object, SchemaGetter, StoredEdge,
+    SurrealCrud, SurrealCrudNode, SurrealRead, Writable,
 };
 pub use traits::patch_op::{PatchOp, PatchOpConversionError, Patchable};
 pub use traits::raw::Raw;
@@ -282,9 +282,10 @@ pub mod test_support {
     #[cfg(feature = "migrations")]
     pub use crate::migrations::{
         database::{
-            db_runner::apply_after_reading,
+            db_runner::{apply_after_reading, lock_history, prune_confirmed, read_history},
             file_generator::{generate_from_schemas, init_comparison_with, remove_comparison},
-            migration_model::history_or_empty,
+            migration_model::{HistoryReading, history_or_empty},
+            replacement::swap_migration_files,
         },
         resources::bucket_backend::credential_in_backend,
         schema::{add_table_info, database_schema, field_definition},
