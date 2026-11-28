@@ -152,7 +152,8 @@ written with the [`relate`](crate::statements::relate) statement.
 
 # Partial updates: NONE and NULL
 
-`<Model>Patch` holds one [`Patch`] per stored field:
+`<Model>Patch` holds one [`Patch`] per stored field, each as visible as the field it updates, so
+a private field's patch is private too:
 
 | Value | Update |
 | --- | --- |
@@ -246,8 +247,11 @@ Database-only settings stay in `#[orm(…)]`:
 | On the struct | Meaning |
 | --- | --- |
 | `relax_table` | Allows a table name other than the struct name in snake case. |
-| `schemafull`, `drop` | Flags of the generated `DEFINE TABLE`. |
-| `kind = "any"`, `kind = "normal"` | The table's `TYPE`. An edge's `TYPE RELATION` is not set here. |
+| `schemafull`, `drop` | Flags of the generated `DEFINE TABLE`; `= false` leaves the flag out. |
+| `kind = "any"`, `kind = "normal"` | The table's `TYPE`. An edge's `TYPE RELATION` is `relation`. |
+| `relation`, `relation(from = "user", to = "book \| post")` | On an edge: `TYPE RELATION`, so the table holds only relations, from and to these tables when given (`IN user OUT book \| post`). SurrealDB defines `in` and `out` from them, so they get no `DEFINE FIELD`. The endpoints are explicit: an edge is generic over them. Excludes `kind` and `define`. An edge without it is defined as any other table. Adding it to an edge table that already holds records generates a migration that redefines the table. |
+| `enforced` | `ENFORCED`: relating fails when an endpoint record does not exist. Needs `relation`. |
+| `lightweight` | `LIGHTWEIGHT`: relations are stored only as the connection between their endpoints, with no edge records, and imply `ENFORCED`. Needs `relation(from = …, to = …)`; excludes `enforced`, `schemafull`, `drop` and `as_`. The edge stores only `id`, `in` and `out`, without field definitions, and no `DEFINE FIELD` is generated. It implements [`Deletable`] but not [`Writable`] or [`StoredEdge`], so `create`, `save`, `patch`, `merge`, `update`, `upsert`, `insert_relation` and `RELATE`'s data clauses and `OR UPDATE` do not compile; a `RELATE` without data and `delete` do. SurrealDB also refuses live queries on such a table, which the types do not prevent, and refuses `LIGHTWEIGHT` on a table that already holds edges. |
 | `comment = "…"` | The table's `COMMENT`. |
 | `as_ = …` | The select statement of a `view`, which requires it; other models refuse it. A view implements `SurrealRead` but not `SurrealCrud`, `Node` or `Writable`, and has no patch, merge or setters, so every typed write to it fails to compile. A `Models` union holding a view is marked `#[models(read_only)]`. |
 | `permissions = …` | `full`, `none`, or an expression giving the permissions. |
@@ -257,7 +261,7 @@ Database-only settings stay in `#[orm(…)]`:
 | --- | --- |
 | `ty = "…"` | The stored type, written as in SurrealQL (`option<array<record<user>>>`); inferred from the Rust type when omitted. On `id` it is the record key's type (`int`, `string`, `uuid`, …); without it, `id` is not defined and takes any key. |
 | `link_one`, `link_self`, `link_many` | The node a record link points to. |
-| `nest_object`, `nest_array` | The embedded object type of the field or of its elements. `nest_object` also applies to an `Option<Object>` field. |
+| `nest_object`, `nest_array` | The embedded object type of the field or of its elements. `nest_object` also applies to an `Option<Object>` field. On a `schemafull` table a `nest_object` field is `FLEXIBLE`, so the object's own fields are kept; they have no definitions of their own. |
 | `merge = "…"` | A hand-written [`MergeFields`] type, so a field whose value is not a `#[model(object)]` merges field by field in `<Model>Merge`. |
 | `relate(model = …, connection = "->edge->node")` | A read-only relation reached through an edge; never stored. |
 | `value = …` | The field's default: `DEFAULT …` in the generated `DEFINE FIELD`, applied when a record is created without the field. Values written explicitly, falsy ones (`0`, `false`, `''`) included, are kept, and updates never re-apply it. |
@@ -266,5 +270,5 @@ Database-only settings stay in `#[orm(…)]`:
 | `computed = …` | `COMPUTED …`: evaluated on every read and never stored; SurrealDB discards a written value. The field has no patch, merge or setter, and `object!` does not take it. Excludes `value`, `default_always`, `value_expr`, `assert`, `item_assert` and `readonly`; `flexible` is allowed with an object type. |
 | `readonly`, `flexible`, `comment = "…"` | `READONLY`, `FLEXIBLE` (the type must admit an object) and `COMMENT`. |
 | `assert`, `permissions`, `item_assert` | Clauses of the generated `DEFINE FIELD`. |
-| `define = …` | An expression giving the whole `DEFINE FIELD`; excludes the clauses above. |
+| `define = …` | An expression giving the whole `DEFINE FIELD`, in place of the generated one and of `item_assert`'s; excludes the clauses above. |
 | `old_name = "…"` | The field's previous name, for migrations that rename it. |
