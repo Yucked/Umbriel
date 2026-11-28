@@ -56,7 +56,7 @@ impl Display for TransactionType {
                 TransactionType::Begin => "begin transaction",
                 TransactionType::Commit => "commit transaction",
                 TransactionType::Cancel => "cancel transaction",
-                TransactionType::Invalid => unreachable!(),
+                TransactionType::Invalid => "an invalid transaction statement",
             }
         )
     }
