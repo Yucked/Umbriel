@@ -37,16 +37,12 @@ parse = ["surrealdb/parse"]
 # Exposes internals to `crates/tests`; not part of the public API.
 test-support = []
 
-# Schema migrations and their CLI (`umbriel::migrations`). The generator compares schemas in
-# databases it creates on the caller's server (`Comparison`); no engine is enabled here.
-migrations = [
-  "dep:sha2",
-  "dep:inquire",
-  "dep:clap",
-  "dep:log",
-  "dep:pretty_env_logger",
-  "tokio/time",
-]
+# Schema migrations (`umbriel::migrations`): generating, applying and rolling back, from files or
+# embedded ones. The generator compares schemas in databases it creates on the caller's server
+# (`Comparison`); no engine is enabled here.
+migrations = ["dep:sha2", "dep:log", "tokio/time"]
+# The migration command line (`umbriel::migrations::Migrator`) and its terminal prompts.
+cli = ["migrations", "dep:clap", "dep:inquire", "dep:pretty_env_logger"]
 
 [dependencies]
 umbriel-macros = { workspace = true }
@@ -64,7 +60,8 @@ tokio = { workspace = true, features = ["rt"] }
 
 sha2 = { workspace = true, optional = true }
 inquire = { workspace = true, optional = true }
-clap = { workspace = true, optional = true }
+# `env` reads `--user` and `--pass` from `UMBRIEL_USER` and `UMBRIEL_PASS`.
+clap = { workspace = true, optional = true, features = ["env"] }
 log = { workspace = true, optional = true }
 pretty_env_logger = { workspace = true, optional = true }
 
