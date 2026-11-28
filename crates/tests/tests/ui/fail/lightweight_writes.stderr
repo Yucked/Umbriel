@@ -1,0 +1,60 @@
+error[E0599]: `LikesEdge<User, Post>` cannot be written to
+  --> tests/ui/fail/lightweight_writes.rs:33:27
+   |
+21 | pub struct LikesEdge<In: Node, Out: Node> {
+   | ----------------------------------------- method `save` not found for this struct because it doesn't satisfy `LikesEdge<User, Post>: SurrealCrud` or `LikesEdge<User, Post>: Writable`
+...
+33 |     let _ = likes.clone().save(db).await;
+   |                           ^^^^ not writable
+   |
+   = note: the following trait bounds were not satisfied:
+           `LikesEdge<User, Post>: Writable`
+           which is required by `LikesEdge<User, Post>: SurrealCrud`
+           `&LikesEdge<User, Post>: Writable`
+           which is required by `&LikesEdge<User, Post>: SurrealCrud`
+           `&mut LikesEdge<User, Post>: Writable`
+           which is required by `&mut LikesEdge<User, Post>: SurrealCrud`
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
+note: the trait `Writable` must be implemented
+  --> $WORKSPACE/crates/orm/src/traits/model.rs
+   |
+   | pub trait Writable: Deletable {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `save`, perhaps you need to implement it:
+           candidate #1: `SurrealCrud`
+
+error[E0277]: `LikesEdge<User, Post>` is not an edge that stores its relations as records
+  --> tests/ui/fail/lightweight_writes.rs:34:31
+   |
+34 |     let _ = insert_relation::<Likes>(likes.clone());
+   |                               ^^^^^ not a stored edge
+   |
+help: the trait `StoredEdge` is not implemented for `LikesEdge<User, Post>`
+  --> tests/ui/fail/lightweight_writes.rs:21:1
+   |
+21 | pub struct LikesEdge<In: Node, Out: Node> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: declare `LikesEdge<User, Post>` with `#[umbriel::model(edge)]`; a `LIGHTWEIGHT` edge holds only `id`, `in` and `out`, so relate it without data
+note: required by a bound in `insert_relation`
+  --> $WORKSPACE/crates/orm/src/statements/insert.rs
+   |
+   | pub fn insert_relation<E: StoredEdge>(edges: impl Into<Insertables<E>>) -> InsertStatement<E> {
+   |                           ^^^^^^^^^^ required by this bound in `insert_relation`
+
+error[E0599]: the method `content` exists for struct `RelateStatement<LikesEdge<User, Post>>`, but its trait bounds were not satisfied
+  --> tests/ui/fail/lightweight_writes.rs:35:83
+   |
+21 | pub struct LikesEdge<In: Node, Out: Node> {
+   | ----------------------------------------- doesn't satisfy `LikesEdge<User, Post>: StoredEdge`
+...
+35 |     let _ = relate::<Likes>(umbriel::Field::new("user:alice->likes->post:hello")).content(likes);
+   |                                                                                   ^^^^^^^ method cannot be called on `RelateStatement<LikesEdge<User, Post>>` due to unsatisfied trait bounds
+   |
+   = note: the following trait bounds were not satisfied:
+           `LikesEdge<User, Post>: StoredEdge`
+note: the trait `StoredEdge` must be implemented
+  --> $WORKSPACE/crates/orm/src/traits/model.rs
+   |
+   | pub trait StoredEdge: Edge {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
