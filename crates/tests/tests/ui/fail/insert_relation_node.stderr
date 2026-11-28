@@ -1,4 +1,4 @@
-error[E0277]: `User` is not an edge
+error[E0277]: `User` is not an edge that stores its relations as records
   --> tests/ui/fail/insert_relation_node.rs:11:13
    |
 11 |       let _ = insert_relation(User {
@@ -6,16 +6,16 @@ error[E0277]: `User` is not an edge
 12 | |         id: User::id("alice"),
 13 | |         name: "Alice".to_owned(),
 14 | |     });
-   | |______^ not an edge
+   | |______^ not a stored edge
    |
-help: the trait `Edge` is not implemented for `User`
+help: the trait `StoredEdge` is not implemented for `User`
   --> tests/ui/fail/insert_relation_node.rs:4:1
    |
  4 | pub struct User {
    | ^^^^^^^^^^^^^^^
-   = note: declare `User` with `#[umbriel::model(edge)]`
+   = note: declare `User` with `#[umbriel::model(edge)]`; a `LIGHTWEIGHT` edge holds only `id`, `in` and `out`, so relate it without data
 note: required by a bound in `insert_relation`
   --> $WORKSPACE/crates/orm/src/statements/insert.rs
    |
-   | pub fn insert_relation<E: Edge>(edges: impl Into<Insertables<E>>) -> InsertStatement<E> {
-   |                           ^^^^ required by this bound in `insert_relation`
+   | pub fn insert_relation<E: StoredEdge>(edges: impl Into<Insertables<E>>) -> InsertStatement<E> {
+   |                           ^^^^^^^^^^ required by this bound in `insert_relation`
