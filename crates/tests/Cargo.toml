@@ -16,7 +16,7 @@ doctest = false
 # Every database test runs on a developer-started server: WebSocket for most, HTTP for the
 # transport scenarios in `server.rs`. No embedded engine is enabled.
 umbriel = { workspace = true, default-features = false, features = [
-    "migrations",
+    "cli",
     "parse",
     "protocol-http",
     "protocol-ws",
