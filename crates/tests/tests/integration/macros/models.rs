@@ -7,6 +7,60 @@ use umbriel_tests::{support::models::*, *};
 
 mod definitions {
     use super::*;
+    use umbriel::{LinkOne, Node, model};
+
+    #[model(node, table = "flags_off")]
+    #[orm(schemafull = false, drop = false)]
+    #[derive(Debug, Clone)]
+    pub struct FlagsOff {
+        pub id: RecordId<Self>,
+    }
+
+    #[model(node, table = "flags_on")]
+    #[orm(schemafull = true, drop = true)]
+    #[derive(Debug, Clone)]
+    pub struct FlagsOn {
+        pub id: RecordId<Self>,
+    }
+
+    #[model(edge, table = "any_relation")]
+    #[orm(relation, relax_table)]
+    #[derive(Debug, Clone)]
+    pub struct AnyRelationEdge<In: Node, Out: Node> {
+        pub id: RecordId<Self>,
+        #[orm(link_one = "In")]
+        pub r#in: LinkOne<In>,
+        #[orm(link_one = "Out")]
+        pub out: LinkOne<Out>,
+    }
+
+    pub type AnyRelation = AnyRelationEdge<Alien, Planet<u64>>;
+
+    #[model(edge, table = "enforced_relation")]
+    #[orm(relation(from = "alien", to = "planet | weapon"), enforced, relax_table)]
+    #[derive(Debug, Clone)]
+    pub struct EnforcedRelationEdge<In: Node, Out: Node> {
+        pub id: RecordId<Self>,
+        #[orm(link_one = "In")]
+        pub r#in: LinkOne<In>,
+        #[orm(link_one = "Out")]
+        pub out: LinkOne<Out>,
+    }
+
+    pub type EnforcedRelation = EnforcedRelationEdge<Alien, Planet<u64>>;
+
+    #[model(edge, table = "light_relation")]
+    #[orm(relation(from = "alien", to = "planet"), lightweight, relax_table)]
+    #[derive(Debug, Clone)]
+    pub struct LightRelationEdge<In: Node, Out: Node> {
+        pub id: RecordId<Self>,
+        #[orm(link_one = "In")]
+        pub r#in: LinkOne<In>,
+        #[orm(link_one = "Out")]
+        pub out: LinkOne<Out>,
+    }
+
+    pub type LightRelation = LightRelationEdge<Alien, Planet<u64>>;
 
     #[test]
     fn stored_types_are_inferred_from_rust_types() {
@@ -290,27 +344,143 @@ DEFINE FIELD data ON TABLE planet TYPE int;"
         assert_eq!(StudentWithDefineFnAttr::define_table().as_str(), expected);
     }
 
+    /// Regression (UMB-013): `define = …` was emitted on top of the generated `DEFINE FIELD`.
+    /// It is the field's whole definition.
     #[test]
-    fn define_adds_the_given_field_definition() {
+    fn define_replaces_the_field_definition() {
         let fields = StudentWithDefineAttr::define_fields();
         let schema = StudentWithDefineAttr::schema();
 
-        let first_name = definitions_of(&fields, "firstName");
         assert_eq!(
-            first_name,
-            [
-                "DEFINE FIELD firstName ON TABLE student_with_define_attr TYPE string;".to_owned(),
-                define_first_name(&schema.firstName, StudentWithDefineAttr::table()).to_debug_sql(),
-            ]
+            definitions_of(&fields, "firstName"),
+            [define_first_name(&schema.firstName, StudentWithDefineAttr::table()).to_debug_sql()]
         );
         assert_eq!(
-            definitions_of(&fields, "lastName")[1],
-            define_last_name().to_debug_sql()
+            definitions_of(&fields, "lastName"),
+            [define_last_name().to_debug_sql()]
         );
         assert_eq!(
-            definitions_of(&fields, "ageDefineExternalInvoke")[1],
-            define_age(&schema.ageDefineExternalInvoke).to_debug_sql()
+            definitions_of(&fields, "ageDefineExternalInvoke"),
+            [define_age(&schema.ageDefineExternalInvoke).to_debug_sql()]
         );
+    }
+
+    /// Regression (UMB-012): `schemafull = false` and `drop = false` emitted the flags.
+    #[test]
+    fn false_table_flags_are_left_out() {
+        assert_eq!(
+            FlagsOff::define_table().as_str(),
+            "DEFINE TABLE flags_off;"
+        );
+        assert_eq!(FlagsOn::define_table().as_str(), "DEFINE TABLE flags_on DROP SCHEMAFULL;");
+    }
+
+    #[test]
+    fn edges_are_relation_tables_only_when_asked() {
+        assert_eq!(
+            AlienVisitsPlanet::define_table().as_str(),
+            "DEFINE TABLE visits;",
+            "an edge without `relation`"
+        );
+        assert_eq!(
+            AnyRelation::define_table().as_str(),
+            "DEFINE TABLE any_relation TYPE RELATION;"
+        );
+        assert_eq!(
+            EnforcedRelation::define_table().as_str(),
+            "DEFINE TABLE enforced_relation TYPE RELATION IN alien OUT planet | weapon ENFORCED;"
+        );
+        assert_eq!(
+            LightRelation::define_table().as_str(),
+            "DEFINE TABLE light_relation TYPE RELATION IN alien OUT planet LIGHTWEIGHT;"
+        );
+        assert!(
+            LightRelation::define_fields().is_empty(),
+            "a lightweight edge defines no field, not even `in` and `out`"
+        );
+    }
+
+    /// Server checks of the relation tables the derive defines.
+    mod relation_tables {
+        use super::*;
+
+        async fn alien_and_planet(db: &Surreal<Any>) {
+            assert!(
+                succeeds(
+                    db,
+                    "DEFINE TABLE alien; DEFINE TABLE planet; DEFINE TABLE weapon; \
+                     CREATE alien:zorg; CREATE planet:mars; CREATE weapon:laser;"
+                )
+                .await,
+                "the endpoints are created"
+            );
+        }
+
+        #[tokio::test]
+        async fn an_enforced_relation_refuses_a_missing_or_wrong_endpoint() {
+            let (db, _guard) = db().await;
+            alien_and_planet(&db).await;
+            apply_definitions::<EnforcedRelation>(&db).await;
+            assert!(
+                succeeds(&db, "RELATE alien:zorg->enforced_relation->planet:mars;").await,
+                "a relation between the endpoint tables"
+            );
+            assert!(
+                !succeeds(&db, "RELATE alien:zorg->enforced_relation->planet:venus;").await,
+                "a missing endpoint record"
+            );
+            assert!(
+                !succeeds(&db, "RELATE planet:mars->enforced_relation->alien:zorg;").await,
+                "endpoints from the wrong tables"
+            );
+        }
+
+        #[tokio::test]
+        async fn a_relation_table_refuses_a_plain_record() {
+            let (db, _guard) = db().await;
+            apply_definitions::<AnyRelation>(&db).await;
+            assert!(!succeeds(&db, "CREATE any_relation:one;").await);
+        }
+
+        /// Its schema installs, a `RELATE` without data succeeds and is idempotent, and the
+        /// relation can be deleted.
+        #[tokio::test]
+        async fn a_lightweight_relation_installs_relates_and_deletes() {
+            let (db, _guard) = db().await;
+            alien_and_planet(&db).await;
+            apply_definitions::<LightRelation>(&db).await;
+            for _ in 0..2 {
+                assert!(
+                    succeeds(&db, "RELATE alien:zorg->light_relation->planet:mars;").await,
+                    "a data-free relation"
+                );
+            }
+            let related: Vec<RecordId<Planet<u64>>> =
+                read(&db, "RETURN alien:zorg->light_relation->planet;").await;
+            assert_eq!(related.len(), 1, "{related:?}");
+            let statement = umbriel::statements::delete::<LightRelation>(LightRelation::table());
+            assert!(succeeds(&db, &statement.to_debug_sql()).await, "deleted");
+        }
+
+        /// SurrealDB refuses `LIGHTWEIGHT` on a table that already holds edges.
+        #[tokio::test]
+        async fn lightweight_is_refused_on_a_table_holding_edges() {
+            let (db, _guard) = db().await;
+            alien_and_planet(&db).await;
+            assert!(
+                succeeds(
+                    &db,
+                    "DEFINE TABLE light_relation TYPE RELATION IN alien OUT planet; \
+                     RELATE alien:zorg->light_relation->planet:mars;"
+                )
+                .await,
+                "an edge record"
+            );
+            let redefined = LightRelation::define_table()
+                .as_str()
+                .replace("DEFINE TABLE", "DEFINE TABLE OVERWRITE");
+            assert!(!succeeds(&db, &redefined).await, "{redefined}");
+        }
     }
 
     #[tokio::test]
@@ -796,5 +966,106 @@ mod compiles_views_and_unions {
         let _ = Sale::select_value(Sale::schema().doubled);
         let _: SelectStatement<Reports> = select(All).from(Table::new("sale")).decode();
         insert(vec![]);
+    }
+}
+
+/// Names a stored name or table may have that a Rust identifier may not, and lifetimes.
+mod compiles_names_and_lifetimes {
+    use umbriel::{Model, RecordId, Render, model};
+
+    /// Regression (UMB-031): an `old_name` that isn't an identifier panicked the derive.
+    #[model(node, table = "renamed_person")]
+    #[orm(relax_table)]
+    pub struct RenamedPerson {
+        pub id: RecordId<Self>,
+        #[orm(old_name = "first-name")]
+        pub first_name: String,
+    }
+
+    /// A keyword table: `type` is held as a raw identifier.
+    #[model(node, table = "type")]
+    pub struct Type {
+        pub id: RecordId<Self>,
+        pub name: String,
+    }
+
+    /// Regression (UMB-035): a model with a lifetime wasn't `Send + Sync`, its marker holding
+    /// `&'a dyn Any`.
+    #[model(object)]
+    pub struct Borrowed<'a> {
+        #[orm(ty = "string")]
+        pub name: std::borrow::Cow<'a, str>,
+    }
+
+    fn send_and_sync<T: Send + Sync>() {}
+
+    #[test]
+    fn compiles() {
+        assert_eq!(Type::TABLE, "type");
+        let renamed = RenamedPerson::get_field_meta();
+        assert_eq!(
+            renamed[0].old_name.as_ref().map(Render::to_debug_sql),
+            Some(umbriel::Field::new("first-name").to_debug_sql())
+        );
+        send_and_sync::<BorrowedSchema<'static>>();
+        send_and_sync::<BorrowedMerge<'static>>();
+    }
+}
+
+/// Items the issue listed as unverified (UMB-014, UMB-034). Both reproduced, and these tests
+/// now cover their fixes.
+mod unverified {
+    use super::*;
+    use umbriel::{RecordId, SurrealCrudNode, model};
+
+    /// UMB-034: a fully qualified `std::string::String` infers the same type as `String`.
+    #[model(node, table = "qualified")]
+    #[derive(Debug, Clone)]
+    pub struct Qualified {
+        pub id: RecordId<Self>,
+        pub name: std::string::String,
+    }
+
+    #[test]
+    fn a_qualified_string_is_inferred() {
+        assert_eq!(
+            joined(&Qualified::define_fields()),
+            "DEFINE FIELD name ON TABLE qualified TYPE string;"
+        );
+    }
+
+    /// Regression (UMB-014): a SCHEMAFULL table refused a nested object's fields ("no such field
+    /// exists"). The object is `FLEXIBLE` there and keeps them through a round trip.
+    #[model(node, table = "armoury")]
+    #[orm(schemafull)]
+    #[surreal(rename_all = "camelCase")]
+    #[derive(Debug, Clone)]
+    pub struct Armoury {
+        pub id: RecordId<Self>,
+        #[orm(nest_object = "Rocket")]
+        pub rocket: Rocket,
+    }
+
+    #[tokio::test]
+    async fn a_nested_object_round_trips_on_a_schemafull_table() {
+        let (db, _guard) = db().await;
+        apply_definitions::<Armoury>(&db).await;
+        let rocket = Rocket {
+            name: "Ares".to_owned(),
+            strength: 9,
+            nice: true,
+            bunch_of_other_fields: 3,
+            created: chrono::Utc::now(),
+        };
+        let stored = Armoury {
+            id: Armoury::id("one"),
+            rocket: rocket.clone(),
+        }
+        .create(&db)
+        .await
+        .expect("created");
+        assert_eq!(stored.rocket.name, rocket.name);
+        assert_eq!(stored.rocket.strength, rocket.strength);
+        assert_eq!(stored.rocket.bunch_of_other_fields, rocket.bunch_of_other_fields);
     }
 }
