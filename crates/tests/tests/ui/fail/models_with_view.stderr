@@ -15,7 +15,7 @@ help: the trait `Writable` is not implemented for `SaleCopy`
    |
 14 | pub struct SaleCopy {
    | ^^^^^^^^^^^^^^^^^^^
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 help: the trait `Writable` is implemented for `Sale`
   --> tests/ui/fail/models_with_view.rs:7:1
    |
