@@ -1,4 +1,4 @@
-use crate::migrations::*;
+use crate::migrations::{database::replacement, *};
 
 use clap::Args;
 
@@ -9,6 +9,10 @@ use clap::Args;
 pub struct Up {
     #[command(flatten)]
     pub(crate) fast_forward: FastForwardDelta,
+
+    /// First apply a reset's migration, which replaces the history the reset read
+    #[arg(long)]
+    pub(crate) replace_history: bool,
 }
 
 impl Up {
@@ -24,7 +28,10 @@ impl Up {
             UpdateStrategy::Number(number) => fast_forward.number = Some(number),
             UpdateStrategy::Till(till) => fast_forward.till = Some(till),
         }
-        Self { fast_forward }
+        Self {
+            fast_forward,
+            replace_history: false,
+        }
     }
 
     /// How far to apply pending migrations.
@@ -60,16 +67,6 @@ impl Default for FastForwardDelta {
     }
 }
 
-/// How far to apply pending migrations.
-pub enum UpdateStrategy {
-    /// Every pending migration (`up`, `up --latest`); the default.
-    Latest,
-    /// This many pending migrations (`up --number 3`).
-    Number(u32),
-    /// Pending migrations up to and including this one (`up --till <file name>`).
-    Till(MigrationFilename),
-}
-
 impl From<&FastForwardDelta> for UpdateStrategy {
     fn from(fast_forward: &FastForwardDelta) -> Self {
         if fast_forward.latest {
@@ -85,20 +82,32 @@ impl From<&FastForwardDelta> for UpdateStrategy {
 }
 
 impl Up {
+    /// First applies a reset's migration, which replaces the history the reset read (see
+    /// [`Reset`]), then the pending migrations.
+    pub fn replace_history(mut self) -> Self {
+        self.replace_history = true;
+        self
+    }
+
     /// Applies pending migrations, each in its own transaction: when one fails, those before it
-    /// stay applied (see [`MigrationRunner`]).
+    /// stay applied (see [`MigrationRunner`]). With `--replace-history`, a reset's migration is
+    /// applied first, only onto the history the reset read, and the reset's backup is removed.
     ///
     /// # Errors
     ///
     /// The failure of connecting, detecting the migration type (such as
-    /// [`MigrationError::MigrationDirectoryDoesNotExist`] before `init`), or applying (such as
-    /// [`MigrationError::MigrationNotFoundFromPendingMigrations`] for a `--till` target that is
-    /// not pending).
+    /// [`MigrationError::MigrationDirectoryDoesNotExist`] before `init`), replacing the history
+    /// ([`MigrationError::NoPendingReset`], [`MigrationError::ResetIncomplete`]), or applying
+    /// (such as [`MigrationError::MigrationNotFoundFromPendingMigrations`] for a `--till`
+    /// target that is not pending).
     pub async fn run(&self, cli: &mut Migrator) -> MigrationResult<()> {
         cli.setup_db().await?;
         let file_manager = cli.file_manager();
         let update_strategy = self.update_strategy();
         let db = cli.db()?;
+        if self.replace_history {
+            replacement::replace_history(db, &file_manager).await?;
+        }
 
         match file_manager.detect_migration_type()? {
             MigrationFlag::TwoWay => {
