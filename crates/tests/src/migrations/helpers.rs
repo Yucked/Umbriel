@@ -41,10 +41,24 @@ pub fn config(dir: &Path) -> MigrationConfig {
 }
 
 /// Generates a migration named `generated` from `resources` into `dir`, comparing in a
-/// namespace of its own.
+/// namespace of its own, against a database of its own whose history is empty: every file of
+/// `dir` is pending.
 pub async fn generate(
     dir: &Path,
     flag: MigrationFlag,
+    resources: impl DbResources,
+    prompter: MockPrompter,
+) -> MigrationResult<()> {
+    let (history, _history) = db().await;
+    generate_against(dir, flag, &history, resources, prompter).await
+}
+
+/// [`generate`] checked against the history of `history`, as `generate` checks the database
+/// `up` applies to.
+pub async fn generate_against(
+    dir: &Path,
+    flag: MigrationFlag,
+    history: &Surreal<Any>,
     resources: impl DbResources,
     prompter: MockPrompter,
 ) -> MigrationResult<()> {
@@ -54,13 +68,13 @@ pub async fn generate(
         MigrationFlag::TwoWay => {
             config(dir)
                 .two_way()
-                .generate_migrations(&comparison, &name, resources, prompter)
+                .generate_migrations(&comparison, history, &name, resources, prompter)
                 .await
         }
         MigrationFlag::OneWay => {
             config(dir)
                 .one_way()
-                .generate_migrations(&comparison, &name, resources, prompter)
+                .generate_migrations(&comparison, history, &name, resources, prompter)
                 .await
         }
     }
