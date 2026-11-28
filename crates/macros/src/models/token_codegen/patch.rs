@@ -34,7 +34,9 @@ impl Codegen<'_> {
             return Ok(());
         }
 
-        let vis = &model_attributes.receiver().vis;
+        // Each patch and merge field is as visible as the field it updates, so neither widens
+        // a private field (UMB-015).
+        let vis = &field_receiver.vis;
         let field_ident = field_receiver.ident()?;
         let field_type = field_receiver
             .ty()

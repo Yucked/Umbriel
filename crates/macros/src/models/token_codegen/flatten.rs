@@ -95,7 +95,8 @@ impl Codegen<'_> {
         self.renamed_serialized_fields_kv
             .push(quote!(pub #ident: &'static str));
 
-        let vis = &model_attributes.receiver().vis;
+        // As visible as the flattened field, so the patch and merge never widen it (UMB-015).
+        let vis = &field_receiver.vis;
         self.patch_fields
             .push(quote!(#vis #ident: #crate_name::FlatPatch<#ty>));
         self.patch_defaults
