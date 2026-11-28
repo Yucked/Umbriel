@@ -75,21 +75,6 @@ pub enum MigrationError {
     #[error("Migration file - {0} - does not exist")]
     MigrationFileDoesNotExist(String),
 
-    /// A rollback could not be planned.
-    #[error("Rollback failed. Error: {0}")]
-    RollbackFailed(String),
-
-    /// The migration file and its history record name different migrations.
-    #[error(
-        "Migration file name and database name mismatch. Migration file name: {migration_file_name}. Migration database name: {migration_db_name}"
-    )]
-    MigrationFileVsDbNamesMismatch {
-        /// The migration file's name.
-        migration_file_name: String,
-        /// The name in the history record.
-        migration_db_name: String,
-    },
-
     /// A file name does not follow `<timestamp>_<name>.[up.|down.]surql`.
     #[error(
         "Invalid migration name. {0}. Make sure it's in the format - <timestamp>_<migration_name>.<up|down|>.surql if two way or <timestamp>_<migration_name.surql if one way"
@@ -220,16 +205,105 @@ pub enum MigrationError {
         key: ResourceKey,
     },
 
-    /// Another runner changed the migration history after this run read it, so this run
-    /// applied nothing more. Running again applies what is still pending.
+    /// Another runner changed the migration history after this run read it, or at the same
+    /// time, so this run changed nothing more. Running again reads the history afresh.
     #[error(
-        "Did not apply `{migration}`: the migration history changed after this run read it, \
-        so another runner has applied migrations. Run again to apply what is still pending"
+        "The migration history changed after this run read it: another runner applied or \
+        rolled back migrations. Run again"
     )]
-    HistoryChanged {
-        /// The migration this run was about to apply.
+    HistoryChanged,
+
+    /// A prune holds the history's lock while it deletes files, so nothing is applied or rolled
+    /// back until it ends. A lock an interrupted prune left behind is released with `unlock`.
+    #[error(
+        "The migration history is locked by `{holder}`. If no prune is running, release the \
+        lock with `unlock`"
+    )]
+    HistoryLocked {
+        /// Who holds the lock.
+        holder: String,
+    },
+
+    /// A migration changed the history records other than its own, as a reset's first migration
+    /// does when it clears the history. Such a migration is applied only through
+    /// `up --replace-history` or `reset --run`.
+    #[error(
+        "Did not apply `{migration}`: it changes the migration history. If it is a reset's \
+        migration, apply it with `up --replace-history`"
+    )]
+    HistoryRewritten {
+        /// The migration.
         migration: MigrationFilename,
     },
+
+    /// A pending migration sorts before the newest applied one, as a migration merged from
+    /// another branch may. Applying it there would make the history's order differ from the
+    /// files', so it is refused in both modes; give it a newer timestamp.
+    #[error(
+        "`{name}` is pending but sorts before the applied migration `{newest_applied}`. Rename \
+        it with a timestamp after that one"
+    )]
+    OutOfOrder {
+        /// The pending migration.
+        name: MigrationFilename,
+        /// The newest applied migration.
+        newest_applied: MigrationFilename,
+    },
+
+    /// An applied migration's file is missing from the directory (strict mode).
+    #[error(
+        "`{name}` is missing, but the history records its migration as applied. If a reset \
+        replaced it, apply the reset's migration with `up --replace-history`"
+    )]
+    AppliedFileMissing {
+        /// The missing file.
+        name: MigrationFilename,
+    },
+
+    /// The database has no migration history table, so nothing can tell which files are
+    /// unapplied: it may be the wrong database.
+    #[error("The database has no migration history; check that this is the right database")]
+    NoHistory,
+
+    /// A lax rollback reached an applied migration without a down file and stopped there: the
+    /// migrations before it stay applied, since a newer migration may depend on them.
+    #[error(
+        "Rolled back {rolled_back} migration(s) and stopped at `{at}`, whose down file is missing"
+    )]
+    RollbackStopped {
+        /// The migration without a down file.
+        at: MigrationFilename,
+        /// How many migrations were rolled back before it.
+        rolled_back: usize,
+    },
+
+    /// A reset could not finish: its files and the history are in a state it cannot resolve.
+    /// The replaced migration files are kept in `backup`, and the new ones may still be in
+    /// `staging`; nothing in either is deleted.
+    #[error(
+        "The reset is incomplete. The replaced migration files are in `{}`{}. Move them back \
+        into the migration directory, or apply the reset's migration with \
+        `up --replace-history` once the history is the one the reset read",
+        .backup.display(),
+        .staging.as_ref().map(|staging| format!(", and the new files in `{}`", staging.display())).unwrap_or_default()
+    )]
+    ResetIncomplete {
+        /// The directory holding the replaced migration files and the reset's record.
+        backup: PathBuf,
+        /// The directory still holding new migration files, if any.
+        staging: Option<PathBuf>,
+        /// What stopped the reset.
+        #[source]
+        source: Option<Box<MigrationError>>,
+    },
+
+    /// `up --replace-history` found no reset waiting for its migration to be applied.
+    #[error("There is no reset whose migration is waiting to be applied")]
+    NoPendingReset,
+
+    /// The user declined to confirm the change.
+    #[error("Declined; nothing was changed")]
+    Declined,
 
     /// A bucket's backend changed. Redefining a bucket connects a new store, which empties a
     /// `memory` bucket, and `ALTER BUCKET` leaves the open store in place until a restart, so the
@@ -334,9 +408,9 @@ There are {one_way_filecount} up only files and {two_way_filecount} up and down 
         source: std::io::Error,
     },
 
-    /// A prompt failed.
-    #[error(transparent)]
-    PromptError(#[from] inquire::error::InquireError),
+    /// A prompt failed, such as one on a closed terminal.
+    #[error("the prompt failed")]
+    PromptError(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     /// The database reported an error.
     #[error(transparent)]
