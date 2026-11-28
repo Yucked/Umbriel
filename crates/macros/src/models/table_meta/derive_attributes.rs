@@ -97,9 +97,131 @@ pub struct ModelReceiver {
 
     #[darling(default)]
     pub(crate) define: Option<AttributeDefine>,
+
+    /// `relation` or `relation(from = "user", to = "book | post")`: an edge's table is
+    /// `TYPE RELATION`, holding only relations, optionally between these tables. `FROM`/`TO` are
+    /// SurrealQL's synonyms for `IN`/`OUT`, which `in`, a Rust keyword, cannot name here. An edge
+    /// is generic over its endpoints, so they cannot be inferred.
+    #[darling(default)]
+    pub(crate) relation: Option<RelationAttr>,
+
+    /// `enforced`: a relation's endpoint records must exist (`ENFORCED`). Needs `relation`.
+    #[darling(default)]
+    pub(crate) enforced: bool,
+
+    /// `lightweight`: relations are stored only as the connection between their endpoints, with
+    /// no edge records (`LIGHTWEIGHT`, which implies `ENFORCED`). Needs `relation(from, to)`.
+    #[darling(default)]
+    pub(crate) lightweight: bool,
+}
+
+/// The endpoints of `#[orm(relation(from = "…", to = "…"))]`, each one or more tables joined
+/// with `|`; `relation` alone allows any.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct RelationAttr {
+    pub(crate) from: Option<syn::LitStr>,
+    pub(crate) to: Option<syn::LitStr>,
+}
+
+impl darling::FromMeta for RelationAttr {
+    fn from_word() -> darling::Result<Self> {
+        Ok(Self::default())
+    }
+
+    fn from_list(items: &[darling::ast::NestedMeta]) -> darling::Result<Self> {
+        #[derive(darling::FromMeta)]
+        struct Endpoints {
+            #[darling(default)]
+            from: Option<syn::LitStr>,
+            #[darling(default)]
+            to: Option<syn::LitStr>,
+        }
+        let Endpoints { from, to } = Endpoints::from_list(items)?;
+        Ok(Self { from, to })
+    }
+}
+
+impl RelationAttr {
+    /// The tables of `endpoint`, split at `|`; a spanned error for an empty one.
+    fn tables(endpoint: &syn::LitStr) -> ExtractorResult<Vec<String>> {
+        let value = endpoint.value();
+        let tables = value.split('|').map(str::trim).collect::<Vec<_>>();
+        if tables.iter().any(|table| table.is_empty()) {
+            return Err(syn::Error::new_spanned(
+                endpoint,
+                "a relation endpoint is one or more table names joined with `|`",
+            )
+            .into());
+        }
+        Ok(tables.into_iter().map(str::to_owned).collect())
+    }
 }
 
 impl ModelReceiver {
+    /// Whether the model is a `LIGHTWEIGHT` edge, which stores no records.
+    pub fn is_lightweight(&self) -> bool {
+        self.lightweight
+    }
+
+    /// The `TYPE RELATION` clause, checked: `None` without `relation`.
+    fn relation_tokens(&self) -> ExtractorResult<Option<TokenStream>> {
+        let crate_name = get_crate_name();
+        let error = |message: &str| -> ExtractorResult<Option<TokenStream>> {
+            Err(syn::Error::new_spanned(&self.ident, message).into())
+        };
+        let Some(relation) = &self.relation else {
+            if self.enforced {
+                return error("`enforced` needs `relation`: only a relation table has endpoints");
+            }
+            if self.lightweight {
+                return error("`lightweight` needs `relation(from = \"…\", to = \"…\")`");
+            }
+            return Ok(None);
+        };
+        if !matches!(self.data_type()?, DataType::Edge) {
+            return error("`relation`, `enforced` and `lightweight` are for `edge` models");
+        }
+        if self.kind.is_some() || self.define.is_some() {
+            return error(
+                "`relation` sets the table's `TYPE RELATION`, so it cannot be combined with \
+                 `kind` or a table-level `define`",
+            );
+        }
+        if self.lightweight {
+            if relation.from.is_none() || relation.to.is_none() {
+                return error(
+                    "`lightweight` implies `ENFORCED`, which needs both endpoints: \
+                     `relation(from = \"…\", to = \"…\")`",
+                );
+            }
+            if self.enforced {
+                return error("`lightweight` implies `enforced`; remove `enforced`");
+            }
+            if self.schemafull == Some(true) || self.drop == Some(true) || self.as_.is_some() {
+                return error(
+                    "a `lightweight` edge stores no records, so SurrealDB rejects it with \
+                     `schemafull`, `drop` or `as`",
+                );
+            }
+        }
+        let endpoint = |endpoint: &Option<syn::LitStr>, method: TokenStream| {
+            endpoint
+                .as_ref()
+                .map(|tables| {
+                    let tables = RelationAttr::tables(tables)?;
+                    Ok::<_, darling::Error>(quote!(.#method([#( #tables ),*])))
+                })
+                .transpose()
+        };
+        let from = endpoint(&relation.from, quote!(in_))?;
+        let to = endpoint(&relation.to, quote!(out))?;
+        let enforced = self.enforced.then(|| quote!(.enforced()));
+        let lightweight = self.lightweight.then(|| quote!(.lightweight()));
+        Ok(Some(quote!(
+            .kind_relation(#crate_name::statements::table_relation() #from #to #enforced #lightweight)
+        )))
+    }
+
     pub fn ident(&self) -> StructIdent {
         StructIdent(self.ident.clone())
     }
@@ -185,11 +307,15 @@ impl ModelReceiver {
         } = *self;
 
         let crate_name = get_crate_name();
+        // `drop` and `schemafull` count by value: `= false` asks for nothing (UMB-012).
+        let drop = *drop == Some(true);
+        let schemafull = *schemafull == Some(true);
+        let relation = self.relation_tokens()?;
 
         if (define.is_some())
-            && (drop.is_some()
+            && (drop
                 || as_.is_some()
-                || schemafull.is_some()
+                || schemafull
                 || permissions.is_some()
                 || kind.is_some()
                 || comment.is_some())
@@ -243,7 +369,7 @@ impl ModelReceiver {
             None => {
                 let mut define_table_methods: Vec<TokenStream> = vec![];
 
-                if drop.is_some() {
+                if drop {
                     define_table_methods.push(quote!(.drop()))
                 }
 
@@ -251,11 +377,12 @@ impl ModelReceiver {
                     define_table_methods.push(quote!(.as_(#as_)))
                 }
 
-                if schemafull.is_some() {
+                if schemafull {
                     define_table_methods.push(quote!(.schemafull()))
                 }
 
                 define_table_methods.extend(kind);
+                define_table_methods.extend(relation);
 
                 if let Some(comment) = comment {
                     define_table_methods.push(quote!(.comment(#comment)))
