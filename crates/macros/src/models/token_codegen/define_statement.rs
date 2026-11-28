@@ -39,6 +39,13 @@ impl Codegen<'_> {
         if self.skip_field() || model_attributes.receiver().view {
             return Ok(vec![]);
         }
+        // A `TYPE RELATION` table defines its `in` and `out` itself, from its endpoints, and
+        // refuses a definition of either.
+        if model_attributes.receiver().relation.is_some()
+            && field_receiver.is_in_or_out_edge_node_field(model_attributes)
+        {
+            return Ok(vec![]);
+        }
 
         let crate_name = get_crate_name();
         let VariablesModelMacro { _____table, .. } = VariablesModelMacro::new();
@@ -46,6 +53,12 @@ impl Codegen<'_> {
         let db_field_name = field_receiver.db_field_name(&casing)?;
         // Definitions write their values inline; `inline` keeps the builder's errors.
         let raw = |definition: TokenStream| quote!(#crate_name::Raw::inline(&#definition));
+
+        // `define = …` is the field's whole definition: it replaces the generated statement and
+        // its array-item statement rather than joining them (UMB-013).
+        if let Some(define) = field_receiver.define.as_ref() {
+            return Ok(vec![raw(quote!(#define))]);
+        }
 
         // `DEFINE FIELD id … TYPE` constrains the record key, which `RecordId<T>` leaves open, so
         // `id` has a type only when given a key type (`ty = "int"`). Every other stored field has
@@ -99,7 +112,14 @@ impl Codegen<'_> {
             define_field_methods.push(quote!(.readonly()));
         }
 
-        if field_receiver.flexible {
+        // A SCHEMAFULL table drops an embedded object's fields unless each has a definition, so
+        // an embedded object there is `FLEXIBLE` and keeps them (UMB-014).
+        let embedded_on_schemafull = model_attributes.receiver().schemafull == Some(true)
+            && matches!(
+                field_receiver.to_relation_type(model_attributes),
+                RelationType::NestObject(_)
+            );
+        if field_receiver.flexible || embedded_on_schemafull {
             define_field_methods.push(quote!(.flexible()));
         }
 
@@ -130,10 +150,6 @@ impl Codegen<'_> {
                     #( # define_array_field_item_methods) *
             )));
         };
-
-        if let Some(define) = field_receiver.define.as_ref() {
-            all_field_defintions.push(raw(quote!(#define)));
-        }
 
         Ok(all_field_defintions)
     }
