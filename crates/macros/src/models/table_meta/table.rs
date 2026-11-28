@@ -1,4 +1,5 @@
 use heck::ToSnakeCase;
+use syn::ext::IdentExt;
 
 use crate::models::*;
 
@@ -11,8 +12,8 @@ impl TableNameIdent {
         relax_table: &Option<bool>,
     ) -> ExtractorResult<&Self> {
         let table = self;
-        let expected_table = struct_name_ident.to_string().to_snake_case();
-        if !relax_table.unwrap_or(false) && self.to_string() != expected_table {
+        let expected_table = struct_name_ident.unraw().to_string().to_snake_case();
+        if !relax_table.unwrap_or(false) && self.unraw() != expected_table {
             return Err(syn::Error::new(
                 table.span(),
                 format!(
@@ -26,8 +27,9 @@ impl TableNameIdent {
         Ok(self)
     }
 
+    /// The table's name as stored: a keyword table such as `type` is `r#type` as an identifier.
     pub(crate) fn as_string(&self) -> TableNameAsString {
-        TableNameAsString(self.to_string())
+        TableNameAsString(self.unraw().to_string())
     }
 }
 
