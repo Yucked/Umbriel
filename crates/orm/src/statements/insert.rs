@@ -7,7 +7,9 @@ use std::{
 
 use surrealdb::types::{SurrealValue, Table, ToSql, Value};
 
-use crate::{DurationLike, Edge, Model, Node, Param, Renderer, SchemaGetter, Setter, TableOf};
+use crate::{
+    DurationLike, Model, Node, Param, Renderer, SchemaGetter, Setter, StoredEdge, TableOf,
+};
 
 use super::{
     Cardinality, Many, ReturnAfter, ReturnMode, Returning, SelectStatement, Statement, Subquery,
@@ -63,9 +65,10 @@ pub fn insert<T: Node>(insertables: impl Into<Insertables<T>>) -> InsertStatemen
 /// Creates an `INSERT RELATION` statement: inserts edges, each holding its `in` and `out`
 /// endpoints and optionally its id. Since SurrealDB 3.1.5 an edge id that already exists is a
 /// [`RecordExists`](crate::Error::RecordExists) error unless [`ignore`](InsertStatement::ignore)
-/// or [`on_duplicate_key_update`](InsertStatement::on_duplicate_key_update) handles it. It is
-/// rejected on `LIGHTWEIGHT` relation tables (3.3.0).
-pub fn insert_relation<E: Edge>(edges: impl Into<Insertables<E>>) -> InsertStatement<E> {
+/// or [`on_duplicate_key_update`](InsertStatement::on_duplicate_key_update) handles it.
+/// SurrealDB rejects it on `LIGHTWEIGHT` relation tables (3.3.0), so it requires a
+/// [`StoredEdge`].
+pub fn insert_relation<E: StoredEdge>(edges: impl Into<Insertables<E>>) -> InsertStatement<E> {
     let data = match edges.into() {
         Insertables::Node(edge) => Data::Values(Value::Array(vec![edge.into_value()].into())),
         Insertables::Nodes(edges) => Data::Values(Value::Array(
