@@ -177,3 +177,90 @@ mod till_refuses {
         refused(&project, missing).await;
     }
 }
+
+/// A reset's migration clears the old history. `up` applies it only when asked, and only onto
+/// the history the reset replaced.
+mod replace_history {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    /// A two-way project in `mode` with an applied init, reset without `--run`.
+    async fn reset_without_run(mode: Mode) -> Project {
+        let project = Project::new(MigrationFlag::TwoWay, mode).await;
+        project
+            .run(
+                Init::new("migration init".into(), true, true),
+                Resources,
+                allow_empty(),
+            )
+            .await;
+        project
+            .run(
+                Reset::new("migration reset".into(), true, false),
+                ResourcesV3,
+                allow_empty(),
+            )
+            .await;
+        project
+    }
+
+    /// Without `--replace-history`, neither mode lets the reset's migration clear the history.
+    #[tokio::test]
+    async fn up_without_the_flag_refuses_the_reset_migration() {
+        for mode in [Mode::Strict, Mode::Lax] {
+            let project = reset_without_run(mode).await;
+            let error = project
+                .try_run(Up::default(), ResourcesV3, allow_empty())
+                .await
+                .expect_err("refused");
+            match mode {
+                Mode::Strict => assert!(
+                    matches!(error, MigrationError::AppliedFileMissing { .. }),
+                    "{error:?}"
+                ),
+                Mode::Lax => assert!(
+                    matches!(error, MigrationError::HistoryRewritten { .. }),
+                    "{error:?}"
+                ),
+            }
+            assert_eq!(project.files(), [Basename::from("migration_reset")]);
+            assert_eq!(project.history().await, [Basename::from("migration_init")]);
+        }
+    }
+
+    /// A history that is neither the one the reset replaced nor its replacement, here cleared by
+    /// hand, as on another database: nothing is applied and the backup is kept.
+    #[tokio::test]
+    async fn a_history_the_reset_did_not_read_is_refused() {
+        let project = reset_without_run(Mode::Strict).await;
+        assert!(
+            umbriel_tests::succeeds(&project.db, "DELETE migration;").await,
+            "the history is cleared"
+        );
+        let error = project
+            .try_run(Up::default().replace_history(), ResourcesV3, allow_empty())
+            .await
+            .expect_err("refused");
+        assert!(
+            matches!(error, MigrationError::ResetIncomplete { .. }),
+            "{error:?}"
+        );
+        assert!(project.history().await.is_empty(), "nothing is applied");
+        assert!(
+            Reset::backup_dir(&project.dir).exists(),
+            "the backup is kept"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_flag_without_a_reset_is_refused() {
+        let project = Project::new(MigrationFlag::TwoWay, Mode::Strict).await;
+        generate_twelve(&project).await;
+        let error = project
+            .try_run(Up::default().replace_history(), Resources, allow_empty())
+            .await
+            .expect_err("refused");
+        assert!(matches!(error, MigrationError::NoPendingReset), "{error:?}");
+        project.assert_state(&TWELVE, &[]).await;
+    }
+}
