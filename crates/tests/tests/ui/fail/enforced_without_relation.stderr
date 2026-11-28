@@ -1,0 +1,45 @@
+error: `enforced` needs `relation`: only a relation table has endpoints
+ --> tests/ui/fail/enforced_without_relation.rs:6:12
+  |
+6 | pub struct Likes<In: Node, Out: Node> {
+  |            ^^^^^
+
+error[E0277]: `Likes<In, Out>` is not an Umbriel model
+ --> tests/ui/fail/enforced_without_relation.rs:7:13
+  |
+7 |     pub id: RecordId<Self>,
+  |             ^^^^^^^^^^^^^^ not a model
+  |
+help: the trait `Model` is not implemented for `Likes<In, Out>`
+ --> tests/ui/fail/enforced_without_relation.rs:6:1
+  |
+6 | pub struct Likes<In: Node, Out: Node> {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = note: declare `Likes<In, Out>` with `#[umbriel::model(node)]` or `#[umbriel::model(edge)]`
+help: the trait `umbriel::surrealdb_types::SurrealValue` is conditionally implemented for `umbriel::RecordId<T>`
+ --> $WORKSPACE/crates/orm/src/query/record_id.rs
+  |
+  | impl<T: Model> SurrealValue for RecordId<T> {
+  | ^^^^^^^^-----^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |         |
+  |         unsatisfied requirement introduced here: `Likes<In, Out>: Model`
+  = note: required for `umbriel::RecordId<Likes<In, Out>>` to implement `umbriel::surrealdb_types::SurrealValue`
+
+error[E0507]: cannot move out of dereference of `umbriel::RecordId<Likes<In, Out>>`
+ --> tests/ui/fail/enforced_without_relation.rs:7:9
+  |
+4 | #[model(edge, table = "likes")]
+  | ------------------------------- value moved due to this method call
+...
+7 |     pub id: RecordId<Self>,
+  |         ^^ move occurs because value has type `umbriel::surrealdb_types::RecordId`, which does not implement the `Copy` trait
+  |
+note: `umbriel::surrealdb_types::SurrealValue::into_value` takes ownership of the receiver `self`, which moves value
+ --> $CARGO/surrealdb-types-$VERSION/src/traits/surreal_value.rs
+  |
+  |     fn into_value(self) -> Value;
+  |                   ^^^^
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+  |
+7 |     pub <umbriel::surrealdb_types::RecordId as Clone>::clone(&id): RecordId<Self>,
+  |         ++++++++++++++++++++++++++++++++++++++++++++++++++++++  +
