@@ -14,15 +14,37 @@
 //!
 //! Applied migrations are recorded in the `migration` table, one [`Migration`] record per file,
 //! keyed by its file name: the timestamp, and the SHA-256 checksum of the up (or only) file and,
-//! for two-way migrations, of the down file. A migration is pending when its timestamp is newer
-//! than the latest record. Applying (`up`) checks no checksum: it runs only the pending files. In
-//! [`Mode::Strict`], the default, a rollback (`down`) verifies the checksums and names of the
-//! migrations it rolls back against their records, and listing the applied migrations fails when
-//! the history records migrations the directory lacks; [`Mode::Lax`] skips both checks. Each migration commits in one
-//! transaction with its record, so the history agrees with the database's committed changes; see
-//! [`MigrationRunner`] for failures, interrupted runs and concurrent runners. Connecting never
-//! applies anything: only `up`, `down`, `reset --run`, `init --run` and `generate --run` (or their
-//! library forms) write schema.
+//! for two-way migrations, of the down file. The runner also keeps a revision record in the
+//! `migration_revision` table, which serializes concurrent runners and holds a prune's lock.
+//!
+//! A migration is pending when the history doesn't record its file name. Migrations apply in file
+//! name order, and only in it: a pending file that sorts before the newest applied one, as one
+//! merged from another branch may, is [`MigrationError::OutOfOrder`] in both modes, and applies
+//! once renamed with a newer timestamp. The history's file order is therefore the order it was
+//! applied in, which rollback and generation rely on.
+//!
+//! In [`Mode::Strict`], the default, `up` and `generate` first check that every applied
+//! migration's file exists and still has its checksums, and a rollback (`down`) checks the files
+//! of every migration it rolls back before changing anything; listing the applied migrations
+//! fails when the history records migrations the directory lacks. [`Mode::Lax`] logs these
+//! instead, and a lax rollback stops at the first migration without a down file. Each migration
+//! commits in one transaction with its record, so the history agrees with the database's
+//! committed changes; see [`MigrationRunner`] for failures, interrupted runs and concurrent
+//! runners. A migration that changes other history records, as a reset's first migration clears
+//! the history, applies only through `reset --run` or `up --replace-history` (see `cli::Reset`).
+//! Connecting never applies anything: only `up`, `down`, `reset --run`, `init --run` and
+//! `generate --run` (or their library forms) write schema.
+//!
+//! # Renames and removals
+//!
+//! A field renamed with `#[orm(old_name = "…")]`, or a single field replaced by another that the
+//! [`Prompter`] calls a rename, is written as three statements: the new field's `DEFINE FIELD`,
+//! an `UPDATE` of every record of the table copying the old field's values into the new one, and
+//! the old field's `REMOVE FIELD`. The `UPDATE` checks each record against the table's field
+//! definitions, so a table's renames are written before its other field changes: a new required
+//! field defined first would fail it. A rename keeps its values in both directions. Any other
+//! removed table or field loses its data, which a rollback does not bring back: the migration
+//! lists them in its header, and generation asks the [`Prompter`] to confirm them first.
 //!
 //! # Library
 //!
@@ -48,10 +70,13 @@
 //!
 //! # Command line
 //!
-//! [`Migrator::run`] is the command line, run from a binary of the consuming crate that names its
-//! resources. Its subcommands are `init`, `generate`, `up` (the default), `down`, `list`, `prune`
-//! and `reset`. Every subcommand takes the connection (`--url`, `--ns`, `--db`, `--user`,
-//! `--pass`), `--dir` and `--mode`. `init`, `generate` and `reset` also need
+//! `Migrator::run`, behind the `cli` feature, is the command line, run from a binary of the
+//! consuming crate that names its resources. Its subcommands are `init`, `generate`, `up` (the default), `down`, `list`, `prune`,
+//! `reset` and `unlock`. Every subcommand takes the connection (`--url`, `--ns`, `--db`, `--user`,
+//! `--pass`), `--dir` and `--mode`; `init` and `generate` check the directory against that
+//! database's history. `prune`, `down --prune`, `reset` and `unlock` list what they delete,
+//! replace or release and ask before going ahead, unless given `--yes`. `init`, `generate` and
+//! `reset` also need
 //! `--comparison-ns`, `--comparison-user` and the password in `UMBRIEL_COMPARISON_PASS`, for the
 //! comparison databases they create. An embedded engine allows experimental features only when
 //! asked, with `--allow-experimental files,surrealism`, which bucket and module migrations need.
@@ -60,7 +85,7 @@
 //!
 //! Umbriel reads the directories and history `surreal_orm` wrote: the file names, timestamps,
 //! checksums and the `migration` table's fields are unchanged, so applied migrations stay applied
-//! and a strict rollback still verifies them. Two differences remain:
+//! and a strict rollback still verifies them. Three differences remain:
 //!
 //! - The history table's `id` field is defined as `string`, the record key's type in SurrealDB 3,
 //!   where `surreal_orm` defined it as `record<migration>`. The history table is compared like
@@ -73,13 +98,19 @@
 //!   learn its schema, and by `up` on any database whose history lacks them, such as a new
 //!   deployment. `init` and `reset` start from an empty schema and replay nothing. Upgrade the database itself as SurrealDB's upgrade guide
 //!   describes, then start a new history with `reset`, which regenerates a single first migration
-//!   from the codebase (see [`Reset`]), or rewrite the old files in SurrealDB 3 syntax. A
-//!   rewritten file is not run again where it is already applied, but a strict rollback of it
-//!   fails its checksum.
+//!   from the codebase (see `cli::Reset`), or rewrite the old files in SurrealDB 3 syntax. A
+//!   rewritten file is not run again where it is already applied, but it no longer matches its
+//!   checksum, so strict `up`, `generate` and rollback refuse it there.
+//! - `surreal_orm` chose pending migrations by timestamp, so an older file merged later was
+//!   never applied. Here it is pending, and refused as [`MigrationError::OutOfOrder`] until it
+//!   is renamed.
 //!
 //! Upgrading this crate never changes stored data or applied files by itself.
 
-/// The migration command line, run from a binary that names the codebase's resources.
+/// The migration command line, run from a binary that names the codebase's resources. Behind
+/// the `cli` feature, which adds `clap`, `inquire` and `pretty_env_logger`; the rest of this
+/// module needs only `migrations`.
+#[cfg(feature = "cli")]
 pub mod cli;
 pub(crate) mod database;
 mod error;
@@ -87,6 +118,7 @@ pub(crate) mod files;
 pub(crate) mod resources;
 pub(crate) mod schema;
 
+#[cfg(feature = "cli")]
 pub use cli::*;
 pub use database::*;
 pub use error::*;
