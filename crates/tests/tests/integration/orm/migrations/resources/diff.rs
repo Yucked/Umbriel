@@ -389,6 +389,81 @@ mod schema_changes {
     }
 }
 
+/// UMB-036: a rename copies values with an `UPDATE` of every record, so it must run before a new
+/// required field is defined, or the update fails the record against it.
+mod rename_order {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use umbriel::{RecordId, create_table_resources, model};
+
+    #[model(node, table = "renamed_thing")]
+    #[orm(schemafull, relax_table)]
+    #[derive(Debug, Clone, Default)]
+    pub struct ThingV1 {
+        pub id: RecordId<Self>,
+        pub b: String,
+    }
+
+    /// `b` renamed to `z`, and a required `a`, which sorts before `z`.
+    #[model(node, table = "renamed_thing")]
+    #[orm(schemafull, relax_table)]
+    #[derive(Debug, Clone, Default)]
+    pub struct ThingV2 {
+        pub id: RecordId<Self>,
+        #[orm(old_name = "b")]
+        pub z: String,
+        pub a: String,
+    }
+
+    impl umbriel::TableResources for ThingV1 {}
+
+    impl umbriel::TableResources for ThingV2 {}
+
+    #[derive(Debug, Clone)]
+    struct Before;
+
+    impl DbResources for Before {
+        create_table_resources!(ThingV1);
+    }
+
+    #[derive(Debug, Clone)]
+    struct After;
+
+    impl DbResources for After {
+        create_table_resources!(ThingV2);
+    }
+
+    #[tokio::test]
+    async fn a_rename_runs_before_a_new_required_field() {
+        let (_temp, dir) = migration_dir();
+        let (db, _guard) = db().await;
+        generate(&dir, MigrationFlag::TwoWay, Before, MockPrompter::default())
+            .await
+            .expect("the first migration generates");
+        apply_up(&dir, &db).await;
+        assert!(
+            umbriel_tests::succeeds(&db, "CREATE renamed_thing:one SET b = 'kept';").await,
+            "a record is created"
+        );
+
+        generate(&dir, MigrationFlag::TwoWay, After, MockPrompter::default())
+            .await
+            .expect("the rename generates");
+        let (up, _) = newest_migration(&dir);
+        assert_order(
+            &up,
+            &[
+                "UPDATE renamed_thing SET z = b",
+                "DEFINE FIELD OVERWRITE a ON renamed_thing",
+            ],
+        );
+        apply_up(&dir, &db).await;
+        let renamed: Vec<String> =
+            umbriel_tests::read(&db, "SELECT VALUE z FROM renamed_thing;").await;
+        assert_eq!(renamed, ["kept"]);
+    }
+}
+
 /// Functions removed by name, changefeeds, sequences, buckets, APIs, configs and modules; and
 /// the checks generation makes, run through a synthetic inspection where a live database cannot
 /// hold the definition.
@@ -720,7 +795,9 @@ mod definitions {
             assert!(up.contains("DEFINE SEQUENCE order_number "), "{up}");
             assert!(!up.contains("DEFINE SEQUENCE OVERWRITE"), "{up}");
 
+            // Lax: the history names the replaced files, which strict `up` refuses first.
             let error = config(&regenerated)
+                .set_mode(Mode::Lax)
                 .two_way()
                 .run_up_pending_migrations(&db, UpdateStrategy::Latest)
                 .await
@@ -996,7 +1073,9 @@ mod definitions {
             assert!(up.contains("DEFINE BUCKET avatars "), "{up}");
             assert!(!up.contains("DEFINE BUCKET OVERWRITE"), "{up}");
 
+            // Lax: the history names the replaced files, which strict `up` refuses first.
             let error = config(&regenerated)
+                .set_mode(Mode::Lax)
                 .two_way()
                 .run_up_pending_migrations(&db, UpdateStrategy::Latest)
                 .await
