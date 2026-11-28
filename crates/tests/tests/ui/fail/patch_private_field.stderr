@@ -1,0 +1,9 @@
+error[E0451]: field `balance` of struct `AccountPatch` is private
+  --> tests/ui/fail/patch_private_field.rs:15:9
+   |
+14 |     let _ = account::AccountPatch {
+   |             --------------------- in this type
+15 |         balance: umbriel::Patch::Set(0),
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private field
+16 |         ..Default::default()
+   |           ------------------ fields  are private
