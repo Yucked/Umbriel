@@ -1,6 +1,6 @@
 use clap::Args;
 
-use crate::migrations::*;
+use crate::migrations::{database::db_runner::delete_file, *};
 
 /// Rollback migrations
 #[derive(Args, Debug, Clone)]
@@ -11,6 +11,10 @@ pub struct Down {
     /// Delete the rolled-back migration files afterwards
     #[arg(global = true, long, default_value_t = false)]
     pub(crate) prune: bool,
+
+    /// With `--prune`, delete without asking for confirmation
+    #[arg(long)]
+    pub(crate) yes: bool,
 }
 
 impl Down {
@@ -29,7 +33,14 @@ impl Down {
         Self {
             strategy: arguments,
             prune,
+            yes: false,
         }
+    }
+
+    /// Prunes without asking for confirmation.
+    pub fn yes(mut self) -> Self {
+        self.yes = true;
+        self
     }
 
     /// How far to roll back.
@@ -65,16 +76,6 @@ impl Default for RollbackStrategyStruct {
     }
 }
 
-/// How far to roll back.
-pub enum RollbackStrategy {
-    /// The latest applied migration (`down`, `down --previous`); the default.
-    Previous,
-    /// This many applied migrations (`down --number 3`).
-    Number(u32),
-    /// Every migration applied after this one (`down --till <file name>`).
-    Till(MigrationFilename),
-}
-
 impl From<&RollbackStrategyStruct> for RollbackStrategy {
     fn from(strategy: &RollbackStrategyStruct) -> Self {
         if strategy.previous {
@@ -90,37 +91,60 @@ impl From<&RollbackStrategyStruct> for RollbackStrategy {
 }
 
 impl Down {
-    /// Rolls back two-way migrations, each in its own transaction, then prunes their files if
-    /// asked. When one fails, those rolled back before it stay rolled back (see
-    /// [`MigrationRunner`]).
+    /// Rolls back two-way migrations, each in its own transaction (see [`MigrationRunner`]).
+    /// When one fails, those rolled back before it stay rolled back.
+    ///
+    /// With `--prune`, the files of the migrations to roll back are listed and confirmed with
+    /// `prompter` (unless `--yes`) before anything is rolled back. The rollback then runs under
+    /// the history's lock, and each migration's files are deleted once its reversal commits; a
+    /// reversal that fails keeps its files. No other file is touched.
     ///
     /// # Errors
     ///
-    /// [`MigrationError::OneWayRollback`] for one-way migrations; otherwise the failure of
-    /// connecting, detecting the migration type, rolling back or pruning.
-    pub async fn run(&self, cli: &mut Migrator) -> MigrationResult<()> {
+    /// [`MigrationError::OneWayRollback`] for one-way migrations, [`MigrationError::Declined`],
+    /// and the failure of connecting, detecting the migration type, rolling back
+    /// (see [`MigrationRunner::rollback_migrations`]) or deleting a file.
+    pub async fn run(&self, cli: &mut Migrator, prompter: impl Prompter) -> MigrationResult<()> {
         cli.setup_db().await?;
         let file_manager = cli.file_manager();
         if file_manager.detect_migration_type()? == MigrationFlag::OneWay {
             return Err(MigrationError::OneWayRollback);
         }
-
-        file_manager
-            .two_way()
-            .run_down_migrations(
-                cli.db()?,
-                RollbackOptions {
-                    rollback_strategy: self.rollback_strategy(),
-                    mode: cli.mode,
-                },
-            )
-            .await?;
-        log::info!("Rollback successful");
-
-        if self.prune {
-            log::info!("Pruning all pending migration files");
-            Prune.run(cli).await?;
+        let db = cli.db()?;
+        let options = RollbackOptions {
+            rollback_strategy: self.rollback_strategy(),
+            mode: cli.mode,
+        };
+        let plan = &MigrationRunner::plan_rollback(db, &file_manager, options).await?;
+        let files = plan.files();
+        if !self.prune || files.is_empty() {
+            let revision = plan.reading().revision;
+            MigrationRunner::execute_rollback(db, plan, None, revision, |_| Ok(())).await?;
+            log::info!("Rollback successful");
+            return Ok(());
         }
+
+        let listed = files.iter().map(ToString::to_string).collect::<Vec<_>>();
+        confirmed(
+            &prompter,
+            self.yes,
+            "Roll back these migrations and delete their files",
+            &listed,
+        )?;
+        let dir = &file_manager.get_migration_dir()?;
+        MigrationRunner::with_lock(db, plan.reading(), |holder| async move {
+            // Taking the lock wrote the revision after the plan's.
+            let revision = plan.reading().revision + 1;
+            MigrationRunner::execute_rollback(db, plan, Some(&holder), revision, |name| {
+                for file in [name.clone(), name.to_down()] {
+                    delete_file(&dir.join(file.to_string()))?;
+                }
+                Ok(())
+            })
+            .await
+        })
+        .await?;
+        log::info!("Rollback successful");
         Ok(())
     }
 }
