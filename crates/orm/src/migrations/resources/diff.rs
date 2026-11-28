@@ -58,13 +58,16 @@ enum Step<'a> {
 }
 
 impl Step<'_> {
-    /// Where the step sorts: by kind, then table, then name.
-    fn order(&self) -> (ResourceKind, Option<&str>, &str) {
+    /// Where the step sorts: by kind, then table, then renames before other steps, then name.
+    /// A rename copies values with an `UPDATE` of every record, which checks each record against
+    /// the table's field definitions, so it runs before a new required field is defined
+    /// (UMB-036).
+    fn order(&self) -> (ResourceKind, Option<&str>, bool, &str) {
         match self {
             Self::Create(key) | Self::Update(key) | Self::Remove(key) | Self::Rebuild(key) => {
-                (key.kind, key.table.as_deref(), key.name.as_str())
+                (key.kind, key.table.as_deref(), true, key.name.as_str())
             }
-            Self::Rename { table, to, .. } => (ResourceKind::Field, Some(*table), *to),
+            Self::Rename { table, to, .. } => (ResourceKind::Field, Some(*table), false, *to),
         }
     }
 }
@@ -128,6 +131,28 @@ impl<'a> SchemaDiff<'a> {
     /// Whether the schemas are the same.
     pub(crate) fn is_empty(&self) -> bool {
         self.changes.is_empty()
+    }
+
+    /// The tables and fields going up removes, with their data, as `REMOVE TABLE person` and
+    /// `REMOVE FIELD name ON person`; a field of a removed table goes with the table. A rename
+    /// keeps its values, so it is not listed.
+    pub(crate) fn data_removals(&self) -> Vec<String> {
+        let removed = |kind| {
+            self.changes.iter().filter_map(move |change| match change {
+                Change::Remove(key) if key.kind == kind => Some(key),
+                _ => None,
+            })
+        };
+        let tables = removed(ResourceKind::Table)
+            .map(|key| key.name.as_str())
+            .collect::<HashSet<_>>();
+        removed(ResourceKind::Table)
+            .map(|key| format!("REMOVE TABLE {}", key.name))
+            .chain(removed(ResourceKind::Field).filter_map(|key| {
+                let table = key.table.as_deref()?;
+                (!tables.contains(table)).then(|| format!("REMOVE FIELD {} ON {table}", key.name))
+            }))
+            .collect()
     }
 
     /// The statements that take the database from one schema to the other: `Up` from the
@@ -240,7 +265,7 @@ impl<'a> SchemaDiff<'a> {
         let mut group = None;
         for step in defines.iter().chain(&rebuilds).chain(&removes) {
             // A blank line between kinds and between tables.
-            let (kind, table, _) = step.order();
+            let (kind, table, _, _) = step.order();
             if group.is_some_and(|group| group != (kind, table)) {
                 statements.push(QueryType::Blank);
             }
