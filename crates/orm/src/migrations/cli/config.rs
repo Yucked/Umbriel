@@ -17,6 +17,12 @@ use crate::migrations::{Comparison, MigrationError, MigrationResult};
 /// process list and shell history.
 pub const COMPARISON_PASSWORD_VARIABLE: &str = "UMBRIEL_COMPARISON_PASS";
 
+/// The environment variable `--user` is read from when not given.
+pub const USER_VARIABLE: &str = "UMBRIEL_USER";
+
+/// The environment variable `--pass` is read from when not given.
+pub const PASSWORD_VARIABLE: &str = "UMBRIEL_PASS";
+
 /// Where the database is: the in-memory engine or a URL.
 #[derive(Clone, Debug)]
 pub enum UrlDb {
@@ -38,14 +44,17 @@ impl Display for UrlDb {
 impl FromStr for UrlDb {
     type Err = String;
 
-    // Can be one of memory, file:<path>, tikv:<addr>, file://<path>, tikv://<addr>
+    /// `memory` or `mem://` (in any case) is the in-memory engine. Any other URL keeps its text,
+    /// with only its scheme lowercased: a path or host may be case-sensitive.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim().to_lowercase();
-        if s == "memory" {
-            Ok(UrlDb::Memory)
-        } else {
-            Ok(UrlDb::Others(s))
+        let s = s.trim();
+        if s.eq_ignore_ascii_case("memory") || s.eq_ignore_ascii_case("mem://") {
+            return Ok(UrlDb::Memory);
         }
+        Ok(UrlDb::Others(match s.split_once("://") {
+            Some((scheme, rest)) => format!("{}://{rest}", scheme.to_ascii_lowercase()),
+            None => s.to_owned(),
+        }))
     }
 }
 
@@ -93,13 +102,14 @@ pub struct DatabaseConnection {
     #[arg(global = true, long, default_value_t = String::from("test"))]
     pub(crate) ns: String,
 
-    /// User name
-    #[arg(global = true, short, long, default_value_t = String::from("root"))]
-    pub(crate) user: String,
+    /// User name; required, with no default
+    #[arg(global = true, short, long, env = USER_VARIABLE)]
+    pub(crate) user: Option<String>,
 
-    /// Password
-    #[arg(global = true, short, long, default_value_t = String::from("root"))]
-    pub(crate) pass: String,
+    /// Password; required, with no default. Prefer the environment variable, which keeps it out
+    /// of the process list and shell history. Its value is never shown in help
+    #[arg(global = true, short, long, env = PASSWORD_VARIABLE, hide_env_values = true)]
+    pub(crate) pass: Option<String>,
 
     /// Experimental features an embedded engine allows, such as `files` for buckets and
     /// `surrealism` for modules. None by default. A server keeps its own capabilities, so this
@@ -135,8 +145,8 @@ impl DatabaseConnection {
             url,
             db: "test".to_owned(),
             ns: "test".to_owned(),
-            user: "root".to_owned(),
-            pass: "root".to_owned(),
+            user: None,
+            pass: None,
             allow_experimental: Vec::new(),
             db_connection: Some(db),
             comparison_ns: None,
@@ -151,12 +161,20 @@ impl DatabaseConnection {
     ///
     /// # Errors
     ///
+    /// [`MigrationError::MissingArgument`] when the user or password is given neither as an
+    /// argument nor in [`USER_VARIABLE`] or [`PASSWORD_VARIABLE`], before anything is connected;
     /// [`MigrationError::DbError`] when connecting, signing in or selecting the namespace and
     /// database fails.
     pub async fn setup(&mut self) -> MigrationResult<()> {
+        let username = self.user.clone().ok_or(MigrationError::MissingArgument {
+            argument: "--user",
+        })?;
+        let password = self.pass.clone().ok_or(MigrationError::MissingArgument {
+            argument: "--pass",
+        })?;
         let root = Root {
-            username: self.user.clone(),
-            password: self.pass.clone(),
+            username: username.clone(),
+            password: password.clone(),
         };
         let capabilities = self
             .allow_experimental
@@ -179,8 +197,8 @@ impl DatabaseConnection {
                     .signin(Database {
                         namespace: self.ns.clone(),
                         database: self.db.clone(),
-                        username: self.user.clone(),
-                        password: self.pass.clone(),
+                        username,
+                        password,
                     })
                     .await
             }
