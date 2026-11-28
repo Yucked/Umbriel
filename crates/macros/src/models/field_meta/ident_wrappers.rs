@@ -14,11 +14,24 @@ macro_rules! create_ident_wrapper {
             fn from_expr(expr: &::syn::Expr) -> ::darling::Result<Self> {
                 match expr {
                     ::syn::Expr::Lit(expr) => {
-                        if let ::syn::Lit::Str(lit_str) = &expr.lit {
-                            Ok($ident(::syn::Ident::new(&lit_str.value(), lit_str.span())))
-                        } else {
-                            Err(darling::Error::custom("Expected a string literal."))
-                        }
+                        let ::syn::Lit::Str(lit_str) = &expr.lit else {
+                            return Err(darling::Error::custom("Expected a string literal."));
+                        };
+                        // `Ident::new` panics on text that isn't an identifier, so it is parsed
+                        // first (UMB-031); a keyword, such as the table `type`, is taken as a raw
+                        // identifier.
+                        let value = lit_str.value();
+                        let ident = ::syn::parse_str::<::syn::Ident>(&value)
+                            .or_else(|_| ::syn::parse_str::<::syn::Ident>(&format!("r#{value}")))
+                            .map_err(|_| {
+                                ::darling::Error::custom(format!(
+                                    "`{value}` is not a name an identifier can hold"
+                                ))
+                                .with_span(lit_str)
+                            })?;
+                        let mut ident = ident;
+                        ident.set_span(lit_str.span());
+                        Ok($ident(ident))
                     }
                     ::syn::Expr::Path(expr_path) => {
                         let ident = expr_path
