@@ -109,7 +109,8 @@ Every call borrows an executor: the client (`&db`), or a transaction from
 | `kv-mem`, `kv-rocksdb`, `kv-surrealkv`, `kv-indxdb`, `kv-tikv` | Embedded storage engines. |
 | `scripting`, `http`, `jwks`, `ml`, `cjk` | SDK capabilities for embedded engines. |
 | `parse` | Offline SurrealQL value parsing. |
-| `migrations` | Schema migrations and their CLI. |
+| `migrations` | Schema migrations: generating, applying and rolling back, from files or embedded. |
+| `cli` | The migration command line (`Migrator`); implies `migrations`. |
 
 These pass through to the SurrealDB SDK feature of the same name.
 
@@ -201,7 +202,7 @@ let name: Option<String> = response.take(0)?;
 
 ## 🚚 Migrations
 
-Enable the `migrations` feature, list your models, and hand them to the CLI:
+Enable the `cli` feature, list your models, and hand them to the CLI:
 
 ```rust
 use umbriel::{DbResources, TableResources, create_table_resources, migrations::Migrator};
@@ -228,6 +229,7 @@ cargo run -- gen  --name add_teams    # diff the models against the migrations
 cargo run -- up                        # apply pending   (-n N, --till <file>)
 cargo run -- down                      # roll back       (-n N, --till <file>, --prune)
 cargo run -- list --status pending     # all | pending | applied
+cargo run -- prune                     # delete unapplied files, after asking (--yes skips)
 ```
 
 <details>
@@ -236,7 +238,9 @@ cargo run -- list --status pending     # all | pending | applied
 <br>
 
 The connection flags are `--url` (default `ws://localhost:8000`), `--ns`, `--db`, `--user` and
-`--pass`. Use `--dir` for a custom migrations directory. The generator compares schemas in
+`--pass`. The user and password have no default; they can also come from `UMBRIEL_USER` and
+`UMBRIEL_PASS`, which keeps the password out of the process list. Use `--dir` for a custom
+migrations directory. The generator compares schemas in
 temporary databases, created in the namespace you give with `--comparison-ns`. Run
 `cargo run -- help` for the full list.
 
