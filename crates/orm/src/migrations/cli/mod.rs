@@ -6,31 +6,36 @@ mod init;
 mod list;
 mod prune;
 mod reset;
+mod unlock;
 mod up;
 
 use std::path::PathBuf;
 
-pub use down::{Down, RollbackStrategy, RollbackStrategyStruct};
+pub use down::{Down, RollbackStrategyStruct};
 pub use generate::Generate;
 pub use init::Init;
-pub use list::{List, Status};
+pub use list::List;
 pub use prune::Prune;
 pub use reset::Reset;
+pub use unlock::Unlock;
 
 use surrealdb::{Surreal, engine::any::Any};
-pub use up::{FastForwardDelta, Up, UpdateStrategy};
+pub use up::{FastForwardDelta, Up};
 
 use crate::DbResources;
 use clap::{ArgAction, Parser};
 
-pub use self::config::{COMPARISON_PASSWORD_VARIABLE, DatabaseConnection, Experimental};
+pub use self::config::{
+    COMPARISON_PASSWORD_VARIABLE, DatabaseConnection, Experimental, PASSWORD_VARIABLE,
+    USER_VARIABLE,
+};
 use crate::migrations::{
     Comparison, MigrationConfig, MigrationResult, Mode, Prompter, RealPrompter,
 };
 
 /// Umbriel CLI
 #[derive(Parser, Debug, Clone)]
-#[clap(name = "SurrealOrm", about = "Umbriel CLI")]
+#[clap(name = "umbriel", about = "Umbriel CLI")]
 #[command(version)]
 pub struct Migrator {
     /// Subcommand: generate, up, down, list
@@ -41,8 +46,9 @@ pub struct Migrator {
     #[arg(global = true, short, long)]
     pub dir: Option<PathBuf>,
 
-    /// Sets the level of verbosity e.g -v, -vv, -vvv, -vvvv
-    #[arg(global = true, short, long, action = ArgAction::Count, default_value_t=3)]
+    /// Logs more with each `-v`: errors only by default, then warnings (-v), information (-vv),
+    /// debugging (-vvv) and everything (-vvvv)
+    #[arg(global = true, short, long, action = ArgAction::Count)]
     pub(crate) verbose: u8,
 
     /// Strict checks the migration files against the history (checksums and file names); lax
@@ -71,6 +77,11 @@ impl Migrator {
     /// How closely migration files are checked against the history.
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    /// How many `-v` were given: 0 logs errors only.
+    pub fn verbosity(&self) -> u8 {
+        self.verbose
     }
 
     /// The connected database.
@@ -142,10 +153,11 @@ impl Migrator {
                 generate.run(self, codebase_resources, prompter).await
             }
             Some(SubCommand::Up(up)) => up.run(self).await,
-            Some(SubCommand::Down(down)) => down.run(self).await,
-            Some(SubCommand::Prune(prune)) => prune.run(self).await,
+            Some(SubCommand::Down(down)) => down.run(self, prompter).await,
+            Some(SubCommand::Prune(prune)) => prune.run(self, prompter).await,
             Some(SubCommand::List(list)) => list.run(self).await,
             Some(SubCommand::Reset(reset)) => reset.run(self, codebase_resources, prompter).await,
+            Some(SubCommand::Unlock(unlock)) => unlock.run(self, prompter).await,
         }
     }
 
@@ -210,6 +222,8 @@ pub enum SubCommand {
     List(List),
     /// Delete Unapplied local migration files that have not been applied to the current database instance
     Prune(Prune),
+    /// Release the migration history's lock, which an interrupted prune leaves behind
+    Unlock(Unlock),
 }
 
 macro_rules! impl_from {
@@ -228,3 +242,4 @@ impl_from!(Down);
 impl_from!(Reset);
 impl_from!(List);
 impl_from!(Prune);
+impl_from!(Unlock);
