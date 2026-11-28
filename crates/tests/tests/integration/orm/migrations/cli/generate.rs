@@ -92,7 +92,9 @@ async fn renames_and_deletions_are_generated_in_both_directions() {
     for (flag, strategy) in cases {
         let prompter = MockPrompter::new(true, strategy);
         let project = Project::new(flag, Mode::Strict).await;
-        project.run(init(&project, false), Before, prompter).await;
+        project
+            .run(init(&project, false), Before, prompter.clone())
+            .await;
         project
             .run(generate("migration gen 1", false), After, prompter)
             .await;
