@@ -14,12 +14,12 @@ error[E0599]: `SaleCopy` cannot be written to
            which is required by `&SaleCopy: SurrealCrud`
            `&mut SaleCopy: Writable`
            which is required by `&mut SaleCopy: SurrealCrud`
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: the trait `Writable` must be implemented
   --> $WORKSPACE/crates/orm/src/traits/model.rs
    |
-   | pub trait Writable: Model {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   | pub trait Writable: Deletable {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: items from traits can only be used if the trait is implemented and in scope
    = note: the following trait defines an item `save`, perhaps you need to implement it:
            candidate #1: `SurrealCrud`
@@ -40,12 +40,12 @@ error[E0599]: `SaleCopy` cannot be written to
            which is required by `&SaleCopy: SurrealCrud`
            `&mut SaleCopy: Writable`
            which is required by `&mut SaleCopy: SurrealCrud`
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: the trait `Writable` must be implemented
   --> $WORKSPACE/crates/orm/src/traits/model.rs
    |
-   | pub trait Writable: Model {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   | pub trait Writable: Deletable {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: items from traits can only be used if the trait is implemented and in scope
    = note: the following trait defines an item `delete_by_id`, perhaps you need to implement it:
            candidate #1: `SurrealCrud`
@@ -66,12 +66,12 @@ error[E0599]: `SaleCopy` cannot be written to
            which is required by `&SaleCopy: SurrealCrud`
            `&mut SaleCopy: Writable`
            which is required by `&mut SaleCopy: SurrealCrud`
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: the trait `Writable` must be implemented
   --> $WORKSPACE/crates/orm/src/traits/model.rs
    |
-   | pub trait Writable: Model {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   | pub trait Writable: Deletable {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: items from traits can only be used if the trait is implemented and in scope
    = note: the following trait defines an item `patch`, perhaps you need to implement it:
            candidate #1: `SurrealCrud`
@@ -92,12 +92,12 @@ error[E0599]: `SaleCopy` cannot be written to
            which is required by `&SaleCopy: SurrealCrud`
            `&mut SaleCopy: Writable`
            which is required by `&mut SaleCopy: SurrealCrud`
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: the trait `Writable` must be implemented
   --> $WORKSPACE/crates/orm/src/traits/model.rs
    |
-   | pub trait Writable: Model {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   | pub trait Writable: Deletable {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: items from traits can only be used if the trait is implemented and in scope
    = note: the following traits define an item `merge`, perhaps you need to implement one of them:
            candidate #1: `SurrealCrud`
@@ -121,12 +121,12 @@ error[E0599]: `SaleCopy` cannot be written to
            which is required by `&SaleCopy: SurrealCrud`
            `&mut SaleCopy: Writable`
            which is required by `&mut SaleCopy: SurrealCrud`
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: the trait `Writable` must be implemented
   --> $WORKSPACE/crates/orm/src/traits/model.rs
    |
-   | pub trait Writable: Model {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   | pub trait Writable: Deletable {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: items from traits can only be used if the trait is implemented and in scope
    = note: the following trait defines an item `insert_many`, perhaps you need to implement it:
            candidate #1: `SurrealCrud`
@@ -147,12 +147,12 @@ error[E0599]: `SaleCopy` cannot be written to
            which is required by `&SaleCopy: SurrealCrud`
            `&mut SaleCopy: Writable`
            which is required by `&mut SaleCopy: SurrealCrud`
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: the trait `Writable` must be implemented
   --> $WORKSPACE/crates/orm/src/traits/model.rs
    |
-   | pub trait Writable: Model {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   | pub trait Writable: Deletable {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: items from traits can only be used if the trait is implemented and in scope
    = note: the following trait defines an item `delete_where`, perhaps you need to implement it:
            candidate #1: `SurrealCrud`
@@ -168,7 +168,7 @@ help: the trait `Writable` is not implemented for `SaleCopy`
    |
 17 | pub struct SaleCopy {
    | ^^^^^^^^^^^^^^^^^^^
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: required by a bound in `update`
   --> $WORKSPACE/crates/orm/src/statements/update.rs
    |
@@ -186,7 +186,7 @@ help: the trait `Writable` is not implemented for `SaleCopy`
    |
 17 | pub struct SaleCopy {
    | ^^^^^^^^^^^^^^^^^^^
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: required by a bound in `update_only`
   --> $WORKSPACE/crates/orm/src/statements/update.rs
    |
@@ -204,7 +204,7 @@ help: the trait `Writable` is not implemented for `SaleCopy`
    |
 17 | pub struct SaleCopy {
    | ^^^^^^^^^^^^^^^^^^^
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: required by a bound in `umbriel::statements::upsert`
   --> $WORKSPACE/crates/orm/src/statements/upsert.rs
    |
@@ -222,20 +222,20 @@ help: the trait `Writable` is not implemented for `SaleCopy`
    |
 17 | pub struct SaleCopy {
    | ^^^^^^^^^^^^^^^^^^^
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: required by a bound in `upsert_only`
   --> $WORKSPACE/crates/orm/src/statements/upsert.rs
    |
    | pub fn upsert_only<T: Writable>(
    |                       ^^^^^^^^ required by this bound in `upsert_only`
 
-error[E0277]: `SaleCopy` cannot be written to
+error[E0277]: `SaleCopy` cannot be deleted from
   --> tests/ui/fail/view_writes.rs:43:22
    |
 43 |     let _ = delete::<SaleCopy>(id.clone());
-   |                      ^^^^^^^^ not writable
+   |                      ^^^^^^^^ not deletable
    |
-help: the trait `Writable` is not implemented for `SaleCopy`
+help: the trait `Deletable` is not implemented for `SaleCopy`
   --> tests/ui/fail/view_writes.rs:17:1
    |
 17 | pub struct SaleCopy {
@@ -244,16 +244,16 @@ help: the trait `Writable` is not implemented for `SaleCopy`
 note: required by a bound in `umbriel::statements::delete`
   --> $WORKSPACE/crates/orm/src/statements/delete.rs
    |
-   | pub fn delete<T: Writable>(targettables: impl Into<TargettablesForUpdate>) -> DeleteStatement<T> {
-   |                  ^^^^^^^^ required by this bound in `delete`
+   | pub fn delete<T: Deletable>(targettables: impl Into<TargettablesForUpdate>) -> DeleteStatement<T> {
+   |                  ^^^^^^^^^ required by this bound in `delete`
 
-error[E0277]: `SaleCopy` cannot be written to
+error[E0277]: `SaleCopy` cannot be deleted from
   --> tests/ui/fail/view_writes.rs:44:27
    |
 44 |     let _ = delete_only::<SaleCopy>(id.clone());
-   |                           ^^^^^^^^ not writable
+   |                           ^^^^^^^^ not deletable
    |
-help: the trait `Writable` is not implemented for `SaleCopy`
+help: the trait `Deletable` is not implemented for `SaleCopy`
   --> tests/ui/fail/view_writes.rs:17:1
    |
 17 | pub struct SaleCopy {
@@ -262,8 +262,8 @@ help: the trait `Writable` is not implemented for `SaleCopy`
 note: required by a bound in `delete_only`
   --> $WORKSPACE/crates/orm/src/statements/delete.rs
    |
-   | pub fn delete_only<T: Writable>(
-   |                       ^^^^^^^^ required by this bound in `delete_only`
+   | pub fn delete_only<T: Deletable>(
+   |                       ^^^^^^^^^ required by this bound in `delete_only`
 
 error[E0277]: `SaleCopy` is not a node
   --> tests/ui/fail/view_writes.rs:45:22
@@ -330,7 +330,7 @@ help: the trait `Writable` is not implemented for `SaleCopy`
    |
 17 | pub struct SaleCopy {
    | ^^^^^^^^^^^^^^^^^^^
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
 note: required by a bound in `TableOf::<T>::insert_many`
   --> $WORKSPACE/crates/orm/src/query/table_of.rs
    |
@@ -341,13 +341,13 @@ note: required by a bound in `TableOf::<T>::insert_many`
    |         T: Writable,
    |            ^^^^^^^^ required by this bound in `TableOf::<T>::insert_many`
 
-error[E0277]: `SaleCopy` cannot be written to
+error[E0277]: `SaleCopy` cannot be deleted from
   --> tests/ui/fail/view_writes.rs:51:44
    |
 51 |     let _ = TableOf::<SaleCopy>::default().delete_where(Field::new("amount").is(1));
-   |                                            ^^^^^^^^^^^^ not writable
+   |                                            ^^^^^^^^^^^^ not deletable
    |
-help: the trait `Writable` is not implemented for `SaleCopy`
+help: the trait `Deletable` is not implemented for `SaleCopy`
   --> tests/ui/fail/view_writes.rs:17:1
    |
 17 | pub struct SaleCopy {
@@ -360,8 +360,8 @@ note: required by a bound in `TableOf::<T>::delete_where`
 ...
    |     pub fn delete_where(&self, filter: impl Conditional + Clone) -> DeleteStatement<T>
    |     where
-   |         T: Writable,
-   |            ^^^^^^^^ required by this bound in `TableOf::<T>::delete_where`
+   |         T: Deletable,
+   |            ^^^^^^^^^ required by this bound in `TableOf::<T>::delete_where`
 
 error[E0277]: `SaleCopy` cannot be written to
   --> tests/ui/fail/view_writes.rs:54:40
@@ -376,7 +376,7 @@ help: the trait `Writable` is not implemented for `SaleCopy`
    |
 17 | pub struct SaleCopy {
    | ^^^^^^^^^^^^^^^^^^^
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
    = note: required for `AnyTarget` to implement `From<TableOf<SaleCopy>>`
    = note: required for `TableOf<SaleCopy>` to implement `Into<AnyTarget>`
 note: required by a bound in `create_any_only`
@@ -399,7 +399,7 @@ help: the trait `Writable` is not implemented for `SaleCopy`
    |
 17 | pub struct SaleCopy {
    | ^^^^^^^^^^^^^^^^^^^
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
    = note: required for `AnyTarget` to implement `From<umbriel::RecordId<SaleCopy>>`
    = note: required for `umbriel::RecordId<SaleCopy>` to implement `Into<AnyTarget>`
 note: required by a bound in `create_any_only`
@@ -422,7 +422,7 @@ help: the trait `Writable` is not implemented for `SaleCopy`
    |
 17 | pub struct SaleCopy {
    | ^^^^^^^^^^^^^^^^^^^
-   = note: views are read-only: SurrealDB computes their records from the `AS SELECT` query
+   = note: views are read-only, and a `LIGHTWEIGHT` edge stores no records: relate it without data
    = note: required for `AnyTarget` to implement `From<&umbriel::RecordId<SaleCopy>>`
    = note: required for `&umbriel::RecordId<SaleCopy>` to implement `Into<AnyTarget>`
 note: required by a bound in `create_any_only`
