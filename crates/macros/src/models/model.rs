@@ -207,10 +207,23 @@ impl ModelReceiver {
             )
         });
 
-        // Every typed write requires `Writable`, which only nodes and edges have.
-        let writable = (matches!(data_type, DataType::Node | DataType::Edge) && !self.view).then(|| {
+        self.check_lightweight(&code_gen)?;
+        // Every typed write requires `Writable`, which only nodes and edges that store records
+        // have; a lightweight edge's relations can still be deleted.
+        let records = matches!(data_type, DataType::Node | DataType::Edge) && !self.view;
+        let deletable = records.then(|| {
+            quote!(
+                impl #impl_generics #crate_name::Deletable for #struct_name_ident #ty_generics #where_clause {}
+            )
+        });
+        let writable = (records && !self.is_lightweight()).then(|| {
             quote!(
                 impl #impl_generics #crate_name::Writable for #struct_name_ident #ty_generics #where_clause {}
+            )
+        });
+        let stored_edge = (matches!(data_type, DataType::Edge) && !self.is_lightweight()).then(|| {
+            quote!(
+                impl #impl_generics #crate_name::StoredEdge for #struct_name_ident #ty_generics #where_clause {}
             )
         });
 
@@ -258,7 +271,11 @@ impl ModelReceiver {
 
             #model_kind_impl
 
+            #deletable
+
             #writable
+
+            #stored_edge
 
             #record_model
 
@@ -376,6 +393,7 @@ impl ModelReceiver {
         let (impl_generics, ty_generics, where_clause) = self.generics().split_for_impl();
         let struct_marker = self.generics().phantom_marker_type();
         let vis = &self.vis;
+        // invariant: `table()` fails for a node or edge without one.
         let table = self
             .table()?
             .expect("a node or edge has a table")
@@ -385,6 +403,18 @@ impl ModelReceiver {
             None => quote!(::std::option::Option::None),
         };
         let table_definitions = self.get_table_definition_token()?;
+        // SurrealDB rejects any field definition on a `LIGHTWEIGHT` table, `id`, `in` and `out`
+        // included: it has no record to hold them.
+        let define_fields = if self.is_lightweight() {
+            quote!(::std::vec::Vec::new())
+        } else {
+            quote!(
+                <Self as #crate_name::Model>::get_field_meta()
+                    .into_iter()
+                    .flat_map(|meta| meta.definition)
+                    .collect()
+            )
+        };
         let patch_ident = struct_name_ident.patch_ident();
         let VariablesModelMacro {
             _____struct_marker_ident,
@@ -522,10 +552,7 @@ impl ModelReceiver {
                 }
 
                 fn define_fields() -> ::std::vec::Vec<#crate_name::Raw> {
-                    <Self as #crate_name::Model>::get_field_meta()
-                        .into_iter()
-                        .flat_map(|meta| meta.definition)
-                        .collect()
+                    #define_fields
                 }
 
                 // Flattened objects' fields are defined as this table's own.
@@ -630,6 +657,7 @@ impl ModelReceiver {
         let crate_name = get_crate_name();
         let struct_name_ident = &self.ident();
         let (impl_generics, ty_generics, where_clause) = self.generics().split_for_impl();
+        // invariant: `table()` fails for a node without one.
         let table = self.table()?.expect("a node has a table").as_string();
         let explicit_generics =
             ModelAttributes::new(self)?.explicit_fully_qualified_generics_path();
@@ -672,14 +700,68 @@ impl ModelReceiver {
         ))
     }
 
+    /// A `LIGHTWEIGHT` edge stores only the connection between its endpoints: it has no stored
+    /// field but `id`, `in` and `out`, and none of them has a definition.
+    fn check_lightweight(&self, code_gen: &Codegen) -> ExtractorResult<()> {
+        if !self.is_lightweight() {
+            return Ok(());
+        }
+        if let Some(name) = code_gen
+            .serialized_field_names_normalised
+            .iter()
+            .find(|name| !name.is_id() && !name.is_in_or_out_edge_node(&DataType::Edge))
+        {
+            return Err(syn::Error::new_spanned(
+                &self.ident,
+                format!(
+                    "a `lightweight` edge stores only `id`, `in` and `out`; `{name}` would need an \
+                     edge record"
+                ),
+            )
+            .into());
+        }
+        let fields = self.data.as_ref().take_struct().map(|fields| fields.fields);
+        if let Some(field) = fields
+            .into_iter()
+            .flatten()
+            .find(|field| field.defines_field())
+        {
+            let message = "a `lightweight` edge has no field definitions, so its fields take no \
+                           `ty`, `assert`, `value`, `define` or other definition attribute";
+            let error = match &field.ident {
+                Some(ident) => syn::Error::new_spanned(ident, message),
+                None => syn::Error::new_spanned(&self.ident, message),
+            };
+            return Err(error.into());
+        }
+        Ok(())
+    }
+
     fn edge_tokens(&self, code_gen: &Codegen) -> ExtractorResult<TokenStream> {
         let crate_name = get_crate_name();
         let struct_name_ident = &self.ident();
         let (impl_generics, ty_generics, where_clause) = self.generics().split_for_impl();
+        // invariant: `table()` fails for an edge without one.
         let table = self.table()?.expect("an edge has a table").as_string();
         let CommonIdents {
             table_name_checker, ..
         } = code_gen.common_idents();
+
+        // `Edge::In` and `Edge::Out` are the endpoints' type parameters, so an edge names them
+        // `In` and `Out` (UMB-030): any other name would leave them unresolved.
+        let type_parameter = |name: &str| {
+            self.generics().params().iter().any(|param| {
+                matches!(param, syn::GenericParam::Type(type_param) if type_param.ident == name)
+            })
+        };
+        if !type_parameter("In") || !type_parameter("Out") {
+            return Err(syn::Error::new_spanned(
+                &self.ident,
+                "an edge model is generic over its endpoints, as type parameters named `In` and \
+                 `Out`: `struct Likes<In: Node, Out: Node>`",
+            )
+            .into());
+        }
 
         let has_in_and_out_fields = code_gen
             .serialized_field_names_normalised
