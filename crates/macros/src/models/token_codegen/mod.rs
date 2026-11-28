@@ -207,6 +207,8 @@ impl<'a> Codegen<'a> {
         self.struct_attributes_data.field_receiver = Some(field_receiver);
     }
 
+    // invariant: `parse_fields` sets the field receiver and model attributes before any codegen
+    // reads them.
     pub(crate) fn field_receiver(&self) -> &'a MyFieldReceiver {
         self.struct_attributes_data.field_receiver
             .expect("Field receiver has not been set. Make sure it has been set by calling set_field_receiver")

@@ -86,6 +86,7 @@ impl VisitMut for ReplaceSelfVisitor {
                 i.path
                     .segments
                     .last_mut()
+                    // invariant: the path was just set to the struct's identifier.
                     .expect("Empty paths segments.")
                     .arguments = PathArguments::AngleBracketed(self.generics.clone());
             }

@@ -65,6 +65,7 @@ impl EdgeType {
             quote! { #edge_type_ident }
         };
 
+        // invariant: an identifier with lifetime and identifier arguments is always a type.
         let edge_type = syn::parse2::<Type>(quoted_type).expect("Failed to parse edge type");
 
         edge_type.into()

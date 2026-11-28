@@ -94,6 +94,8 @@ impl<'a> ModelAttributes<'a> {
                 })
                 .collect();
 
+            // invariant: the path is the struct's identifier, and generics with parameters have
+            // their angle brackets.
             path.segments
                 .last_mut()
                 .expect("Problem getting last segment of path. Path potentially empty.")
