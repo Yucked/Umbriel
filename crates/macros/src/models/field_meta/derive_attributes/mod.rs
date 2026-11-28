@@ -12,7 +12,28 @@ use super::{AttributeAssert, AttributeDefine, AttributeItemAssert, AttributeValu
 create_ident_wrapper!(FieldIdentNormalized);
 create_ident_wrapper!(FieldWrapperIdent);
 create_ident_wrapper!(FieldIdentOriginal);
-create_ident_wrapper!(OldFieldName);
+
+/// `old_name = "…"`: the field's previous stored name, kept as written. A stored name need not
+/// be a Rust identifier (`first-name`), so it is never made one (UMB-031).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OldFieldName(String);
+
+impl darling::FromMeta for OldFieldName {
+    fn from_string(value: &str) -> darling::Result<Self> {
+        if value.is_empty() {
+            return Err(darling::Error::custom(
+                "`old_name` is the field's previous stored name, so it cannot be empty",
+            ));
+        }
+        Ok(Self(value.to_owned()))
+    }
+}
+
+impl std::fmt::Display for OldFieldName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 #[derive(Clone, Debug, FromField)]
 #[darling(attributes(orm), forward_attrs(surreal))]
@@ -112,5 +133,22 @@ impl MyFieldReceiver {
     /// Whether the field is `COMPUTED`: read only, so it has no patch, merge or setter.
     pub fn is_computed(&self) -> bool {
         self.computed.is_some()
+    }
+
+    /// Whether an attribute asks for something of the field's `DEFINE FIELD`, which a
+    /// `LIGHTWEIGHT` edge cannot have.
+    pub fn defines_field(&self) -> bool {
+        self.field_type_db.is_some()
+            || self.assert.is_some()
+            || self.define.is_some()
+            || self.value.is_some()
+            || self.default_always.is_some()
+            || self.value_expr.is_some()
+            || self.computed.is_some()
+            || self.readonly
+            || self.flexible
+            || self.comment.is_some()
+            || self.permissions.is_some()
+            || self.item_assert.is_some()
     }
 }
