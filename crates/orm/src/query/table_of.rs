@@ -8,7 +8,7 @@ use surrealdb::types::{RecordIdKeyRange, SurrealValue, Table};
 use crate::{
     __private::ModelField,
     All, Conditional, Error, Executor, Field, FieldTuple, Filter, Model, RecordId, RecordKey,
-    RecordRange, Result, Writable, count,
+    Deletable, RecordRange, Result, Writable, count,
     statements::{
         DeleteStatement, SelectCount, SelectStatement, delete::delete, select,
         select::select_value_of, select_value,
@@ -266,7 +266,7 @@ impl<T: Model> TableOf<T> {
     /// offered for them.
     pub fn delete_where(&self, filter: impl Conditional + Clone) -> DeleteStatement<T>
     where
-        T: Writable,
+        T: Deletable,
     {
         delete::<T>(self.clone()).where_(filter)
     }
