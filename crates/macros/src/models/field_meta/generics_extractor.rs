@@ -91,7 +91,21 @@ impl CustomGenerics {
 pub struct StructGenerics(pub CustomGenerics);
 
 impl FromGenerics for StructGenerics {
+    /// The model's generics. A const parameter is a spanned error (UMB-029): supporting one would
+    /// thread its argument through every generated type, and no model needs one.
     fn from_generics(generics: &Generics) -> darling::Result<Self> {
+        if let Some(GenericParam::Const(param)) = generics
+            .params
+            .iter()
+            .find(|param| matches!(param, GenericParam::Const(_)))
+        {
+            return Err(syn::Error::new_spanned(
+                param,
+                "a model cannot have const generic parameters; use a type parameter or a \
+                 constant instead",
+            )
+            .into());
+        }
         Ok(Self(CustomGenerics::new(generics.clone())))
     }
 }
@@ -104,7 +118,9 @@ impl std::ops::Deref for StructGenerics {
     }
 }
 
-// PhantomData<(&'a dyn std::any::Any, &'b dyn std::any::Any, T, U, V)>,
+/// The marker generated types hold for the model's generics, `PhantomData<(fn() -> &'a (), T)>`:
+/// a lifetime is held through a function pointer, which is `Send` and `Sync`, so a model with a
+/// lifetime stays both (UMB-035).
 #[derive(Clone, Debug)]
 pub struct PhantomDataType(Type);
 
@@ -128,14 +144,10 @@ impl StructGenerics {
                 }
                 syn::GenericParam::Lifetime(lifetime_def) => {
                     let lifetime = &lifetime_def.lifetime;
-                    quote!(& #lifetime dyn ::std::any::Any)
+                    quote!(fn() -> & #lifetime ())
                 }
-                syn::GenericParam::Const(const_param) => {
-                    let ident = &const_param.ident;
-                    let ty = &const_param.ty;
-                    let expr: Expr = syn::parse_quote!(#ident as #ty);
-                    quote!(#expr)
-                }
+                // invariant: `StructGenerics::from_generics` rejects const parameters.
+                syn::GenericParam::Const(_) => unreachable!("a model has no const parameters"),
             })
             .collect::<Vec<TokenStream>>();
 
