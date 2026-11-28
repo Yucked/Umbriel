@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use surrealdb::types::ToSql;
 
 use crate::{
-    DurationLike, Edge, Field, Renderer,
+    DurationLike, Edge, Field, Renderer, StoredEdge,
     query::field::{EdgeStep, Relation},
 };
 
@@ -178,10 +178,12 @@ fn push_content_errors(content: &ContentIds, relation: &Relation<'_>, out: &mut 
 
 /// Implements the data clauses and `TIMEOUT` both RELATE builders share. The engine keeps an
 /// edge's `in` and `out` under every data clause; under `OR UPDATE` they apply to the existing
-/// edge. `CONTENT`'s id, `in` and `out` are checked against the path when it is rendered.
+/// edge. `CONTENT`'s id, `in` and `out` are checked against the path when it is rendered. The
+/// data clauses need a [`StoredEdge`]: a `LIGHTWEIGHT` edge has no record to hold data.
 macro_rules! relate_clauses {
     ($statement:ident) => {
-        data_clause_methods!(Edge, $statement, "edge");
+        data_clause_methods!(data StoredEdge, $statement, "edge");
+        $crate::statements::data::mode_methods!(Edge, $statement);
 
         impl_statement!([T: Edge, R: ReturnMode, C: Cardinality] $statement<T, R, C>);
 
@@ -201,10 +203,11 @@ pub struct RelateStatement<T, R = ReturnAfter<T>, C = Many> {
     cardinality: PhantomData<(fn() -> T, C)>,
 }
 
-impl<T: Edge, R: ReturnMode, C: Cardinality> RelateStatement<T, R, C> {
+impl<T: StoredEdge, R: ReturnMode, C: Cardinality> RelateStatement<T, R, C> {
     /// `RELATE OR UPDATE`: an edge whose id already exists is updated instead of failing. Since
     /// SurrealDB 3.1.5, relating an existing edge id without it updates the edge with a warning,
-    /// which is to become an error.
+    /// which is to become an error. A `LIGHTWEIGHT` edge cannot be updated, so it needs a
+    /// [`StoredEdge`].
     pub fn or_update(self) -> RelateOrUpdateStatement<T, R, C> {
         RelateOrUpdateStatement {
             body: self.body,
