@@ -144,14 +144,22 @@ impl<F: Into<Field>, const N: usize> From<[F; N]> for Unsettables {
 }
 
 /// Writes the data-clause builder methods shared by `CREATE`, `UPDATE`, `UPSERT` and `RELATE`:
-/// `content`, `set`, `merge`, `patch`, `replace`, `unset`, `timeout`, and the private `with_mode`
-/// that changes the return mode.
+/// `content`, `set`, `merge`, `patch`, `replace` and `unset`, and with them [`mode_methods`]'s.
+/// `data $bound, …` writes the data clauses alone, for a statement whose other methods take a
+/// wider bound: a `LIGHTWEIGHT` edge's `RELATE` has a `TIMEOUT` and return modes but no data.
 ///
 /// The statement is `$statement<T, R, C>` with a `body` holding `data: Option<DataClause>` and
 /// `timeout: Option<DurationLike>`, `mode: R` and `cardinality: PhantomData<C>`; `$bound` is what
 /// `T` must implement. `$noun` names what the statement writes in the generated docs.
 macro_rules! data_clause_methods {
+    (data $bound:path, $statement:ident, $noun:literal) => {
+        $crate::statements::data::data_clause_methods!(@data $bound, $statement, $noun);
+    };
     ($bound:path, $statement:ident, $noun:literal) => {
+        $crate::statements::data::data_clause_methods!(@data $bound, $statement, $noun);
+        $crate::statements::data::mode_methods!($bound, $statement);
+    };
+    (@data $bound:path, $statement:ident, $noun:literal) => {
         impl<T: $bound, R: $crate::statements::ReturnMode, C: $crate::statements::Cardinality>
             $statement<T, R, C>
         {
@@ -231,7 +239,17 @@ macro_rules! data_clause_methods {
                 ));
                 self
             }
+        }
+    };
+}
 
+/// Writes `timeout` and the private `with_mode`, which changes the return mode, for
+/// `$statement<T, R, C>` with `T: $bound` (see [`data_clause_methods`]).
+macro_rules! mode_methods {
+    ($bound:path, $statement:ident) => {
+        impl<T: $bound, R: $crate::statements::ReturnMode, C: $crate::statements::Cardinality>
+            $statement<T, R, C>
+        {
             /// `TIMEOUT @duration`, bound as a query parameter.
             pub fn timeout(mut self, duration: impl Into<$crate::DurationLike>) -> Self {
                 self.body.timeout = Some(duration.into());
@@ -249,4 +267,4 @@ macro_rules! data_clause_methods {
     };
 }
 
-pub(crate) use data_clause_methods;
+pub(crate) use {data_clause_methods, mode_methods};
